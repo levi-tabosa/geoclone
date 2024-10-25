@@ -29,7 +29,3 @@ export function glClearColor(r, g, b, a) {
 export function glClearBits(bits) {
    webgl.clear(webgl.COLOR_BUFFER_BIT);
 }
-
-export function printSlice(ptr, len) {
-   console.log(String.fromCharCode(new Uint8Array(ptr, len)));
-}

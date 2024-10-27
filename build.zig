@@ -11,7 +11,11 @@ pub fn build(b: *std.Build) void {
         .optimize = optimize,
     });
 
-    exe.root_module.addImport("geoc", b.addModule("geoc", .{ .root_source_file = b.path("src/root.zig"), .target = target, .optimize = optimize }));
+    exe.root_module.addImport("geoc", b.addModule("geoc", .{
+        .root_source_file = b.path("src/root.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
 
     const dist_step = b.step("dist", "Makes dist");
 
@@ -25,6 +29,7 @@ pub fn build(b: *std.Build) void {
         });
         install_dir.step.dependOn(&remove_out.step);
         dist_step.dependOn(&install_dir.step);
+        exe.rdynamic = true;
     } else {
         dist_step.dependOn(&remove_out.step);
         dist_step.dependOn(&b.addRunArtifact(exe).step);

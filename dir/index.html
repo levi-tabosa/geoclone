@@ -9,37 +9,8 @@
 
 <body>
    <script type="module">
-      import * as geoc from "./geoc.js";
-      (async function run() {
-         let promise = fetch("example.wasm");
-
-         /**@type WebAssembly.Instance*/
-         let wasm_instance;
-
-         /**@type WebAssembly.Memory*/
-         let wasm_memory;
-
-         /**@param { number } c_ptr
-          * @param { number } len
-          * @returns { string }
-         */
-         function get_c_str(c_ptr, len) {
-            const slice = new Uint8Array(
-               wasm_memory.buffer, 
-               c_ptr, 
-               len
-            );
-            return new TextDecoder().decode(slice);
-         }
-         
-         WebAssembly.instantiateStreaming(promise, {
-            env: geoc
-         }).then((result) => {
-            wasm_instance = result.instance;
-            wasm_memory = wasm_instance.exports.memory;
-            wasm_instance.exports._start();
-         });   
-      }) ();
+      import {init} from "./geoc.js";
+      init("example.wasm");
    </script>
 </body>
 </html>

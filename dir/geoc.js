@@ -6,56 +6,239 @@ let webgl;
 let wasm_instance;
 /** @type { WebAssembly.Memory } */
 let wasm_memory;
+/** @type { Map<number, WebGLShader> } */
+let shaders = new Map(); 
+let next_shader = 0;
+
+/**
+ * @typedef {{
+ *    index: number,
+ *    info: WebGLActiveInfo}
+ * } Attribute
+ * 
+ * @typedef {{
+ *    gl: WebGLProgram, 
+ *    attributes: Map<string, Attribute>, 
+ *    uniforms: Map<string, WebGLActiveInfo>}
+ * } Program
+ * */
+
+/** @type { Map<number, Program> } */
+let programs = new Map(); 
+let next_program = 0;
+/** @type { Map<number, WebGLBuffer> } */
+let buffers = new Map(); 
+let next_buffer = 0;
 
 function call(ptr, fnPtr) {
    wasm_instance.exports.callPtr(ptr, fnPtr);
 }
 
-function get_c_str (c_ptr, len) {
-   const slice = new Uint8Array(
+function getData (c_ptr, len) {
+   return new Uint8Array(
       wasm_memory.buffer,
       c_ptr,
       len
    );
-   return new TextDecoder().decode(slice);
+}
+
+function getStr (c_ptr, len) {
+   return new TextDecoder().decode(getData(c_ptr, len));
 }
 
 const env = {
-   printSlice: function (ptr, len) {
-      console.log(get_c_str(ptr, len));
+   _log: function (ptr, len) {
+      console.log(getStr(ptr, len));
    },
-   geocInit: function () {
+   init: function () {
       const body = document.getElementsByTagName("body").item(0);
       canvas = document.createElement("canvas");
       webgl = canvas.getContext("webgl");
-      body.append(canvas);
-   },
-   geocDeinit: function () {
-      webgl.finish();
-   },
-   compileGLShader: function (gl) {
-      if (!gl) {
-         alert('No WebGL support on browser');
+      if(webgl == null) {
          throw new Error('No WebGL support on browser');
       }
+      body.append(canvas);
    },
-   clearColor: function (r, g, b, a) {
+   deinit: function () {
+      webgl.finish();
+   },
+   clear: function (r, g, b, a) {
       webgl.clearColor(r, g, b, a);
+      webgl.clear(webgl.COLOR_BUFFER_BIT);
    },
-   clearBits: function (bits) {
-      webgl.clear(bits);
-      // webgl.clear(webgl.COLOR_BUFFER_BIT);
-   },
-   geocRun: function (ptr, fnPtr) {
+   run: function (ptr, fnPtr) {
       function frame() {
+         canvas.width = canvas.clientWidth;
+         canvas.height = canvas.clientHeight;
+         webgl.viewport(0, 0, canvas.width, canvas.height);
          call(ptr, fnPtr);
          requestAnimationFrame(frame);
       }
       requestAnimationFrame(frame);
+      throw new Error("Dummy error");
    },
-   geocTime: function () {
-      return performance.now / 1000;
+   time: function () {
+      return performance.now() / 1000;
+   },
+   initShader: function (type, source_ptr, source_len) {
+      const shader = ({
+         0 : webgl.createShader(webgl.VERTEX_SHADER),
+         1 : webgl.createShader(webgl.FRAGMENT_SHADER)
+      }) [type] || null;
+
+      if(shader == null) {
+         throw new Error('Invalid shader type');
+      }
+
+      webgl.shaderSource(shader, `precision mediump float;\n${getStr(source_ptr, source_len)}`);
+      webgl.compileShader(shader);
+
+
+      if(!webgl.getShaderParameter(shader, webgl.COMPILE_STATUS)){
+         throw new Error(`Failed to compile shader ${webgl.getProgramInfoLog(shader)}`)
+      }
+      const handle = next_shader++;
+      shaders.set(handle, shader);
+      return handle;
+   },
+   deinitShader: function (handle) {
+      webgl.deleteShader(shaders.get(handle) ?? null);
+   },
+   initProgram: function (shader1_handle, shader2_handle) {
+      const program = webgl.createProgram();
+      if(program == null) {
+         throw new Error(`Failed to create program}`);
+      }
+
+      const shader1 = shaders.get(shader1_handle);
+      const shader2 = shaders.get(shader2_handle);
+
+      if(!shader1 || !shader2) {
+         throw new Error("Failed to shaders attach, shader is not");
+      }
+      webgl.attachShader(program, shader1);
+      webgl.attachShader(program, shader2);
+      webgl.linkProgram(program);
+      
+      if(!webgl.getProgramParameter(program, webgl.LINK_STATUS)) {
+         throw new Error(`Failed to link program:${gl.getProgramInfoLog(program)}`);
+      }
+      
+      const attribute_count = webgl.getProgramParameter(program, webgl.ACTIVE_ATTRIBUTES);
+
+      /** @type {Map<string, Attribute>}*/
+      const attributes = new Map();
+
+      for(let i = 0; i < attribute_count; i++) {
+         const attribute = webgl.getActiveAttrib(program, i);
+         if(attribute) {
+            attributes.set(attribute.name, {index: i, info: attribute});
+         }
+      }
+      const uniform_count = webgl.getProgramParameter(program, webgl.ACTIVE_UNIFORMS);
+
+      /** @type {Map<string, WebGLActiveInfo>}*/
+      const uniforms = new Map();
+
+      for(let i = 0; i < uniform_count; i++) {
+         const uniform = webgl.getActiveUniform(program, i);
+         if(uniform) {
+            uniforms.set(uniform.name, uniform);
+         }
+      }
+
+      webgl.useProgram(program);
+
+      const handle = next_program++;
+      programs.set(handle, {gl: program, attributes: attributes, uniforms: uniforms});
+      return handle;
+   },
+   useProgram: function(handle) {
+      const program = programs.get(handle);
+      if(program) {
+         webgl.useProgram(program.gl);
+      }
+   },
+   deinitProgram: function (handle) {
+      const program = programs.get(handle);
+      if(program) {
+         return;
+      }
+      programs.delete(handle);
+      webgl.deleteProgram(program.gl);
+   },
+   initVertexBuffer: function(data_ptr, data_len) {
+      const vertex_buffer = webgl.createBuffer();
+      if(vertex_buffer == null) {
+         throw new Error("Failed to create buffer");
+      }
+      webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
+      webgl.bufferData(webgl.ARRAY_BUFFER, getData(data_ptr, data_len), webgl.STATIC_DRAW);
+
+      const handle = next_buffer++;
+      buffers.set(handle, vertex_buffer);
+      return handle;
+   },
+   deinitVertexBuffer: function(js_handle) {
+      const buffer = buffers.get(js_handle) ?? null;
+      buffers.delete(js_handle);
+      webgl.deleteBuffer(buffer);
+   },
+   bindVertexBuffer: function(js_handle){
+      const vertex_buffer = buffers.get(js_handle) ?? null;
+      webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
+   },
+   vertexAttribPointer: function(
+      program_handle,
+      name_ptr,
+      name_len,
+      size,
+      type,
+      normalized,
+      stride,
+      offset,
+  ) {
+   const name = getStr(name_ptr, name_len);
+   const program = programs.get(program_handle);
+   
+   if(!program) {
+     return;
    }
+   let gl_type;
+   const attribute = program.attributes.get(name);
+
+   if(!attribute) {
+      return;
+   }
+   
+   switch(type) {
+      case 0: 
+         gl_type = webgl.FLOAT;
+         break;
+      default:
+         throw new Error("Unknown type");
+   }
+   webgl.enableVertexAttribArray(attribute.index);
+   webgl.vertexAttribPointer(
+      attribute.index,
+      size,
+      gl_type,
+      normalized,
+      stride,
+      offset
+   );
+  },
+  drawArrays: function(mode, first, count) {
+   let gl_mode;
+   switch(mode) {
+      case 0:
+         gl_mode = webgl.TRIANGLES;
+         break;
+      default:
+         throw new Error("No support for modes beside triangles");
+   } 
+   webgl.drawArrays(gl_mode, first, count);
+  },
 };
 
 export async function init(wasmPath) {

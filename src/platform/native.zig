@@ -1,6 +1,10 @@
 const std = @import("std");
 const geoc = @import("../root.zig");
 
+pub fn log(message: []u8) void {
+    std.debug.print("{s}\n", .{message});
+}
+
 const Shader = struct {
     const Self = @This();
 
@@ -14,6 +18,8 @@ const Shader = struct {
     }
 };
 
+pub const Program = struct {};
+
 pub const State = struct {
     const Self = @This();
 
@@ -25,13 +31,13 @@ pub const State = struct {
         _ = Self;
     }
 
-    pub fn run(_: Self, state: geoc.State) void {
+    pub fn run(_: Self, state: *const geoc.State) void {
         _ = state;
-        std.debug.print("native run :)-\n", .{});
+        std.debug.print("native run :)\n\n", .{});
     }
 
     pub fn currentTime(_: Self) f32 {
-        return std.time.milliTimestamp() + 0.1;
+        return @floatFromInt(std.time.timestamp());
     }
 
     pub fn clear(_: Self, r: f32, g: f32, b: f32, a: f32) void {

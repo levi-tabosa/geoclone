@@ -1,59 +1,174 @@
 const geoc = @import("../root.zig");
+const std = @import("std");
 
 const js = struct {
-    extern fn geocInit() void;
-    extern fn geocDeinit() void;
-    extern fn clearColor(r: f32, g: f32, b: f32, a: f32) void;
-    extern fn clearBits(bits: i32) void;
-    extern fn geocRun(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void;
-    extern fn geocTime() f32;
-    extern fn printSlice(ptr: [*]const u8, len: u32) void;
+    extern fn init() void;
+    extern fn deinit() void;
+    extern fn clear(r: f32, g: f32, b: f32, a: f32) void;
+    extern fn run(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void;
+    extern fn time() f32;
+    extern fn _log(ptr: [*]const u8, len: usize) void;
+    extern fn initShader(@"type": u32, ptr_source: [*]const u8, ptr_len: u32) i32;
+    extern fn deinitShader(js_handle: i32) void;
+    extern fn initProgram(shader1_handle: i32, shader2_handle: i32) i32;
+    extern fn deinitProgram(js_handle: i32) void;
+    extern fn useProgram(js_handle: i32) void;
+    extern fn initVertexBuffer(data_ptr: [*]const u8, data_len: usize) i32;
+    extern fn deinitVertexBuffer(js_handle: i32) void;
+    extern fn bindVertexBuffer(js_handle: i32) void;
+    extern fn vertexAttribPointer(
+        program_handle: i32,
+        name_ptr: [*]const u8,
+        name_len: usize,
+        size: usize,
+        gl_type: GLType,
+        normalized: bool,
+        stride: usize,
+        offset: usize,
+    ) void;
+    extern fn drawArrays(mode: geoc.DrawMode, first: usize, count: usize) void;
 };
 
 export fn callPtr(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void {
     drawFn(ptr);
 }
 
-const Shader = struct {
+pub fn log(message: []const u8) void {
+    js._log(message.ptr, message.len);
+}
+
+pub const Shader = struct {
     const Self = @This();
 
-    pub fn init(shader_type: geoc.ShaderType, source: []const u8) Self {
-        _ = shader_type;
-        _ = source;
+    js_handle: i32,
+
+    pub fn init(geoc_instance: geoc.Geoc, @"type": geoc.ShaderType, source: []const u8) Self {
+        _ = geoc_instance;
+
+        return .{
+            .js_handle = js.initShader(@intFromEnum(@"type"), source.ptr, source.len),
+        };
     }
 
     pub fn deinit(self: Self) void {
-        _ = self;
+        js.deinitShader(self.js_handle);
     }
+};
+
+pub const Program = struct {
+    const Self = @This();
+
+    js_handle: i32,
+
+    pub fn init(geoc_instance: geoc.Geoc, shaders: []const Shader) Self {
+        _ = geoc_instance;
+        if (shaders.len != 2) {
+            @panic("Number of shaders must be 2");
+        }
+
+        return .{
+            .js_handle = js.initProgram(shaders[0].js_handle, shaders[1].js_handle),
+        };
+    }
+
+    pub fn use(self: Self) void {
+        js.useProgram(self.js_handle);
+    }
+
+    pub fn deinit(self: Self) void {
+        js.deinitProgram(self.js_handle);
+    }
+};
+
+pub const VertexBuffer = struct {
+    const Self = @This();
+
+    js_handle: i32,
+
+    pub fn init(data: []const u8) Self {
+        return .{
+            .js_handle = js.initVertexBuffer(data.ptr, data.len),
+        };
+    }
+
+    pub fn deinit(self: Self) void {
+        js.deinitVertexBuffer(self.js_handle);
+    }
+
+    pub fn bind(self: Self) void {
+        js.bindVertexBuffer(self.js_handle);
+    }
+};
+
+const GLType = enum(i32) { Float = 0 };
+
+fn getGLType(comptime @"type": type) GLType {
+    if (@"type" == f32) {
+        return .Float;
+    }
+
+    @compileError("Unknown type for OpenGL");
+}
+
+pub const VAO = struct {
+    const Self = @This();
+    pub fn init() Self {
+        return .{};
+    }
+    pub fn bind(_: Self) void {}
+    pub fn deinit(_: *const Self) void {}
 };
 
 pub const State = struct {
     const Self = @This();
 
     pub fn init() Self {
-        js.geocInit();
+        js.init();
         return .{};
     }
 
-    pub fn deinit(self: Self) void {
-        js.geocDeinit();
-        _ = self;
+    pub fn deinit(_: Self) void {
+        js.deinit();
     }
 
     pub fn run(_: Self, state: *const geoc.State) void {
-        js.geocRun(state.ptr, state.drawFn);
+        js.run(state.ptr, state.drawFn);
     }
 
     pub fn currentTime(_: Self) f32 {
-        return js.geocTime();
+        return js.time();
     }
 
     pub fn clear(_: Self, r: f32, g: f32, b: f32, a: f32) void {
-        js.clearColor(r, g, b, a);
-        js.clearBits(0x00004000);
+        js.clear(r, g, b, a);
     }
 
-    pub fn print(_: Self, string: []const u8) void {
-        js.printSlice(string.ptr, string.len);
+    pub fn vertexAttributePointer(
+        _: Self,
+        program: Program,
+        comptime vertex: type,
+        comptime field: std.builtin.Type.StructField,
+        normalized: bool,
+    ) void {
+        const size, const gl_type = switch (@typeInfo(field.type)) {
+            .Array => |array| .{ array.len, getGLType(array.child) },
+            else => {
+                @compileError("field must be array type");
+            },
+        };
+        js.vertexAttribPointer(
+            program.js_handle,
+            field.name.ptr,
+            field.name.len,
+            size,
+            gl_type,
+            normalized,
+            @sizeOf(vertex),
+            @offsetOf(vertex, field.name),
+        );
+    }
+
+    pub fn drawArrays(_: Self, mode: geoc.DrawMode, first: usize, count: usize) void {
+        js.drawArrays(mode, first, count);
     }
 };

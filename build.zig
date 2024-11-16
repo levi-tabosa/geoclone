@@ -20,7 +20,11 @@ pub fn build(b: *std.Build) void {
     setupWasmFileStep(b, exe);
 }
 
-fn createExecutable(b: *std.Build, target: std.Build.ResolvedTarget, optimize: std.builtin.OptimizeMode) *std.Build.Step.Compile {
+fn createExecutable(
+    b: *std.Build,
+    target: std.Build.ResolvedTarget,
+    optimize: std.builtin.OptimizeMode,
+) *std.Build.Step.Compile {
     const exe = b.addExecutable(.{
         .name = "example",
         .root_source_file = b.path("examples/example.zig"),
@@ -34,10 +38,20 @@ fn createExecutable(b: *std.Build, target: std.Build.ResolvedTarget, optimize: s
         .optimize = optimize,
     }));
 
+    exe.root_module.addImport("demo", b.addModule("demo", .{
+        .root_source_file = b.path("examples/demo.zig"),
+        .target = target,
+        .optimize = optimize,
+    }));
+
     return exe;
 }
 
-fn setupDistributionSteps(b: *std.Build, exe: *std.Build.Step.Compile, target: std.Build.ResolvedTarget) void {
+fn setupDistributionSteps(
+    b: *std.Build,
+    exe: *std.Build.Step.Compile,
+    target: std.Build.ResolvedTarget,
+) void {
     const dist_step = b.step("dist", "Makes dist");
 
     const dist_path = std.fs.path.join(b.allocator, &.{ b.install_prefix, "/dist" }) catch @panic("oom");
@@ -84,7 +98,10 @@ fn setupNativeDistribution(
     dist_step.dependOn(&b.addRunArtifact(exe).step);
 }
 
-fn setupWasmFileStep(b: *std.Build, exe: *std.Build.Step.Compile) void {
+fn setupWasmFileStep(
+    b: *std.Build,
+    exe: *std.Build.Step.Compile,
+) void {
     const only_wasm_step = b.step("justw", "regenerates wasm file");
 
     const wasm_path = std.fs.path.join(b.allocator, &.{ b.install_prefix, "/dist/example.wasm" }) catch @panic("OOM");

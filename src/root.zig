@@ -29,16 +29,24 @@ pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral
 
 pub const ShaderType = enum(u32) { Vertex = 0, Fragment = 1 };
 
-pub const DrawMode = enum(u32) { Triangles = 0 };
+pub const DrawMode = enum(u32) {
+    Points = 0,
+    Lines = 1,
+    Line_loop = 2,
+    Line_strip = 3,
+    Triangles = 4,
+    Triangle_string = 5,
+    Triangle_fan = 6,
+};
 
 pub const Shader = struct {
     const Self = @This();
 
     platform: platform.Shader,
 
-    pub fn init(engine: Geoc, shader_type: ShaderType, source: []const u8) Self {
+    pub fn init(geoc_instance: Geoc, shader_type: ShaderType, source: []const u8) Self {
         return .{
-            .platform = platform.Shader.init(engine, shader_type, source),
+            .platform = platform.Shader.init(geoc_instance, shader_type, source),
         };
     }
 
@@ -58,7 +66,7 @@ pub const Program = struct {
             platform_shaders[i] = shaders[i].platform;
         }
         return .{
-            .platform = platform.Program.init(geoc_instance, platform_shaders),
+            .platform = platform.Program.init(platform_shaders),
         };
     }
 
@@ -134,14 +142,17 @@ pub const Geoc = struct {
     allocator: std.mem.Allocator,
 
     pub fn init() Self {
-        return .{ .platform = platform.State.init(), .allocator = gpa.allocator() };
+        return .{
+            .platform = platform.State.init(),
+            .allocator = gpa.allocator(),
+        };
     }
 
     pub fn deinit(self: *Self) void {
         self.platform.deinit();
     }
 
-    pub fn run(self: *Self, state: *const State) void {
+    pub fn run(self: Self, state: State) void {
         self.platform.run(state);
     }
 
@@ -153,17 +164,13 @@ pub const Geoc = struct {
         self.platform.clear(r, g, b, a);
     }
 
-    pub fn draw(self: Self, comptime vertex: type, program: Program, buffer: VertexBuffer(vertex)) void {
-        var vao = VAO.init();
-        defer vao.deinit();
-
-        vao.bind();
+    pub fn draw(self: Self, comptime vertex: type, program: Program, buffer: VertexBuffer(vertex), mode: DrawMode) void {
         program.use();
         buffer.bind();
 
         inline for (std.meta.fields(vertex)) |field| {
             self.platform.vertexAttributePointer(program.platform, vertex, field, false);
         }
-        self.platform.drawArrays(.Triangles, 0, buffer.count);
+        self.platform.drawArrays(mode, 0, buffer.count);
     }
 };

@@ -95,7 +95,7 @@ const env = {
 
 
       if(!webgl.getShaderParameter(shader, webgl.COMPILE_STATUS)){
-         throw new Error(`Failed to compile shader ${webgl.getProgramInfoLog(shader)}`)
+         throw new Error(`Failed to compile shader ${webgl.getShaderInfoLog(shader)}`)
       }
       const handle = next_shader++;
       shaders.set(handle, shader);
@@ -172,6 +172,7 @@ const env = {
       if(vertex_buffer == null) {
          throw new Error("Failed to create buffer");
       }
+
       webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
       webgl.bufferData(webgl.ARRAY_BUFFER, getData(data_ptr, data_len), webgl.STATIC_DRAW);
 
@@ -197,48 +198,67 @@ const env = {
       normalized,
       stride,
       offset,
-  ) {
-   const name = getStr(name_ptr, name_len);
-   const program = programs.get(program_handle);
-   
-   if(!program) {
-     return;
-   }
-   let gl_type;
-   const attribute = program.attributes.get(name);
+   ) {
+      const program = programs.get(program_handle);
+      
+      if(!program) {
+        return;
+      }
+      let gl_type;
+      const attribute = program.attributes.get(getStr(name_ptr, name_len));
 
-   if(!attribute) {
-      return;
-   }
-   
-   switch(type) {
-      case 0: 
-         gl_type = webgl.FLOAT;
-         break;
-      default:
-         throw new Error("Unknown type");
-   }
-   webgl.enableVertexAttribArray(attribute.index);
-   webgl.vertexAttribPointer(
-      attribute.index,
-      size,
-      gl_type,
-      normalized,
-      stride,
-      offset
-   );
-  },
-  drawArrays: function(mode, first, count) {
-   let gl_mode;
-   switch(mode) {
-      case 0:
-         gl_mode = webgl.TRIANGLES;
-         break;
-      default:
-         throw new Error("No support for modes beside triangles");
-   } 
-   webgl.drawArrays(gl_mode, first, count);
-  },
+      if(!attribute) {
+         return;
+      }
+
+      switch(type) {
+         case 0: 
+            gl_type = webgl.FLOAT;
+            break;
+         default:
+            throw new Error("Unknown type");
+      }
+
+      webgl.enableVertexAttribArray(attribute.index);
+      webgl.vertexAttribPointer(
+         attribute.index,
+         size,
+         gl_type,
+         normalized,
+         stride,
+         offset,
+      );
+   },
+   drawArrays: function(mode, first, count) {
+      let gl_mode;
+      switch(mode) {
+         case 0:
+            gl_mode = webgl.POINTS;
+            break;
+         case 1:
+            gl_mode = webgl.LINES;
+            break;
+         case 2:
+            gl_mode = webgl.LINE_LOOP;
+            break;
+         case 3:
+            gl_mode = webgl.LINE_STRIP;
+            break;
+         case 4:
+            gl_mode = webgl.TRIANGLES;
+            break;
+         case 5:
+            gl_mode = webgl.TRIANGLE_STRIP;
+            break;
+         case 6:
+            gl_mode = webgl.TRIANGLE_FAN;
+            break;
+         default:
+            throw new Error("No support for modes beside triangles");
+      }
+
+      webgl.drawArrays(gl_mode, first, count);
+   },
 };
 
 export async function init(wasmPath) {

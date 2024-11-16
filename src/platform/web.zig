@@ -60,8 +60,7 @@ pub const Program = struct {
 
     js_handle: i32,
 
-    pub fn init(geoc_instance: geoc.Geoc, shaders: []const Shader) Self {
-        _ = geoc_instance;
+    pub fn init(shaders: []const Shader) Self {
         if (shaders.len != 2) {
             @panic("Number of shaders must be 2");
         }
@@ -86,6 +85,7 @@ pub const VertexBuffer = struct {
     js_handle: i32,
 
     pub fn init(data: []const u8) Self {
+        if (data.len == 0) log("hi");
         return .{
             .js_handle = js.initVertexBuffer(data.ptr, data.len),
         };
@@ -131,7 +131,7 @@ pub const State = struct {
         js.deinit();
     }
 
-    pub fn run(_: Self, state: *const geoc.State) void {
+    pub fn run(_: Self, state: geoc.State) void {
         js.run(state.ptr, state.drawFn);
     }
 

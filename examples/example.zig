@@ -45,51 +45,58 @@ pub const State = struct {
         defer vertex_shader.deinit();
         const fragment_shader = geoc.Shader.init(geoc_instance, geoc.ShaderType.Fragment, fragment_shader_source);
         defer fragment_shader.deinit();
-
         const program = geoc.Program.init(geoc_instance, &[_]geoc.Shader{ vertex_shader, fragment_shader });
 
-        const axis_len = demo_instance.axis.len;
-        var axis_array = geoc_instance.allocator.alloc(Vertex, axis_len) catch @panic("OOM");
-        defer geoc_instance.allocator.free(axis_array);
-
-        for (0..axis_len) |i| {
-            axis_array[i] = Vertex{
-                .coords = .{
-                    demo_instance.axis.*[i].coords[0],
-                    demo_instance.axis.*[i].coords[1],
-                },
-                .offset = .{
-                    demo_instance.axis.*[i].offset[0],
-                    demo_instance.axis.*[i].offset[1],
-                },
-            };
-        }
-        _LOGF(geoc_instance.allocator, "axis on example {any}\n", .{axis_array});
-
-        const axis_buffer = geoc.VertexBuffer(Vertex).init(axis_array);
-        geoc_instance.draw(Vertex, program, axis_buffer, geoc.DrawMode.Lines);
-
+        // const axis_len = demo_instance.axis.len;
         const grid_len = demo_instance.grid.len;
-        _LOGF(geoc_instance.allocator, "grid len on example {}", .{demo_instance.grid.len});
+
+        // var axis_array = geoc_instance.allocator.alloc(Vertex, axis_len) catch @panic("OOM");
+        // defer geoc_instance.allocator.free(axis_array);
         var grid_array = geoc_instance.allocator.alloc(Vertex, grid_len) catch @panic("OOM");
         defer geoc_instance.allocator.free(grid_array);
 
-        _LOGF(geoc_instance.allocator, "demo.instance.grid on example {any}", .{demo_instance.grid.*});
-
         for (0..grid_len) |i| {
-            grid_array[i] = Vertex{ .coords = .{
-                demo_instance.grid.*[i].coords[0],
-                demo_instance.grid.*[i].coords[1],
-            }, .offset = .{
-                demo_instance.grid.*[i].offset[0],
-                demo_instance.grid.*[i].offset[1],
-            } };
+            grid_array[i] = Vertex{
+                .coords = .{
+                    demo_instance.grid.*[i].coords[0],
+                    demo_instance.grid.*[i].coords[1],
+                },
+                // .offset = .{
+                //     demo_instance.grid.*[i].offset[0],
+                //     demo_instance.grid.*[i].offset[1],
+                // },
+            };
         }
 
         // const grid_buffer = geoc.VertexBuffer(Vertex).init(grid_array);
 
+        // for (0..axis_len) |i| {
+        //     axis_array[i] = Vertex{
+        //         .coords = .{
+        //             demo_instance.axis.*[i].coords[0],
+        //             demo_instance.axis.*[i].coords[1],
+        //         },
+        //         // .offset = .{
+        //         //     demo_instance.axis.*[i].offset[0],
+        //         //     demo_instance.axis.*[i].offset[1],
+        //         // },
+        //     };
+        // }
+
+        // _LOGF(geoc_instance.allocator, "axis on example {any}\n", .{axis_array});
+        _LOGF(geoc_instance.allocator, "grid on example {any}\n", .{grid_array});
+
+        // const axis_buffer = geoc.VertexBuffer(Vertex).init(axis_array);
+        const grid_buffer = geoc.VertexBuffer(Vertex).init(grid_array);
+        // geoc_instance.draw(Vertex, program, axis_buffer, geoc.DrawMode.Lines);
+        geoc_instance.draw(Vertex, program, grid_buffer, geoc.DrawMode.Lines);
+
+        _LOGF(geoc_instance.allocator, "demo.instance.axis on example {any}", .{demo_instance.axis.*});
+        _LOGF(geoc_instance.allocator, "demo.instance.grid on example {any}", .{demo_instance.grid.*});
+
         return .{
-            .vertex_buffer = axis_buffer,
+            // .vertex_buffer = axis_buffer,
+            .vertex_buffer = grid_buffer,
             .program = program,
             .demo_instance = demo_instance,
             .geoc_instance = geoc_instance,
@@ -107,32 +114,25 @@ pub const State = struct {
     }
 
     pub fn draw(self: Self) void {
-        _log("draw");
+        _log("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
         var t = self.geoc_instance.currentTime();
         t = (t - std.math.floor(t)) * 0.9;
 
+        // const axis_len = self.demo_instance.axis.len;
         const grid_len = self.demo_instance.grid.len;
-        const axis_len = self.demo_instance.axis.len;
+
+        // _LOGF(self.geoc_instance.allocator, "axis len on example draw {}", .{axis_len});
+        // _LOGF(self.geoc_instance.allocator, "self.demo_instance.axis draw {any}", .{self.demo_instance.axis.*});
         _LOGF(self.geoc_instance.allocator, "grid len on example draw {}", .{grid_len});
         _LOGF(self.geoc_instance.allocator, "self.demo_instance.grid draw {any}", .{self.demo_instance.grid.*});
-        _LOGF(self.geoc_instance.allocator, "axis len on example draw {}", .{axis_len});
-        // _LOGF(self.geoc_instance.allocator, "self.demo_instance.axis draw {any}", .{self.demo_instance.axis.*});
 
+        // var axis_array = self.geoc_instance.allocator.alloc(Vertex, axis_len) catch @panic("OOM");
+        // defer self.geoc_instance.allocator.free(axis_array);
         var grid_array = self.geoc_instance.allocator.alloc(Vertex, grid_len) catch @panic("OOM");
         defer self.geoc_instance.allocator.free(grid_array);
-        // var axis_array = self.geoc_instance.allocator.alloc(Vertex, grid_len) catch @panic("OOM");
-        // defer self.geoc_instance.allocator.free(axis_array);
-        _LOGF(self.geoc_instance.allocator, "BEFORE grid on example draw {any}", .{grid_array});
-        // _LOGF(self.geoc_instance.allocator, "BEFORE axis on example draw {any}", .{axis_array});
 
-        for (0..grid_len) |i| {
-            grid_array[i] = Vertex{
-                .coords = .{
-                    self.demo_instance.grid.*[i].coords[0],
-                    self.demo_instance.grid.*[i].coords[1],
-                },
-            };
-        }
+        // _LOGF(self.geoc_instance.allocator, "BEFORE axis on example draw {any}", .{axis_array});
+        _LOGF(self.geoc_instance.allocator, "BEFORE grid on example draw {any}", .{grid_array});
 
         // for (0..axis_len) |i| {
         //     axis_array[i] = Vertex{
@@ -142,16 +142,23 @@ pub const State = struct {
         //         },
         //     };
         // }
+        for (0..grid_len) |i| {
+            grid_array[i] = Vertex{
+                .coords = .{
+                    self.demo_instance.grid.*[i].coords[0],
+                    self.demo_instance.grid.*[i].coords[1],
+                },
+            };
+        }
 
-        // const vertex_array = &[_]Vertex{ Vertex{ .coords = .{ 0.0, -1.0 } }, Vertex{ .coords = .{ 0.0, 1.0 } }, Vertex{ .coords = .{ 1.0, 0.0 } }, Vertex{ .coords = .{ -1.0, 0.0 } } };
-
-        _LOGF(self.geoc_instance.allocator, "AFTER grid on example draw {any}", .{grid_array});
         // _LOGF(self.geoc_instance.allocator, "AFTER axis on example draw {any}", .{axis_array});
-        const grid_buffer = geoc.VertexBuffer(Vertex).init(grid_array);
-        // const axis_buffer = geoc.VertexBuffer(Vertex).init(axis_array);
+        _LOGF(self.geoc_instance.allocator, "AFTER grid on example draw {any}", .{grid_array});
 
-        self.geoc_instance.draw(Vertex, self.program, grid_buffer, geoc.DrawMode.Lines);
+        // const axis_buffer = geoc.VertexBuffer(Vertex).init(axis_array);
+        const grid_buffer = geoc.VertexBuffer(Vertex).init(grid_array);
+
         // self.geoc_instance.draw(Vertex, self.program, axis_buffer, geoc.DrawMode.Lines);
+        self.geoc_instance.draw(Vertex, self.program, grid_buffer, geoc.DrawMode.Lines);
     }
 
     pub fn run(self: Self, state: geoc.State) void {

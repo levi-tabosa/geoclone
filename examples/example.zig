@@ -61,10 +61,10 @@ pub const State = struct {
                     demo_instance.grid.*[i].coords[0],
                     demo_instance.grid.*[i].coords[1],
                 },
-                // .offset = .{
-                //     demo_instance.grid.*[i].offset[0],
-                //     demo_instance.grid.*[i].offset[1],
-                // },
+                .offset = .{
+                    demo_instance.grid.*[i].offset[0],
+                    demo_instance.grid.*[i].offset[1],
+                },
             };
         }
 
@@ -114,7 +114,7 @@ pub const State = struct {
     }
 
     pub fn draw(self: Self) void {
-        _log("~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~");
+        _log("draw");
         var t = self.geoc_instance.currentTime();
         t = (t - std.math.floor(t)) * 0.9;
 
@@ -126,19 +126,25 @@ pub const State = struct {
         _LOGF(self.geoc_instance.allocator, "grid len on example draw {}", .{grid_len});
         _LOGF(self.geoc_instance.allocator, "self.demo_instance.grid draw {any}", .{self.demo_instance.grid.*});
 
+        // _log("hello draw");
+
         // var axis_array = self.geoc_instance.allocator.alloc(Vertex, axis_len) catch @panic("OOM");
         // defer self.geoc_instance.allocator.free(axis_array);
         var grid_array = self.geoc_instance.allocator.alloc(Vertex, grid_len) catch @panic("OOM");
         defer self.geoc_instance.allocator.free(grid_array);
 
         // _LOGF(self.geoc_instance.allocator, "BEFORE axis on example draw {any}", .{axis_array});
-        _LOGF(self.geoc_instance.allocator, "BEFORE grid on example draw {any}", .{grid_array});
+        // _LOGF(self.geoc_instance.allocator, "BEFORE grid on example draw {any}", .{grid_array});
 
         // for (0..axis_len) |i| {
         //     axis_array[i] = Vertex{
         //         .coords = .{
-        //             self.demo_instance.axis.*[i].coords[0],
+        //             self.demo_instance.axis.*[i].coords[0] * t,
         //             self.demo_instance.axis.*[i].coords[1],
+        //         },
+        //         .offset = .{
+        //             self.demo_instance.axis.*[i].offset[0],
+        //             self.demo_instance.axis.*[i].offset[1],
         //         },
         //     };
         // }
@@ -147,6 +153,10 @@ pub const State = struct {
                 .coords = .{
                     self.demo_instance.grid.*[i].coords[0],
                     self.demo_instance.grid.*[i].coords[1],
+                },
+                .offset = .{
+                    self.demo_instance.grid.*[i].offset[0],
+                    self.demo_instance.grid.*[i].offset[1],
                 },
             };
         }
@@ -177,7 +187,7 @@ pub fn main() void {
     var engine = geoc.Geoc.init();
     defer engine.deinit();
 
-    var demo_instance = demo.Demo.init(engine);
+    var demo_instance = demo.Demo.init(engine.allocator);
     defer demo_instance.deinit();
 
     var state = State.init(engine, demo_instance);

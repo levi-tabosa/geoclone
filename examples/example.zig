@@ -71,6 +71,7 @@ pub const State = struct {
         var t = self.geoc_instance.currentTime();
         t = (t - @floor(t)) * 0.99;
         self.demo_instance.setZ(6.28319 * t);
+        self.demo_instance.updateLines();
 
         const axis_len = self.demo_instance.axis.len;
         const grid_len = self.demo_instance.grid.len;

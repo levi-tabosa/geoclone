@@ -1,94 +1,100 @@
-const geoc = @import("geoc");
 const std = @import("std");
-const Allocator = std.mem.Allocator;
-// const grid_res = 10;
-// const num_axis = 6;
-const far = 40.0;
-const near = 10.0;
 
-pub const Vertex = struct {
+pub const Vector = struct {
     coords: [3]f32,
-    offset: [3]f32 = .{ 0.0, 0.0, 0.0 },
+    changed: [3]f32,
 };
 
-fn _log(txt: []const u8) void { //TODO: erase
-    geoc.platform.log(txt);
+fn rVector(coords: [3]f32, angle_x: f32, angle_z: f32) Vector {
+    return .{ .coords = coords, .changed = rotZX(coords, angle_x, angle_z) };
 }
 
-fn _logf(allocator: Allocator, comptime txt: []const u8, args: anytype) void { //TODO: erase
-    _log(std.fmt.allocPrint(allocator, txt, args) catch @panic("OOM"));
+fn rotZX(u: [3]f32, angle_x: f32, angle_z: f32) [3]f32 {
+    return .{
+        u[0] * @cos(angle_z) + u[1] * @sin(angle_z),
+        (u[1] * @cos(angle_z) - u[0] * @sin(angle_z)) * @cos(angle_x) + u[2] * @sin(angle_x),
+        u[2] * @cos(angle_x) - (u[1] * @cos(angle_z) - u[0] * @sin(angle_z)) * @sin(angle_x),
+    };
 }
 
 pub const Demo = struct {
     const Self = @This();
+    const grid_res = 11;
 
-    // geoc_instance: geoc.Geoc,
-    allocator: Allocator,
-    _i: f32 = 0.20,
-    _H: u32 = 1,
-    _W: u32 = 1,
-    angle_x: f32 = 0,
-    angle_z: f32 = 0,
-    axis: *const []Vertex,
-    grid: *const []Vertex,
-    vectors: ?*[]Vertex = null,
-    shapes: ?*[][]Vertex = null,
+    zoom: f32,
+    angle_x: f32,
+    angle_z: f32,
+    axis: [6]Vector,
+    grid: [grid_res << 2]Vector,
+    vectors: ?*[]Vector = null,
+    shapes: ?*[][]Vector = null,
 
-    pub fn init(allocator: Allocator) Self {
-        const grid_res = 10;
-        const num_axis = 6;
+    pub fn init() Self {
+        const a_x: f32 = 0.7;
+        const a_z: f32 = 0.7;
+        const _i = 0.3;
 
-        const grid = &(allocator.alloc(Vertex, grid_res << 2) catch @panic("OOM"));
-        // defer allocator.free(grid.*);
-        const axis = &(allocator.alloc(Vertex, num_axis) catch @panic("OOM"));
-        // defer allocator.free(axis.*);
+        const j = grid_res >> 1;
+        const upperLimit = if (grid_res & 1 == 1) j + 1 else j;
+        const fixed: f32 = j * _i;
+        var i: i32 = -j;
 
-        const fixed: f32 = @floatFromInt(grid_res);
+        var grid: [grid_res << 2]Vector = undefined;
 
-        const vertex_array = [_]Vertex{
-            Vertex{ .coords = .{ fixed, 0.0, 0.0 } },
-            Vertex{ .coords = .{ -fixed, 0.0, 0.0 } },
-            Vertex{ .coords = .{ 0.0, fixed, 0.0 } },
-            Vertex{ .coords = .{ 0.0, -fixed, 0.0 } },
-            Vertex{ .coords = .{ 0.0, 0.0, fixed } },
-            Vertex{ .coords = .{ 0.0, 0.0, -fixed } },
+        while (i < upperLimit) : (i += 1) {
+            const idx: f32 = @as(f32, @floatFromInt(i)) * _i;
+            const index = @as(usize, @intCast(i + j << 2));
+            grid[index] = rVector(.{ idx, fixed, 0.0 }, a_x, a_z);
+            grid[(index) + 1] = rVector(.{ idx, -fixed, 0.0 }, a_x, a_z);
+            grid[(index) + 2] = rVector(.{ fixed, idx, 0.0 }, a_x, a_z);
+            grid[(index) + 3] = rVector(.{ -fixed, idx, 0.0 }, a_x, a_z);
+        }
+
+        const axis = [_]Vector{
+            rVector(.{ fixed, 0.0, 0.0 }, a_x, a_z),
+            rVector(.{ -fixed, 0.0, 0.0 }, a_x, a_z),
+            rVector(.{ 0.0, fixed, 0.0 }, a_x, a_z),
+            rVector(.{ 0.0, -fixed, 0.0 }, a_x, a_z),
+            rVector(.{ 0.0, 0.0, fixed }, a_x, a_z),
+            rVector(.{ 0.0, 0.0, -fixed }, a_x, a_z),
         };
-        for (0..num_axis) |i| {
-            axis.*[i] = vertex_array[i];
-        }
-        _logf(allocator, "axis on demo {any}", .{axis.*});
-
-        for (0..grid_res) |i| {
-            const index: f32 = @floatFromInt(i);
-            grid.*[i << 2] = Vertex{ .coords = .{ index, fixed, 0.0 } };
-            grid.*[(i << 2) + 1] = Vertex{ .coords = .{ index, -fixed, 0.0 } };
-            grid.*[(i << 2) + 2] = Vertex{ .coords = .{ fixed, index, 0.0 } };
-            grid.*[(i << 2) + 3] = Vertex{ .coords = .{ -fixed, index, 0.0 } };
-        }
-        if (grid_res & 1 == 1) {
-            const j = grid_res << 2;
-            grid.*[j] = Vertex{ .coords = .{ fixed, fixed, 0.0 } };
-            grid.*[j + 1] = Vertex{ .coords = .{ fixed, -fixed, 0.0 } };
-            grid.*[j + 2] = Vertex{ .coords = .{ fixed, fixed, 0.0 } };
-            grid.*[j + 3] = Vertex{ .coords = .{ -fixed, fixed, 0.0 } };
-        }
-        _logf(allocator, "grid on demo {any}", .{grid.*});
 
         return .{
-            .allocator = allocator,
             .axis = axis,
             .grid = grid,
+            .angle_x = a_x,
+            .angle_z = a_z,
+            .zoom = _i,
         };
     }
 
-    pub fn deinit(self: Self) void {
-        self.allocator.free(self.axis.*);
-        self.allocator.free(self.grid.*);
-        if (self.vectors) |vecs| {
-            self.allocator.free(vecs.*);
+    pub fn updateLines(self: *Self) void {
+        const j = grid_res >> 1;
+        const upperLimit = if (grid_res & 1 == 1) j + 1 else j;
+        const fixed: f32 = j * self.zoom;
+        var i: i32 = -j;
+
+        while (i < upperLimit) : (i += 1) {
+            const idx: f32 = @as(f32, @floatFromInt(i)) * self.zoom;
+            const index = @as(usize, @intCast(i + j << 2));
+            self.grid[index] = rVector(.{ idx, fixed, 0.0 }, self.angle_x, self.angle_z);
+            self.grid[(index) + 1] = rVector(.{ idx, -fixed, 0.0 }, self.angle_x, self.angle_z);
+            self.grid[(index) + 2] = rVector(.{ fixed, idx, 0.0 }, self.angle_x, self.angle_z);
+            self.grid[(index) + 3] = rVector(.{ -fixed, idx, 0.0 }, self.angle_x, self.angle_z);
         }
-        if (self.shapes) |shps| {
-            self.allocator.free(shps.*);
-        }
+        self.axis = [_]Vector{
+            rVector(.{ fixed, 0.0, 0.0 }, self.angle_x, self.angle_z),
+            rVector(.{ -fixed, 0.0, 0.0 }, self.angle_x, self.angle_z),
+            rVector(.{ 0.0, fixed, 0.0 }, self.angle_x, self.angle_z),
+            rVector(.{ 0.0, -fixed, 0.0 }, self.angle_x, self.angle_z),
+            rVector(.{ 0.0, 0.0, fixed }, self.angle_x, self.angle_z),
+            rVector(.{ 0.0, 0.0, -fixed }, self.angle_x, self.angle_z),
+        };
+    }
+    pub fn setX(self: *Self, angle: f32) void {
+        self.angle_x = angle;
+    }
+    pub fn setZ(self: *Self, angle: f32) void {
+        self.angle_z = angle;
     }
 };

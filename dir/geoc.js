@@ -30,10 +30,6 @@ let next_program = 0;
 let buffers = new Map(); 
 let next_buffer = 0;
 
-function call(ptr, fnPtr) {
-   wasm_instance.exports.callPtr(ptr, fnPtr);
-}
-
 function getData (c_ptr, len) {
    return new Uint8Array(
       wasm_memory.buffer,
@@ -46,10 +42,11 @@ function getStr (c_ptr, len) {
    return new TextDecoder().decode(getData(c_ptr, len));
 }
 
+function call(ptr, fnPtr) {
+   wasm_instance.exports.callPtr(ptr, fnPtr);
+}
+
 const env = {
-   _log: function (ptr, len) {
-      console.log(getStr(ptr, len));
-   },
    init: function () {
       const body = document.getElementsByTagName("body").item(0);
       canvas = document.createElement("canvas");
@@ -62,20 +59,26 @@ const env = {
    deinit: function () {
       webgl.finish();
    },
-   clear: function (r, g, b, a) {
-      webgl.clearColor(r, g, b, a);
-      webgl.clear(webgl.COLOR_BUFFER_BIT);
-   },
    run: function (ptr, fnPtr) {
       function frame() {
          canvas.width = canvas.clientWidth;
          canvas.height = canvas.clientHeight;
          webgl.viewport(0, 0, canvas.width, canvas.height);
          call(ptr, fnPtr);
-         requestAnimationFrame(frame);
+         wasm_instance.
+         setTimeout(() => {
+            requestAnimationFrame(frame);
+         }, 15);
       }
       requestAnimationFrame(frame);
       throw new Error("Dummy error");
+   },
+   _log: function (ptr, len) {
+      console.log(getStr(ptr, len));
+   },
+   clear: function (r, g, b, a) {
+      webgl.clearColor(r, g, b, a);
+      webgl.clear(webgl.COLOR_BUFFER_BIT);
    },
    time: function () {
       return performance.now() / 1000;

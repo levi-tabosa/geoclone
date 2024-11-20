@@ -1,4 +1,7 @@
 {
    "liveServer.settings.port": 5000,
-   "liveServer.settings.root": "/zig-out/dist/"
+   "liveServer.settings.root": "/zig-out/dist/",
+   "[javascript]": {
+    "editor.defaultFormatter": "esbenp.prettier-vscode"
+  }
 }

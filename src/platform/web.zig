@@ -1,11 +1,13 @@
 const geoc = @import("../root.zig");
 const std = @import("std");
+const demo = geoc.demo;
 
-const js = struct {
+const js = struct { //TODO remove unnecessary
     extern fn init() void;
     extern fn deinit() void;
     extern fn clear(r: f32, g: f32, b: f32, a: f32) void;
     extern fn run(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void;
+    extern fn setDemoCallBack(ptr: *anyopaque, setAnglesFn: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void) void;
     extern fn time() f32;
     extern fn _log(ptr: [*]const u8, len: usize) void;
     extern fn initShader(@"type": u32, ptr_source: [*]const u8, ptr_len: u32) i32;
@@ -31,6 +33,15 @@ const js = struct {
 
 export fn callPtr(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void {
     drawFn(ptr);
+}
+
+export fn callSetAnglesPtr(
+    ptr: *anyopaque,
+    setAnglesFn: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
+    angle_x: f32,
+    angle_z: f32,
+) void {
+    setAnglesFn(ptr, angle_x, angle_z);
 }
 
 pub fn log(message: []const u8) void {
@@ -85,7 +96,6 @@ pub const VertexBuffer = struct {
     js_handle: i32,
 
     pub fn init(data: []const u8) Self {
-        if (data.len == 0) log("hi");
         return .{
             .js_handle = js.initVertexBuffer(data.ptr, data.len),
         };
@@ -133,6 +143,10 @@ pub const State = struct {
 
     pub fn run(_: Self, state: geoc.State) void {
         js.run(state.ptr, state.drawFn);
+    }
+
+    pub fn setDemoCallBack(_: Self, state: demo.State) void {
+        js.setDemoCallBack(state.ptr, state.setAnglesFn);
     }
 
     pub fn currentTime(_: Self) f32 {

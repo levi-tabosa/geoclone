@@ -18,6 +18,8 @@ pub fn build(b: *std.Build) void {
     b.installArtifact(exe);
 
     setupWasmFileStep(b, exe);
+
+    setupJSFileStep(b);
 }
 
 fn createExecutable(
@@ -31,18 +33,18 @@ fn createExecutable(
         .target = target,
         .optimize = optimize,
     });
-
-    exe.root_module.addImport("geoc", b.addModule("geoc", .{
+    const geoc = b.addModule("geoc", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
-    }));
+    });
 
-    exe.root_module.addImport("demo", b.addModule("demo", .{
+    geoc.addImport("demo", b.addModule("demo", .{
         .root_source_file = b.path("examples/demo.zig"),
         .target = target,
         .optimize = optimize,
     }));
+    exe.root_module.addImport("geoc", geoc);
 
     return exe;
 }
@@ -113,4 +115,19 @@ fn setupWasmFileStep(
             .override = .{ .custom = "dist" },
         },
     }).step);
+}
+
+fn setupJSFileStep(
+    b: *std.Build,
+) void {
+    const only_js_step = b.step("justjs", "regenerates js file");
+
+    const js_path = std.fs.path.join(b.allocator, &.{ b.install_prefix, "dist/geoc.js" }) catch @panic("OOM");
+    const remove_js = b.addRemoveDirTree(js_path);
+
+    only_js_step.dependOn(&remove_js.step);
+    only_js_step.dependOn(&b.addInstallFile(
+        b.path("dir/geoc.js"),
+        "dist/geoc.js",
+    ).step);
 }

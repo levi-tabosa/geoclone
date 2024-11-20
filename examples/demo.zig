@@ -2,7 +2,7 @@ const std = @import("std");
 
 pub const Vector = struct {
     coords: [3]f32,
-    changed: [3]f32,
+    changed: [3]f32, //TODO bad name
 };
 
 fn rVector(coords: [3]f32, angle_x: f32, angle_z: f32) Vector {
@@ -91,10 +91,16 @@ pub const Demo = struct {
             rVector(.{ 0.0, 0.0, -fixed }, self.angle_x, self.angle_z),
         };
     }
+
     pub fn setX(self: *Self, angle: f32) void {
         self.angle_x = angle;
     }
+
     pub fn setZ(self: *Self, angle: f32) void {
         self.angle_z = angle;
     }
+};
+pub const State = struct {
+    ptr: *anyopaque,
+    setAnglesFn: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
 };

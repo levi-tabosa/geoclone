@@ -1,5 +1,6 @@
 const std = @import("std");
 const builtin = @import("builtin");
+pub const demo = @import("demo");
 pub var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
 pub const platform = switch (builtin.target.isWasm()) {
@@ -154,6 +155,10 @@ pub const Geoc = struct {
 
     pub fn run(self: Self, state: State) void {
         self.platform.run(state);
+    }
+
+    pub fn setDemoCallBack(self: Self, state: demo.State) void {
+        self.platform.setDemoCallBack(state);
     }
 
     pub fn currentTime(self: Self) f32 {

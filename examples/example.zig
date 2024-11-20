@@ -1,6 +1,6 @@
 const geoc = @import("geoc");
 const std = @import("std");
-const demo = @import("demo.zig");
+const demo = geoc.demo;
 const near = 10;
 const far = 40;
 
@@ -25,12 +25,15 @@ const Vertex = struct {
 pub const State = struct {
     const Self = @This();
 
-    vertex_buffer: geoc.VertexBuffer(Vertex),
+    axis_buffer: geoc.VertexBuffer(Vertex), //TODO reutilize later
+    grid_buffer: geoc.VertexBuffer(Vertex),
     program: geoc.Program,
     geoc_instance: geoc.Geoc,
     demo_instance: *demo.Demo,
 
     pub fn init(geoc_instance: geoc.Geoc, demo_instance: *demo.Demo) Self {
+        geoc_instance.setDemoCallBack(.{ .ptr = demo_instance, .setAnglesFn = setAnglesFn });
+
         const vertex_shader_source =
             \\attribute vec2 coords;
             \\attribute vec2 offset;
@@ -40,7 +43,7 @@ pub const State = struct {
         ;
         const fragment_shader_source =
             \\void main() {
-            \\    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
+            \\    gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
             \\}
         ;
         const vertex_shader = geoc.Shader.init(geoc_instance, geoc.ShaderType.Vertex, vertex_shader_source);
@@ -49,8 +52,12 @@ pub const State = struct {
         defer fragment_shader.deinit();
         const program = geoc.Program.init(geoc_instance, &[_]geoc.Shader{ vertex_shader, fragment_shader });
 
+        const axis_len = demo_instance.axis.len;
+        const grid_len = demo_instance.grid.len;
+
         return .{
-            .vertex_buffer = geoc.VertexBuffer(Vertex).init(&[_]Vertex{Vertex{ .coords = .{ 0, 0 } }}),
+            .axis_buffer = geoc.VertexBuffer(Vertex).init(&[_]Vertex{Vertex{ .coords = .{ 0, 0 } }} ** axis_len),
+            .grid_buffer = geoc.VertexBuffer(Vertex).init(&[_]Vertex{Vertex{ .coords = .{ 0, 0 } }} ** grid_len),
             .program = program,
             .geoc_instance = geoc_instance,
             .demo_instance = demo_instance,
@@ -59,20 +66,10 @@ pub const State = struct {
 
     pub fn deinit(self: *Self) void {
         self.program.deinit();
-        self.vertex_buffer.deinit();
-    }
-
-    fn drawFn(ptr: *anyopaque) callconv(.C) void {
-        const state: *State = @ptrCast(@alignCast(ptr));
-        state.draw();
+        self.axis_buffer.deinit();
     }
 
     pub fn draw(self: Self) void {
-        var t = self.geoc_instance.currentTime();
-        t = (t - @floor(t)) * 0.99;
-        self.demo_instance.setZ(6.28319 * t);
-        self.demo_instance.updateLines();
-
         const axis_len = self.demo_instance.axis.len;
         const grid_len = self.demo_instance.grid.len;
 
@@ -80,6 +77,9 @@ pub const State = struct {
         defer self.geoc_instance.allocator.free(axis_array);
         var grid_array = self.geoc_instance.allocator.alloc(Vertex, grid_len) catch @panic("OOM");
         defer self.geoc_instance.allocator.free(grid_array);
+
+        // var axis_array = self.axis_buffer.data(); TODO
+        // var grid_array = self.grid_buffer.data();
 
         for (0..axis_len, self.demo_instance.axis) |i, vertex| {
             axis_array[i] = Vertex{
@@ -105,9 +105,18 @@ pub const State = struct {
                 },
             };
         }
+        const axis_buffer = geoc.VertexBuffer(Vertex).init(axis_array);
+        defer axis_buffer.deinit();
+        const grid_buffer = geoc.VertexBuffer(Vertex).init(grid_array);
+        defer grid_buffer.deinit();
 
-        self.geoc_instance.draw(Vertex, self.program, geoc.VertexBuffer(Vertex).init(axis_array), geoc.DrawMode.Lines);
-        self.geoc_instance.draw(Vertex, self.program, geoc.VertexBuffer(Vertex).init(grid_array), geoc.DrawMode.Lines);
+        self.geoc_instance.draw(Vertex, self.program, axis_buffer, geoc.DrawMode.Lines);
+        self.geoc_instance.draw(Vertex, self.program, grid_buffer, geoc.DrawMode.Lines);
+    }
+
+    fn drawFn(ptr: *anyopaque) callconv(.C) void {
+        const state: *State = @ptrCast(@alignCast(ptr));
+        state.draw();
     }
 
     pub fn run(self: Self, state: geoc.State) void {
@@ -119,6 +128,13 @@ pub const State = struct {
             .ptr = self,
             .drawFn = drawFn,
         };
+    }
+
+    fn setAnglesFn(ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void {
+        const demo_instance: *demo.Demo = @ptrCast(@alignCast(ptr));
+        demo_instance.setZ(angle_z);
+        demo_instance.setX(angle_x);
+        demo_instance.updateLines();
     }
 };
 

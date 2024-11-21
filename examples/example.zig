@@ -32,7 +32,7 @@ pub const State = struct {
     demo_instance: *demo.Demo,
 
     pub fn init(geoc_instance: geoc.Geoc, demo_instance: *demo.Demo) Self {
-        geoc_instance.setDemoCallBack(.{ .ptr = demo_instance, .setAnglesFn = setAnglesFn });
+        geoc_instance.setDemoCallBack(.{ .ptr = demo_instance, .setAnglesFn = setAnglesFn, .setZoomFn = setZoomFn });
 
         const vertex_shader_source =
             \\attribute vec2 coords;
@@ -77,9 +77,6 @@ pub const State = struct {
         defer self.geoc_instance.allocator.free(axis_array);
         var grid_array = self.geoc_instance.allocator.alloc(Vertex, grid_len) catch @panic("OOM");
         defer self.geoc_instance.allocator.free(grid_array);
-
-        // var axis_array = self.axis_buffer.data(); TODO
-        // var grid_array = self.grid_buffer.data();
 
         for (0..axis_len, self.demo_instance.axis) |i, vertex| {
             axis_array[i] = Vertex{
@@ -134,6 +131,12 @@ pub const State = struct {
         const demo_instance: *demo.Demo = @ptrCast(@alignCast(ptr));
         demo_instance.setZ(angle_z);
         demo_instance.setX(angle_x);
+        demo_instance.updateLines();
+    }
+
+    fn setZoomFn(ptr: *anyopaque, zoom: f32) callconv(.C) void {
+        const demo_instance: *demo.Demo = @ptrCast(@alignCast(ptr));
+        demo_instance.setZoom(zoom);
         demo_instance.updateLines();
     }
 };

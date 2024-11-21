@@ -19,7 +19,7 @@ fn rotZX(u: [3]f32, angle_x: f32, angle_z: f32) [3]f32 {
 
 pub const Demo = struct {
     const Self = @This();
-    const grid_res = 11;
+    const grid_res = 10;
 
     zoom: f32,
     angle_x: f32,
@@ -99,8 +99,13 @@ pub const Demo = struct {
     pub fn setZ(self: *Self, angle: f32) void {
         self.angle_z = angle;
     }
+
+    pub fn setZoom(self: *Self, zoom: f32) void {
+        self.zoom += zoom;
+    }
 };
 pub const State = struct {
     ptr: *anyopaque,
     setAnglesFn: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
+    setZoomFn: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
 };

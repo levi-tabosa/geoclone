@@ -6,11 +6,11 @@
    <meta name="viewport" content="width=device-width, initial-scale=1.0">
    <link rel="stylesheet" href="geoc.css">
 </head>
-
+<script type="module">
+   import {init} from "./geoc.js";
+   init("example.wasm");
+</script>
 <body>
-   <script type="module">
-      import {init} from "./geoc.js";
-      init("example.wasm");
-   </script>
 </body>
+
 </html>

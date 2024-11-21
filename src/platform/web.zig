@@ -7,7 +7,6 @@ const js = struct { //TODO remove unnecessary
     extern fn deinit() void;
     extern fn clear(r: f32, g: f32, b: f32, a: f32) void;
     extern fn run(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void;
-    extern fn setDemoCallBack(ptr: *anyopaque, setAnglesFn: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void) void;
     extern fn time() f32;
     extern fn _log(ptr: [*]const u8, len: usize) void;
     extern fn initShader(@"type": u32, ptr_source: [*]const u8, ptr_len: u32) i32;
@@ -28,12 +27,13 @@ const js = struct { //TODO remove unnecessary
         stride: usize,
         offset: usize,
     ) void;
+    extern fn setDemoCallBack(
+        ptr: *anyopaque,
+        setAnglesFn: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
+        setZoomFn: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
+    ) void;
     extern fn drawArrays(mode: geoc.DrawMode, first: usize, count: usize) void;
 };
-
-export fn callPtr(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void {
-    drawFn(ptr);
-}
 
 export fn callSetAnglesPtr(
     ptr: *anyopaque,
@@ -42,6 +42,14 @@ export fn callSetAnglesPtr(
     angle_z: f32,
 ) void {
     setAnglesFn(ptr, angle_x, angle_z);
+}
+
+export fn callSetZoomPtr(ptr: *anyopaque, setZoomFn: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void, zoom: f32) callconv(.C) void {
+    setZoomFn(ptr, zoom);
+}
+
+export fn callPtr(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void {
+    drawFn(ptr);
 }
 
 pub fn log(message: []const u8) void {
@@ -146,7 +154,7 @@ pub const State = struct {
     }
 
     pub fn setDemoCallBack(_: Self, state: demo.State) void {
-        js.setDemoCallBack(state.ptr, state.setAnglesFn);
+        js.setDemoCallBack(state.ptr, state.setAnglesFn, state.setZoomFn);
     }
 
     pub fn currentTime(_: Self) f32 {

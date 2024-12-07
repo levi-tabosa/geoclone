@@ -29,8 +29,9 @@ const js = struct { //TODO remove unnecessary
     ) void;
     extern fn setDemoCallBack(
         ptr: *anyopaque,
-        setAnglesFn: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
-        setZoomFn: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
+        angles_fn_ptr: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
+        zoom_fn_ptr: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
+        insert_fn_ptr: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
     ) void;
     extern fn drawArrays(mode: geoc.DrawMode, first: usize, count: usize) void;
 };
@@ -44,8 +45,18 @@ export fn callSetAnglesPtr(
     setAnglesFn(ptr, angle_x, angle_z);
 }
 
-export fn callSetZoomPtr(ptr: *anyopaque, setZoomFn: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void, zoom: f32) callconv(.C) void {
+export fn callSetZoomPtr(ptr: *anyopaque, setZoomFn: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void, zoom: f32) void {
     setZoomFn(ptr, zoom);
+}
+
+export fn callInsertVector(
+    ptr: *anyopaque,
+    setInsertFn: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
+    x: f32,
+    y: f32,
+    z: f32,
+) void {
+    setInsertFn(ptr, x, y, z);
 }
 
 export fn callPtr(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void {
@@ -154,7 +165,12 @@ pub const State = struct {
     }
 
     pub fn setDemoCallBack(_: Self, state: demo.State) void {
-        js.setDemoCallBack(state.ptr, state.setAnglesFn, state.setZoomFn);
+        js.setDemoCallBack(
+            state.ptr,
+            state.setAnglesFn,
+            state.setZoomFn,
+            state.setInsertFn,
+        );
     }
 
     pub fn currentTime(_: Self) f32 {

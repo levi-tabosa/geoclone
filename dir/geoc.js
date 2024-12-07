@@ -11,11 +11,18 @@
 * } Program
 *
 * @typedef {{
-*    x:number,
-*    y:number}
+*    x: number,
+*    y: number}
 * } Pos
-*
+*  @typedef {{
+*    ptr: number,
+*    angles_fn_ptr: number
+*    zoom_fn_ptr: number
+*    insert_fn_ptr: number
+*    }
+* } Demo
 * */
+
 /** @type { HTMLCanvasElement } */
 let canvas;
 /** @type { WebGLRenderingContext } */
@@ -27,19 +34,21 @@ let wasm_memory;
 /** @type { Map<number, WebGLShader> } */
 let shaders = new Map();
 let next_shader = 0;
-/** @type { boolean } */
-let is_pressed = false;
 /** @type { Map<number, Program> } */
 let programs = new Map();
-/** @type { number } */
 let next_program = 0;
 /** @type { Map<number, WebGLBuffer> } */
 let buffers = new Map();
-/** @type { number } */
 let next_buffer = 0;
-let demo_ptr = 0;
-let demo_fnPtr = 0;
-let demo_other_fnPtr = 0;
+
+let is_pressed = false;
+
+let demo = {
+  ptr: 0,
+  angles_fn_ptr: 0,
+  zoom_fn_ptr: 0,
+  insert_fn_ptr: 0,
+}
 
 function getData(c_ptr, len) {
   return new Uint8Array(wasm_memory.buffer, c_ptr, len);
@@ -61,6 +70,10 @@ function setZoom(ptr, fnPtr, i) {
   wasm_instance.exports.callSetZoomPtr(ptr, fnPtr, i);
 }
 
+function insertVector(ptr, fnPtr, x, y, z) {
+  wasm_instance.exports.callInsertVector(ptr, fnPtr, x, y, z);
+}
+
 const up_listener = (event) => {
   is_pressed = false;
 };
@@ -69,31 +82,54 @@ const down_listener = (event) => {
   is_pressed = true;
 };
 
-const wheel_listener = (event) => {
-  setZoom(demo_ptr, demo_other_fnPtr, (event.deltaY >> 6) * 0.1);
-}
-
 const move_listener = (event) => {
   if (is_pressed) {
     const rect = canvas.getBoundingClientRect();
     const pos = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     const angle_x = (pos.y * 6.283185) / rect.height;
     const angle_z = (pos.x * 6.283185) / rect.width;
-
-    setAngles(demo_ptr, demo_fnPtr, angle_x, angle_z);
+    
+    setAngles(demo.ptr, demo.angles_fn_ptr, angle_x, angle_z);
   }
+};
+
+const wheel_listener = (event) => {
+  setZoom(demo.ptr, demo.zoom_fn_ptr, (event.deltaY >> 6) * 0.1);
+};
+
+const btn_listener = (event) => {
+  const value1 = input1.value;
+  const value2 = input2.value;
+  const value3 = input3.value;
+
+  console.log(`Input 1: ${value1}`);
+  console.log(`Input 2: ${value2}`);
+  console.log(`Input 3: ${value3}`);
+
+  insertVector(demo.ptr, demo.insert_fn_ptr, value1, value2, value3);
 };
 
 const env = {
   init: function () {
-    const body = document.getElementsByTagName("body").item(0);
     const container = document.createElement("div");
-    
-    container.id = "container";
+    const body = document.getElementsByTagName("body").item(0);
+    const button1 = document.createElement("button");
+    const input1 = document.createElement("input");
+    const input2 = document.createElement("input");
+    const input3 = document.createElement("input");
+    const text_fields = document.createElement("div");
     canvas = document.createElement("canvas");
-    canvas.id = "canvas";
     webgl = canvas.getContext("webgl");
-
+    
+    canvas.id = "canvas";
+    container.id = "container";
+    text_fields.id = "text-inputs";
+    button1.id = "button1";
+    input1.id = "input1";
+    input2.id = "input2";
+    input3.id = "input3";
+    button1.className = "floating-button"
+    
     if (webgl == null) {
       throw new Error("No WebGL support on browser");
     }
@@ -102,9 +138,14 @@ const env = {
     canvas.addEventListener("mouseup", up_listener);
     canvas.addEventListener("mousemove", move_listener);
     canvas.addEventListener("wheel", wheel_listener);
-
-    container.appendChild(canvas);
+    button1.addEventListener("click", btn_listener);
     
+    text_fields.appendChild(input1);
+    text_fields.appendChild(input2);
+    text_fields.appendChild(input3);    
+    container.appendChild(canvas);
+    container.appendChild(button1);
+    container.appendChild(text_fields);
     body.append(container);
   },
   deinit: function () {
@@ -126,10 +167,11 @@ const env = {
     requestAnimationFrame(frame);
     throw new Error("Not an error");
   },
-  setDemoCallBack: function (ptr, fnPtr, otherFnPtr) {
-    demo_ptr = ptr;
-    demo_fnPtr = fnPtr;
-    demo_other_fnPtr = otherFnPtr;
+  setDemoCallBack: function (ptr, angles_fn_ptr, set_zoom_fn_ptr, set_insert_fn_ptr) {
+    demo.ptr = ptr;
+    demo.angles_fn_ptr = angles_fn_ptr;
+    demo.zoom_fn_ptr = set_zoom_fn_ptr;
+    demo.insert_fn_ptr = set_insert_fn_ptr;
   },
   _log: function (ptr, len) {
     console.log(getStr(ptr, len));

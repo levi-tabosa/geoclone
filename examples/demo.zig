@@ -32,7 +32,7 @@ pub const Demo = struct {
     axis: [6]Vector,
     grid: [grid_res << 2]Vector,
     vectors: ArrayList(Vector),
-    shapes: ArrayList(ArrayList(Vector)),
+    shapes: ArrayList([]Vector),
 
     pub fn init() Self {
         const angle_x: f32 = 0.7;

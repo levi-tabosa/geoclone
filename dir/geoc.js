@@ -94,7 +94,7 @@ const move_listener = (event) => {
 };
 
 const wheel_listener = (event) => {
-  setZoom(demo.ptr, demo.zoom_fn_ptr, event.deltaY);
+  setZoom(demo.ptr, demo.zoom_fn_ptr, (event.deltaY >> 6) * 0.1);
 };
 
 const btn_listener = (event) => {

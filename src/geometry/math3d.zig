@@ -36,31 +36,31 @@ pub const V3 = struct {
 
 pub const Scene = struct {
     const Self = @This();
-    const grid_res = 10;
+    const res = 10;
 
     allocator: Allocator,
     zoom: f32,
     angle_x: f32,
     angle_z: f32,
     axis: [6]V3,
-    grid: [grid_res * 4]V3,
+    grid: [res * 4]V3,
     vectors: ?[]V3,
     shapes: ?[][]V3,
 
     pub fn init(allocator: std.mem.Allocator) Self {
         const angle_x: f32 = 0.7;
         const angle_z: f32 = 0.7;
-        const _i = 0.3;
+        const zoom = 0.3;
 
-        const j = grid_res >> 1;
-        const upperLimit = if (grid_res & 1 == 1) j + 1 else j;
-        const fixed: f32 = j * _i;
+        const j = res / 2;
+        const upperLimit = if (res & 1 == 1) j + 1 else j;
+        const fixed: f32 = j * zoom;
+
+        var grid: [res * 4]V3 = undefined;
         var i: i32 = -j;
 
-        var grid: [grid_res * 4]V3 = undefined;
-
         while (i < upperLimit) : (i += 1) {
-            const idx: f32 = @as(f32, @floatFromInt(i)) * _i;
+            const idx: f32 = @as(f32, @floatFromInt(i)) * zoom;
             const index = @as(usize, @intCast((i + j) * 4));
             grid[index] = rotateV3(&.{ idx, fixed, 0.0 }, angle_x, angle_z);
 
@@ -80,7 +80,7 @@ pub const Scene = struct {
 
         return .{
             .allocator = allocator,
-            .zoom = _i,
+            .zoom = zoom,
             .angle_x = angle_x,
             .angle_z = angle_z,
             .axis = axis,
@@ -91,8 +91,8 @@ pub const Scene = struct {
     }
 
     pub fn updateLines(self: *Self) void {
-        const j = grid_res >> 1;
-        const upperLimit = if (grid_res & 1 == 1) j + 1 else j;
+        const j = res / 2;
+        const upperLimit = if (res & 1 == 1) j + 1 else j;
         const fixed: f32 = j * self.zoom;
         var i: i32 = -j;
 
@@ -114,10 +114,13 @@ pub const Scene = struct {
         };
         if (self.vectors) |vectors| {
             for (vectors) |*vec| {
-                vec.changed[0] *= self.zoom;
-                vec.changed[1] *= self.zoom;
-                vec.changed[2] *= self.zoom;
                 vec.* = rotateV3(&vec.coords, self.angle_x, self.angle_z);
+
+                // vec.* = rotateV3(
+                //     &.{ vec.coords[0] + self.zoom, vec.coords[1] + self.zoom, vec.coords[2] + self.zoom },
+                //     self.angle_x,
+                //     self.angle_z,
+                // );
             }
         }
     }
@@ -153,7 +156,7 @@ pub const Scene = struct {
             self.vectors.?[0] = origin;
             self.vectors.?[1] = new_vector;
         }
-        _LOGF(self.allocator, "{any}", .{self.vectors});
+        _LOGF(self.allocator, "~~~~{any}~~~~", .{self.vectors});
     }
 
     pub fn clearVectors(self: *Self) void {

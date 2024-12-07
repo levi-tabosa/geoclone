@@ -117,8 +117,8 @@ pub const State = struct {
             for (0..vectors.len, vectors) |i, vertex| {
                 _LOGF(self.geoc.allocator, "vertex: {any}", .{vertex});
                 vectors_array[i] = V2{ .coords = .{
-                    vertex.changed[0],
-                    vertex.changed[1],
+                    vertex.changed[0] * self.scene.zoom,
+                    vertex.changed[1] * self.scene.zoom,
                 } };
             }
             _LOGF(self.geoc.allocator, "vector array: {any}", .{vectors_array});

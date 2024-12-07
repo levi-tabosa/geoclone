@@ -94,7 +94,7 @@ const move_listener = (event) => {
 };
 
 const wheel_listener = (event) => {
-  setZoom(demo.ptr, demo.zoom_fn_ptr, (event.deltaY >> 6) * 0.1);
+  setZoom(demo.ptr, demo.zoom_fn_ptr, event.deltaY);
 };
 
 const btn_listener = (event) => {
@@ -105,6 +105,10 @@ const btn_listener = (event) => {
   console.log(`Input 1: ${value1}`);
   console.log(`Input 2: ${value2}`);
   console.log(`Input 3: ${value3}`);
+
+  input1.value = "";
+  input2.value = "";
+  input3.value = "";
 
   insertVector(demo.ptr, demo.insert_fn_ptr, value1, value2, value3);
 };

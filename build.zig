@@ -39,11 +39,11 @@ fn createExecutable(
         .optimize = optimize,
     });
 
-    geoc.addImport("demo", b.addModule("demo", .{
-        .root_source_file = b.path("examples/demo.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
+    // geoc.addImport("demo", b.addModule("demo", .{
+    //     .root_source_file = b.path("examples/demo.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // }));
     exe.root_module.addImport("geoc", geoc);
 
     return exe;

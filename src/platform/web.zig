@@ -1,8 +1,8 @@
-const geoc = @import("../root.zig");
+const geoclone = @import("../root.zig");
 const std = @import("std");
-const demo = geoc.demo;
+const math3d = geoclone.math3d;
 
-const js = struct { //TODO remove unnecessary
+const js = struct { //TODO remove all unused fn
     extern fn init() void;
     extern fn deinit() void;
     extern fn clear(r: f32, g: f32, b: f32, a: f32) void;
@@ -33,7 +33,7 @@ const js = struct { //TODO remove unnecessary
         zoom_fn_ptr: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
         insert_fn_ptr: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
     ) void;
-    extern fn drawArrays(mode: geoc.DrawMode, first: usize, count: usize) void;
+    extern fn drawArrays(mode: geoclone.DrawMode, first: usize, count: usize) void;
 };
 
 export fn callSetAnglesPtr(
@@ -72,7 +72,7 @@ pub const Shader = struct {
 
     js_handle: i32,
 
-    pub fn init(geoc_instance: geoc.Geoc, @"type": geoc.ShaderType, source: []const u8) Self {
+    pub fn init(geoc_instance: geoclone.Geoc, @"type": geoclone.ShaderType, source: []const u8) Self {
         _ = geoc_instance;
 
         return .{
@@ -160,11 +160,11 @@ pub const State = struct {
         js.deinit();
     }
 
-    pub fn run(_: Self, state: geoc.State) void {
+    pub fn run(_: Self, state: geoclone.State) void {
         js.run(state.ptr, state.drawFn);
     }
 
-    pub fn setDemoCallBack(_: Self, state: demo.State) void {
+    pub fn setDemoCallBack(_: Self, state: math3d.State) void {
         js.setDemoCallBack(
             state.ptr,
             state.setAnglesFn,
@@ -206,7 +206,7 @@ pub const State = struct {
         );
     }
 
-    pub fn drawArrays(_: Self, mode: geoc.DrawMode, first: usize, count: usize) void {
+    pub fn drawArrays(_: Self, mode: geoclone.DrawMode, first: usize, count: usize) void {
         js.drawArrays(mode, first, count);
     }
 };

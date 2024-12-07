@@ -1,12 +1,14 @@
 const std = @import("std");
 const builtin = @import("builtin");
-pub const demo = @import("demo");
-pub var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
 pub const platform = switch (builtin.target.isWasm()) {
     true => @import("platform/web.zig"),
     false => @import("platform/native.zig"),
 };
+
+pub const math3d = @import("geometry/math3d.zig");
+
+pub var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
 pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral), comptime format: []const u8, args: anytype) void {
     const scope_prefix = "(" ++ switch (scope) {
@@ -139,13 +141,13 @@ pub const State = struct {
 pub const Geoc = struct {
     const Self = @This();
 
-    platform: platform.State,
     allocator: std.mem.Allocator,
+    platform: platform.State,
 
     pub fn init() Self {
         return .{
-            .platform = platform.State.init(),
             .allocator = gpa.allocator(),
+            .platform = platform.State.init(),
         };
     }
 
@@ -157,7 +159,7 @@ pub const Geoc = struct {
         self.platform.run(state);
     }
 
-    pub fn setDemoCallBack(self: Self, state: demo.State) void {
+    pub fn setDemoCallBack(self: Self, state: math3d.State) void {
         self.platform.setDemoCallBack(state);
     }
 

@@ -1,3 +1,28 @@
+/**
+ * @typedef {{
+*    index: number,
+*    info: WebGLActiveInfo}
+* } Attribute
+*
+* @typedef {{
+*    gl: WebGLProgram,
+*    attributes: Map<string, Attribute>,
+*    uniforms: Map<string, WebGLActiveInfo>}
+* } Program
+*
+* @typedef {{
+*    x: number,
+*    y: number}
+* } Pos
+*  @typedef {{
+*    ptr: number,
+*    angles_fn_ptr: number
+*    zoom_fn_ptr: number
+*    insert_fn_ptr: number
+*    clear_fn_ptr: number}
+* } Demo
+* */
+
 /** @type { HTMLCanvasElement } */
 let canvas;
 /** @type { WebGLRenderingContext } */
@@ -9,38 +34,22 @@ let wasm_memory;
 /** @type { Map<number, WebGLShader> } */
 let shaders = new Map();
 let next_shader = 0;
-
-/**
- * @typedef {{
- *    index: number,
- *    info: WebGLActiveInfo}
- * } Attribute
- *
- * @typedef {{
- *    gl: WebGLProgram,
- *    attributes: Map<string, Attribute>,
- *    uniforms: Map<string, WebGLActiveInfo>}
- * } Program
- *
- * @typedef {{
- *    x:number,
- *    y:number}
- * } Pos
- *
- * */
-
-let demo_ptr = 0;
-let demo_fnPtr = 0;
-/** @type { boolean } */
-let is_pressed = false;
 /** @type { Map<number, Program> } */
 let programs = new Map();
-/** @type { number } */
 let next_program = 0;
 /** @type { Map<number, WebGLBuffer> } */
 let buffers = new Map();
-/** @type { number } */
 let next_buffer = 0;
+
+let is_pressed = false;
+
+let demo = {
+  ptr: 0,
+  angles_fn_ptr: 0,
+  zoom_fn_ptr: 0,
+  insert_fn_ptr: 0,
+  clear_fn_ptr: 0,
+}
 
 function getData(c_ptr, len) {
   return new Uint8Array(wasm_memory.buffer, c_ptr, len);
@@ -58,11 +67,23 @@ function setAngles(ptr, fnPtr, angle_x, angle_z) {
   wasm_instance.exports.callSetAnglesPtr(ptr, fnPtr, angle_x, angle_z);
 }
 
-const up_listener = (event) => {
+function setZoom(ptr, fnPtr, i) {
+  wasm_instance.exports.callSetZoomPtr(ptr, fnPtr, i);
+}
+
+function insertVector(ptr, fnPtr, x, y, z) {
+  wasm_instance.exports.callInsertVector(ptr, fnPtr, x, y, z);
+}
+
+function clearVectors(ptr, fnPtr) {
+  wasm_instance.exports.callClearVectors(ptr, fnPtr);
+}
+
+const up_listener = (_event) => {
   is_pressed = false;
 };
 
-const down_listener = (event) => {
+const down_listener = (_event) => {
   is_pressed = true;
 };
 
@@ -72,17 +93,100 @@ const move_listener = (event) => {
     const pos = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     const angle_x = (pos.y * 6.283185) / rect.height;
     const angle_z = (pos.x * 6.283185) / rect.width;
-
-    setAngles(demo_ptr, demo_fnPtr, angle_x, angle_z);
+    
+    setAngles(demo.ptr, demo.angles_fn_ptr, angle_x, angle_z);
   }
 };
 
+const wheel_listener = (event) => {
+  setZoom(demo.ptr, demo.zoom_fn_ptr, (event.deltaY >> 6) * 0.1);
+};
+
+const listeners = [
+  (_event) => {
+    insertVector(demo.ptr, demo.insert_fn_ptr, input1.value, input2.value, input3.value);
+    
+    input1.value = "";
+    input2.value = "";
+    input3.value = "";
+  },
+  (_event) => {
+    clearVectors(demo.ptr, demo.clear_fn_ptr);
+  },
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},,
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+];
+
+function createButtonGrid() {
+  const buttonGrid = document.createElement('div');
+  buttonGrid.id = 'button-grid';
+
+  const buttonLabels = [
+    'Insert', 'Clear', 'Rotate',
+    'Cube', 'Toggle', 'Scale',
+    'Pyramid', 'GROUP', 'UNGROUP',
+    'Sphere', 'DISTRIBUTE', 'SNAP', 
+    'Cone', 'PAN', 'UNDO',
+    'REDO', 'SAVE', 'LOAD'
+  ];
+
+  buttonLabels.forEach((label, index) => {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    btn.className = 'floating-button';
+    btn.id = `grid-btn-${index + 1}`;
+    btn.addEventListener('click', listeners[index]);
+    buttonGrid.appendChild(btn);
+  });
+  
+  return buttonGrid;
+}
+
+function createToggleGridButton() {
+  const toggleBtn = document.createElement('button');
+  toggleBtn.id = 'toggle-grid-btn';
+  toggleBtn.textContent = 'BUTTONS';
+  
+  toggleBtn.addEventListener('click', () => {
+     const buttonGrid = document.getElementById('button-grid');
+     buttonGrid.classList.toggle('hidden');
+  });
+  
+  return toggleBtn;
+}
+
 const env = {
   init: function () {
-    const body = document.getElementsByTagName("body").item(0);
     canvas = document.createElement("canvas");
     webgl = canvas.getContext("webgl");
+    const body = document.getElementsByTagName("body").item(0);
+    const container = document.createElement("div");
+    const text_fields = document.createElement("div");
+    const input1 = document.createElement("input");
+    const input2 = document.createElement("input");
+    const input3 = document.createElement("input");
 
+    canvas.id = "canvas";
+    container.id = "container";
+    text_fields.id = "text-inputs";
+    input1.id = "input1";
+    input2.id = "input2";
+    input3.id = "input3";
+    
     if (webgl == null) {
       throw new Error("No WebGL support on browser");
     }
@@ -90,7 +194,16 @@ const env = {
     canvas.addEventListener("mousedown", down_listener);
     canvas.addEventListener("mouseup", up_listener);
     canvas.addEventListener("mousemove", move_listener);
-    body.append(canvas);
+    canvas.addEventListener("wheel", wheel_listener);
+    
+    body.append(container);
+    container.appendChild(canvas);
+    container.appendChild(createButtonGrid());
+    container.appendChild(createToggleGridButton());
+    container.appendChild(text_fields);
+    text_fields.appendChild(input1);
+    text_fields.appendChild(input2);
+    text_fields.appendChild(input3);    
   },
   deinit: function () {
     webgl.finish();
@@ -99,18 +212,24 @@ const env = {
     function frame() {
       canvas.width = canvas.clientWidth;
       canvas.height = canvas.clientHeight;
+
       webgl.viewport(0, 0, canvas.width, canvas.height);
+
       call(ptr, fnPtr);
+
       setTimeout(() => {
         requestAnimationFrame(frame);
       }, 15);
     }
     requestAnimationFrame(frame);
-    throw new Error("Dummy error");
+    throw new Error("Not an error");
   },
-  setDemoCallBack: function (ptr, fnPtr) {
-    demo_ptr = ptr;
-    demo_fnPtr = fnPtr;
+  setDemoCallBack: function (ptr, angles_fn_ptr, zoom_fn_ptr, insert_fn_ptr, clear_fn_ptr) {
+    demo.ptr = ptr;
+    demo.angles_fn_ptr = angles_fn_ptr;
+    demo.zoom_fn_ptr = zoom_fn_ptr;
+    demo.insert_fn_ptr = insert_fn_ptr;
+    demo.clear_fn_ptr = clear_fn_ptr;
   },
   _log: function (ptr, len) {
     console.log(getStr(ptr, len));

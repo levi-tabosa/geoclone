@@ -1,13 +1,12 @@
-const geoc = @import("../root.zig");
+const geoclone = @import("../root.zig");
 const std = @import("std");
-const demo = geoc.demo;
+const canvas = geoclone.canvas;
 
-const js = struct { //TODO remove unnecessary
+const js = struct { //TODO remove all unused fn
     extern fn init() void;
     extern fn deinit() void;
     extern fn clear(r: f32, g: f32, b: f32, a: f32) void;
     extern fn run(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void;
-    extern fn setDemoCallBack(ptr: *anyopaque, setAnglesFn: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void) void;
     extern fn time() f32;
     extern fn _log(ptr: [*]const u8, len: usize) void;
     extern fn initShader(@"type": u32, ptr_source: [*]const u8, ptr_len: u32) i32;
@@ -28,20 +27,52 @@ const js = struct { //TODO remove unnecessary
         stride: usize,
         offset: usize,
     ) void;
-    extern fn drawArrays(mode: geoc.DrawMode, first: usize, count: usize) void;
+    extern fn setDemoCallBack(
+        ptr: *anyopaque,
+        angles_fn_ptr: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
+        zoom_fn_ptr: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
+        insert_fn_ptr: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
+        clear_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
+    ) void;
+    extern fn drawArrays(mode: geoclone.DrawMode, first: usize, count: usize) void;
 };
-
-export fn callPtr(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void {
-    drawFn(ptr);
-}
 
 export fn callSetAnglesPtr(
     ptr: *anyopaque,
-    setAnglesFn: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
+    angles_fn_ptr: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
     angle_x: f32,
     angle_z: f32,
 ) void {
-    setAnglesFn(ptr, angle_x, angle_z);
+    angles_fn_ptr(ptr, angle_x, angle_z);
+}
+
+export fn callSetZoomPtr(
+    ptr: *anyopaque,
+    zoom_fn_ptr: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
+    zoom: f32,
+) void {
+    zoom_fn_ptr(ptr, zoom);
+}
+
+export fn callInsertVector(
+    ptr: *anyopaque,
+    insert_fn_ptr: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
+    x: f32,
+    y: f32,
+    z: f32,
+) void {
+    insert_fn_ptr(ptr, x, y, z);
+}
+
+export fn callClearVectors(
+    ptr: *anyopaque,
+    clear_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
+) void {
+    clear_fn_ptr(ptr);
+}
+
+export fn callPtr(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void {
+    drawFn(ptr);
 }
 
 pub fn log(message: []const u8) void {
@@ -53,7 +84,7 @@ pub const Shader = struct {
 
     js_handle: i32,
 
-    pub fn init(geoc_instance: geoc.Geoc, @"type": geoc.ShaderType, source: []const u8) Self {
+    pub fn init(geoc_instance: geoclone.Geoc, @"type": geoclone.ShaderType, source: []const u8) Self {
         _ = geoc_instance;
 
         return .{
@@ -141,12 +172,18 @@ pub const State = struct {
         js.deinit();
     }
 
-    pub fn run(_: Self, state: geoc.State) void {
+    pub fn run(_: Self, state: geoclone.State) void {
         js.run(state.ptr, state.drawFn);
     }
 
-    pub fn setDemoCallBack(_: Self, state: demo.State) void {
-        js.setDemoCallBack(state.ptr, state.setAnglesFn);
+    pub fn setDemoCallBack(_: Self, state: canvas.State) void {
+        js.setDemoCallBack(
+            state.ptr,
+            state.angles_fn_ptr,
+            state.zoom_fn_ptr,
+            state.insert_fn_ptr,
+            state.clear_fn_ptr,
+        );
     }
 
     pub fn currentTime(_: Self) f32 {
@@ -182,7 +219,7 @@ pub const State = struct {
         );
     }
 
-    pub fn drawArrays(_: Self, mode: geoc.DrawMode, first: usize, count: usize) void {
+    pub fn drawArrays(_: Self, mode: geoclone.DrawMode, first: usize, count: usize) void {
         js.drawArrays(mode, first, count);
     }
 };

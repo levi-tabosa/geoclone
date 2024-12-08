@@ -33,17 +33,13 @@ fn createExecutable(
         .target = target,
         .optimize = optimize,
     });
+
     const geoc = b.addModule("geoc", .{
         .root_source_file = b.path("src/root.zig"),
         .target = target,
         .optimize = optimize,
     });
 
-    geoc.addImport("demo", b.addModule("demo", .{
-        .root_source_file = b.path("examples/demo.zig"),
-        .target = target,
-        .optimize = optimize,
-    }));
     exe.root_module.addImport("geoc", geoc);
 
     return exe;

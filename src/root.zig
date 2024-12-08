@@ -6,7 +6,7 @@ pub const platform = switch (builtin.target.isWasm()) {
     false => @import("platform/native.zig"),
 };
 
-pub const math3d = @import("geometry/math3d.zig");
+pub const canvas = @import("geometry/canvas.zig");
 
 pub var gpa = std.heap.GeneralPurposeAllocator(.{}){};
 
@@ -159,7 +159,7 @@ pub const Geoc = struct {
         self.platform.run(state);
     }
 
-    pub fn setDemoCallBack(self: Self, state: math3d.State) void {
+    pub fn setDemoCallBack(self: Self, state: canvas.State) void {
         self.platform.setDemoCallBack(state);
     }
 

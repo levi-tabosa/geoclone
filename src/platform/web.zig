@@ -1,6 +1,6 @@
 const geoclone = @import("../root.zig");
 const std = @import("std");
-const math3d = geoclone.math3d;
+const canvas = geoclone.canvas;
 
 const js = struct { //TODO remove all unused fn
     extern fn init() void;
@@ -164,7 +164,7 @@ pub const State = struct {
         js.run(state.ptr, state.drawFn);
     }
 
-    pub fn setDemoCallBack(_: Self, state: math3d.State) void {
+    pub fn setDemoCallBack(_: Self, state: canvas.State) void {
         js.setDemoCallBack(
             state.ptr,
             state.setAnglesFn,

@@ -1,8 +1,6 @@
 const g = @import("geoc");
 const std = @import("std");
-const math3d = g.math3d;
-const near = 10;
-const far = 35;
+const canvas = g.canvas;
 
 fn _log(txt: []const u8) void { //TODO: erase
     g.platform.log(txt);
@@ -22,17 +20,19 @@ const V2 = struct {
     offset: [2]f32 = .{ 0.0, 0.0 },
 };
 
+const V3 = canvas.V3;
+
 pub const State = struct {
     const Self = @This();
 
-    axis_buffer: g.VertexBuffer(V2), //TODO reutilize
-    grid_buffer: g.VertexBuffer(V2),
+    axis_buffer: g.VertexBuffer(V3), //TODO reutilize
+    grid_buffer: g.VertexBuffer(V3),
     vectors_buffer: g.VertexBuffer(V2),
     program: g.Program,
     geoc: g.Geoc,
-    scene: *math3d.Scene,
+    scene: *canvas.Scene,
 
-    pub fn init(geoc_instance: g.Geoc, scene: *math3d.Scene) Self {
+    pub fn init(geoc_instance: g.Geoc, scene: *canvas.Scene) Self {
         geoc_instance.setDemoCallBack(.{
             .ptr = scene,
             .setAnglesFn = setAnglesFn,
@@ -41,10 +41,10 @@ pub const State = struct {
         });
 
         const vertex_shader_source =
-            \\attribute vec2 coords;
-            \\attribute vec2 offset;
+            \\attribute vec3 coords;
+            \\attribute vec3 changed;
             \\void main() {
-            \\    gl_Position = vec4(coords.x, coords.y, 1.0, 1.0);
+            \\    gl_Position = vec4(changed.x * 10.0 / (changed.z + 35.0), changed.y * 10.0 / (changed.z + 35.0), 1.0, 1.0);
             \\}
         ;
         const fragment_shader_source =
@@ -58,12 +58,9 @@ pub const State = struct {
         defer fragment_shader.deinit();
         const program = g.Program.init(geoc_instance, &[_]g.Shader{ vertex_shader, fragment_shader });
 
-        const axis_len = scene.axis.len;
-        const grid_len = scene.grid.len;
-
         return .{
-            .axis_buffer = g.VertexBuffer(V2).init(&[_]V2{V2{ .coords = .{ 0, 0 } }} ** axis_len),
-            .grid_buffer = g.VertexBuffer(V2).init(&[_]V2{V2{ .coords = .{ 0, 0 } }} ** grid_len),
+            .axis_buffer = g.VertexBuffer(V3).init(&scene.axis),
+            .grid_buffer = g.VertexBuffer(V3).init(&scene.grid),
             .vectors_buffer = g.VertexBuffer(V2).init(&[_]V2{V2{ .coords = .{ 0, 0 } }}),
             .program = program,
             .geoc = geoc_instance,
@@ -77,56 +74,32 @@ pub const State = struct {
     }
 
     pub fn draw(self: Self) void {
-        const axis_len = self.scene.axis.len;
-        const grid_len = self.scene.grid.len;
-
-        var axis_array = self.geoc.allocator.alloc(V2, axis_len) catch @panic("OOM");
-        defer self.geoc.allocator.free(axis_array);
-        var grid_array = self.geoc.allocator.alloc(V2, grid_len) catch @panic("OOM");
-        defer self.geoc.allocator.free(grid_array);
-
-        for (0..axis_len, self.scene.axis) |i, vertex| {
-            axis_array[i] = V2{ .coords = .{
-                vertex.changed[0] * near / (vertex.changed[2] + far),
-                vertex.changed[1] * near / (vertex.changed[2] + far),
-            } };
-        }
-
-        for (0..grid_len, self.scene.grid) |i, vertex| {
-            grid_array[i] = V2{ .coords = .{
-                vertex.changed[0] * near / (vertex.changed[2] + far),
-                vertex.changed[1] * near / (vertex.changed[2] + far),
-            } };
-        }
-
-        const axis_buffer = g.VertexBuffer(V2).init(axis_array);
+        const axis_buffer = g.VertexBuffer(V3).init(&self.scene.axis);
         defer axis_buffer.deinit();
-        const grid_buffer = g.VertexBuffer(V2).init(grid_array);
+        const grid_buffer = g.VertexBuffer(V3).init(&self.scene.grid);
         defer grid_buffer.deinit();
 
-        self.geoc.draw(V2, self.program, axis_buffer, g.DrawMode.Lines);
-        self.geoc.draw(V2, self.program, grid_buffer, g.DrawMode.Lines);
+        self.geoc.draw(V3, self.program, axis_buffer, g.DrawMode.Lines);
+        self.geoc.draw(V3, self.program, grid_buffer, g.DrawMode.Lines);
+
         self.drawVectors();
     }
 
     fn drawVectors(self: Self) void {
         if (self.scene.vectors) |vectors| {
-            var vectors_array = self.geoc.allocator.alloc(V2, vectors.len) catch @panic("OOM");
-            defer self.geoc.allocator.free(vectors_array);
-
-            for (0..vectors.len, vectors) |i, vertex| {
-                _LOGF(self.geoc.allocator, "vertex: {any}", .{vertex});
-                vectors_array[i] = V2{ .coords = .{
-                    vertex.changed[0] * self.scene.zoom,
-                    vertex.changed[1] * self.scene.zoom,
-                } };
-            }
-            _LOGF(self.geoc.allocator, "vector array: {any}", .{vectors_array});
-
-            const vectors_buffer = g.VertexBuffer(V2).init(vectors_array);
+            const vectors_buffer = g.VertexBuffer(V3).init(vectors);
             defer vectors_buffer.deinit();
+            self.geoc.draw(V3, self.program, vectors_buffer, g.DrawMode.Lines);
+        }
+    }
 
-            self.geoc.draw(V2, self.program, vectors_buffer, g.DrawMode.Lines);
+    fn drawShapes(self: Self) void {
+        if (self.scene.shapes) |shapes| {
+            for (shapes) |s| {
+                const shapes_buffer = g.VertexBuffer(V3).init(s);
+                defer shapes_buffer.deinit();
+                self.geoc.draw(V3, self.program, shapes_buffer, g.DrawMode.Lines);
+            }
         }
     }
 
@@ -146,21 +119,22 @@ pub const State = struct {
         };
     }
 };
-fn setAnglesFn(ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void {
-    const scene: *math3d.Scene = @ptrCast(@alignCast(ptr));
+
+fn setAnglesFn(ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void { //TODO: move these ugly fns
+    const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
     scene.setAngleZ(angle_z);
     scene.setAngleX(angle_x);
     scene.updateLines();
 }
 
 fn setZoomFn(ptr: *anyopaque, zoom: f32) callconv(.C) void {
-    const scene: *math3d.Scene = @ptrCast(@alignCast(ptr));
+    const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
     scene.setZoom(zoom);
     scene.updateLines();
 }
 
 fn setInsertFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
-    const scene: *math3d.Scene = @ptrCast(@alignCast(ptr));
+    const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
     scene.addVector(x, y, z);
 }
 
@@ -168,7 +142,7 @@ pub fn main() void {
     var engine = g.Geoc.init();
     defer engine.deinit();
 
-    var scene = math3d.Scene.init(engine.allocator);
+    var scene = canvas.Scene.init(engine.allocator);
 
     var state = State.init(engine, &scene);
     defer state.deinit();

@@ -74,11 +74,11 @@ function insertVector(ptr, fnPtr, x, y, z) {
   wasm_instance.exports.callInsertVector(ptr, fnPtr, x, y, z);
 }
 
-const up_listener = (event) => {
+const up_listener = (_event) => {
   is_pressed = false;
 };
 
-const down_listener = (event) => {
+const down_listener = (_event) => {
   is_pressed = true;
 };
 
@@ -97,42 +97,87 @@ const wheel_listener = (event) => {
   setZoom(demo.ptr, demo.zoom_fn_ptr, (event.deltaY >> 6) * 0.1);
 };
 
-const btn_listener = (event) => {
-  const value1 = input1.value;
-  const value2 = input2.value;
-  const value3 = input3.value;
+const listeners = [
+  (_event) => {
+    insertVector(demo.ptr, demo.insert_fn_ptr, input1.value, input2.value, input3.value);
+    
+    input1.value = "";
+    input2.value = "";
+    input3.value = "";
+  },
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},,
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+  (_event) => {},
+];
 
-  console.log(`Input 1: ${value1}`);
-  console.log(`Input 2: ${value2}`);
-  console.log(`Input 3: ${value3}`);
+function createButtonGrid() {
+  const buttonGrid = document.createElement('div');
+  buttonGrid.id = 'button-grid';
 
-  input1.value = "";
-  input2.value = "";
-  input3.value = "";
+  const buttonLabels = [
+    'INSERT', 'MOVE', 'ROTATE', 'SCALE', 
+    'DELETE', 'COPY', 'PASTE', 'GROUP', 
+    'UNGROUP', 'ALIGN', 'DISTRIBUTE', 'SNAP', 
+    'ZOOM', 'PAN', 'UNDO', 'REDO', 
+    'SAVE', 'LOAD'
+  ];
 
-  insertVector(demo.ptr, demo.insert_fn_ptr, value1, value2, value3);
-};
+  buttonLabels.forEach((label, index) => {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    btn.className = 'floating-button';
+    btn.id = `grid-btn-${index + 1}`;
+    btn.addEventListener('click', listeners[index]);
+    buttonGrid.appendChild(btn);
+  });
+  
+  return buttonGrid;
+}
+
+function createToggleGridButton() {
+  const toggleBtn = document.createElement('button');
+  toggleBtn.id = 'toggle-grid-btn';
+  toggleBtn.textContent = 'BUTTONS';
+  
+  toggleBtn.addEventListener('click', () => {
+     const buttonGrid = document.getElementById('button-grid');
+     buttonGrid.classList.toggle('hidden');
+  });
+  
+  return toggleBtn;
+}
 
 const env = {
   init: function () {
-    const container = document.createElement("div");
+    canvas = document.createElement("canvas");
+    webgl = canvas.getContext("webgl");
     const body = document.getElementsByTagName("body").item(0);
-    const button1 = document.createElement("button");
+    const container = document.createElement("div");
+    const text_fields = document.createElement("div");
     const input1 = document.createElement("input");
     const input2 = document.createElement("input");
     const input3 = document.createElement("input");
-    const text_fields = document.createElement("div");
-    canvas = document.createElement("canvas");
-    webgl = canvas.getContext("webgl");
-    
+
     canvas.id = "canvas";
     container.id = "container";
     text_fields.id = "text-inputs";
-    button1.id = "button1";
     input1.id = "input1";
     input2.id = "input2";
     input3.id = "input3";
-    button1.className = "floating-button"
     
     if (webgl == null) {
       throw new Error("No WebGL support on browser");
@@ -142,15 +187,15 @@ const env = {
     canvas.addEventListener("mouseup", up_listener);
     canvas.addEventListener("mousemove", move_listener);
     canvas.addEventListener("wheel", wheel_listener);
-    button1.addEventListener("click", btn_listener);
     
+    body.append(container);
+    container.appendChild(canvas);
+    container.appendChild(createButtonGrid());
+    container.appendChild(createToggleGridButton());
+    container.appendChild(text_fields);
     text_fields.appendChild(input1);
     text_fields.appendChild(input2);
     text_fields.appendChild(input3);    
-    container.appendChild(canvas);
-    container.appendChild(button1);
-    container.appendChild(text_fields);
-    body.append(container);
   },
   deinit: function () {
     webgl.finish();

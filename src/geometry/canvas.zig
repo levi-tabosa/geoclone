@@ -148,13 +148,14 @@ pub const Scene = struct {
     pub fn clearVectors(self: *Self) void {
         if (self.vectors) |vectors| {
             self.allocator.free(vectors);
-            vectors = null;
+            self.vectors = null;
         }
     }
 };
 pub const State = struct {
     ptr: *anyopaque,
-    setAnglesFn: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
-    setZoomFn: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
-    setInsertFn: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
+    angles_fn_ptr: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
+    zoom_fn_ptr: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
+    insert_fn_ptr: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
+    clear_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
 };

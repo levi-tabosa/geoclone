@@ -19,7 +19,7 @@
 *    angles_fn_ptr: number
 *    zoom_fn_ptr: number
 *    insert_fn_ptr: number
-*    }
+*    clear_fn_ptr: number}
 * } Demo
 * */
 
@@ -48,6 +48,7 @@ let demo = {
   angles_fn_ptr: 0,
   zoom_fn_ptr: 0,
   insert_fn_ptr: 0,
+  clear_fn_ptr: 0,
 }
 
 function getData(c_ptr, len) {
@@ -72,6 +73,10 @@ function setZoom(ptr, fnPtr, i) {
 
 function insertVector(ptr, fnPtr, x, y, z) {
   wasm_instance.exports.callInsertVector(ptr, fnPtr, x, y, z);
+}
+
+function clearVectors(ptr, fnPtr) {
+  wasm_instance.exports.callClearVectors(ptr, fnPtr);
 }
 
 const up_listener = (_event) => {
@@ -105,7 +110,9 @@ const listeners = [
     input2.value = "";
     input3.value = "";
   },
-  (_event) => {},
+  (_event) => {
+    clearVectors(demo.ptr, demo.clear_fn_ptr);
+  },
   (_event) => {},
   (_event) => {},
   (_event) => {},
@@ -129,11 +136,12 @@ function createButtonGrid() {
   buttonGrid.id = 'button-grid';
 
   const buttonLabels = [
-    'INSERT', 'MOVE', 'ROTATE', 'SCALE', 
-    'DELETE', 'COPY', 'PASTE', 'GROUP', 
-    'UNGROUP', 'ALIGN', 'DISTRIBUTE', 'SNAP', 
-    'ZOOM', 'PAN', 'UNDO', 'REDO', 
-    'SAVE', 'LOAD'
+    'Insert', 'Clear', 'Rotate',
+    'Cube', 'Toggle', 'Scale',
+    'Pyramid', 'GROUP', 'UNGROUP',
+    'Sphere', 'DISTRIBUTE', 'SNAP', 
+    'Cone', 'PAN', 'UNDO',
+    'REDO', 'SAVE', 'LOAD'
   ];
 
   buttonLabels.forEach((label, index) => {
@@ -216,11 +224,12 @@ const env = {
     requestAnimationFrame(frame);
     throw new Error("Not an error");
   },
-  setDemoCallBack: function (ptr, angles_fn_ptr, set_zoom_fn_ptr, set_insert_fn_ptr) {
+  setDemoCallBack: function (ptr, angles_fn_ptr, zoom_fn_ptr, insert_fn_ptr, clear_fn_ptr) {
     demo.ptr = ptr;
     demo.angles_fn_ptr = angles_fn_ptr;
-    demo.zoom_fn_ptr = set_zoom_fn_ptr;
-    demo.insert_fn_ptr = set_insert_fn_ptr;
+    demo.zoom_fn_ptr = zoom_fn_ptr;
+    demo.insert_fn_ptr = insert_fn_ptr;
+    demo.clear_fn_ptr = clear_fn_ptr;
   },
   _log: function (ptr, len) {
     console.log(getStr(ptr, len));

@@ -35,9 +35,10 @@ pub const State = struct {
     pub fn init(geoc_instance: g.Geoc, scene: *canvas.Scene) Self {
         geoc_instance.setDemoCallBack(.{
             .ptr = scene,
-            .setAnglesFn = setAnglesFn,
-            .setZoomFn = setZoomFn,
-            .setInsertFn = setInsertFn,
+            .angles_fn_ptr = anglesFn,
+            .zoom_fn_ptr = zoomFn,
+            .insert_fn_ptr = insertFn,
+            .clear_fn_ptr = clearFn,
         });
 
         const vertex_shader_source =
@@ -119,23 +120,28 @@ pub const State = struct {
         };
     }
 };
-
-fn setAnglesFn(ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void { //TODO: move these ugly fns
+//TODO: move these ugly fns
+fn anglesFn(ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void {
     const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
     scene.setAngleZ(angle_z);
     scene.setAngleX(angle_x);
     scene.updateLines();
 }
 
-fn setZoomFn(ptr: *anyopaque, zoom: f32) callconv(.C) void {
+fn zoomFn(ptr: *anyopaque, zoom: f32) callconv(.C) void {
     const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
     scene.setZoom(zoom);
     scene.updateLines();
 }
 
-fn setInsertFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
+fn insertFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
     const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
     scene.addVector(x, y, z);
+}
+
+fn clearFn(ptr: *anyopaque) callconv(.C) void {
+    const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
+    scene.clearVectors();
 }
 
 pub fn main() void {

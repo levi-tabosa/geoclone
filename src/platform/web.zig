@@ -32,31 +32,43 @@ const js = struct { //TODO remove all unused fn
         angles_fn_ptr: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
         zoom_fn_ptr: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
         insert_fn_ptr: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
+        clear_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
     ) void;
     extern fn drawArrays(mode: geoclone.DrawMode, first: usize, count: usize) void;
 };
 
 export fn callSetAnglesPtr(
     ptr: *anyopaque,
-    setAnglesFn: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
+    angles_fn_ptr: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
     angle_x: f32,
     angle_z: f32,
 ) void {
-    setAnglesFn(ptr, angle_x, angle_z);
+    angles_fn_ptr(ptr, angle_x, angle_z);
 }
 
-export fn callSetZoomPtr(ptr: *anyopaque, setZoomFn: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void, zoom: f32) void {
-    setZoomFn(ptr, zoom);
+export fn callSetZoomPtr(
+    ptr: *anyopaque,
+    zoom_fn_ptr: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
+    zoom: f32,
+) void {
+    zoom_fn_ptr(ptr, zoom);
 }
 
 export fn callInsertVector(
     ptr: *anyopaque,
-    setInsertFn: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
+    insert_fn_ptr: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
     x: f32,
     y: f32,
     z: f32,
 ) void {
-    setInsertFn(ptr, x, y, z);
+    insert_fn_ptr(ptr, x, y, z);
+}
+
+export fn callClearVectors(
+    ptr: *anyopaque,
+    clear_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
+) void {
+    clear_fn_ptr(ptr);
 }
 
 export fn callPtr(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void {
@@ -167,9 +179,10 @@ pub const State = struct {
     pub fn setDemoCallBack(_: Self, state: canvas.State) void {
         js.setDemoCallBack(
             state.ptr,
-            state.setAnglesFn,
-            state.setZoomFn,
-            state.setInsertFn,
+            state.angles_fn_ptr,
+            state.zoom_fn_ptr,
+            state.insert_fn_ptr,
+            state.clear_fn_ptr,
         );
     }
 

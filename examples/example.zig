@@ -25,7 +25,7 @@ const V3 = canvas.V3;
 pub const State = struct {
     const Self = @This();
 
-    axis_buffer: g.VertexBuffer(V3), //TODO reutilize
+    axis_buffer: g.VertexBuffer(V3), //TODO look into VAO and VBO
     grid_buffer: g.VertexBuffer(V3),
     vectors_buffer: g.VertexBuffer(V2),
     program: g.Program,
@@ -39,6 +39,7 @@ pub const State = struct {
             .zoom_fn_ptr = zoomFn,
             .insert_fn_ptr = insertFn,
             .clear_fn_ptr = clearFn,
+            .cube_fn_ptr = cubeFn,
         });
 
         const vertex_shader_source =
@@ -84,6 +85,7 @@ pub const State = struct {
         self.geoc.draw(V3, self.program, grid_buffer, g.DrawMode.Lines);
 
         self.drawVectors();
+        self.drawShapes();
     }
 
     fn drawVectors(self: Self) void {
@@ -99,14 +101,9 @@ pub const State = struct {
             for (shapes) |s| {
                 const shapes_buffer = g.VertexBuffer(V3).init(s);
                 defer shapes_buffer.deinit();
-                self.geoc.draw(V3, self.program, shapes_buffer, g.DrawMode.Lines);
+                self.geoc.draw(V3, self.program, shapes_buffer, g.DrawMode.Triangles);
             }
         }
-    }
-
-    fn drawFn(ptr: *anyopaque) callconv(.C) void {
-        const state: *State = @ptrCast(@alignCast(ptr));
-        state.draw();
     }
 
     pub fn run(self: Self, state: g.State) void {
@@ -121,6 +118,11 @@ pub const State = struct {
     }
 };
 //TODO: move these ugly fns
+fn drawFn(ptr: *anyopaque) callconv(.C) void {
+    const state: *State = @ptrCast(@alignCast(ptr));
+    state.draw();
+}
+
 fn anglesFn(ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void {
     const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
     scene.setAngleZ(angle_z);
@@ -142,6 +144,11 @@ fn insertFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
 fn clearFn(ptr: *anyopaque) callconv(.C) void {
     const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
     scene.clearVectors();
+}
+
+fn cubeFn(ptr: *anyopaque) callconv(.C) void {
+    const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
+    scene.insertCube();
 }
 
 pub fn main() void {

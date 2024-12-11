@@ -19,7 +19,8 @@
 *    angles_fn_ptr: number
 *    zoom_fn_ptr: number
 *    insert_fn_ptr: number
-*    clear_fn_ptr: number}
+*    clear_fn_ptr: number
+*    cube_fn_ptr: number}
 * } Demo
 * */
 
@@ -49,6 +50,7 @@ let demo = {
   zoom_fn_ptr: 0,
   insert_fn_ptr: 0,
   clear_fn_ptr: 0,
+  cube_fn_ptr: 0,
 }
 
 function getData(c_ptr, len) {
@@ -77,6 +79,10 @@ function insertVector(ptr, fnPtr, x, y, z) {
 
 function clearVectors(ptr, fnPtr) {
   wasm_instance.exports.callClearVectors(ptr, fnPtr);
+}
+
+function insertCube(ptr, fnPtr) {
+  wasm_instance.exports.callInsertCube(ptr, fnPtr);
 }
 
 const up_listener = (_event) => {
@@ -113,10 +119,12 @@ const listeners = [
   (_event) => {
     clearVectors(demo.ptr, demo.clear_fn_ptr);
   },
-  (_event) => {},
-  (_event) => {},
-  (_event) => {},
-  (_event) => {},
+  (_event) => {console.log("rotate")}, //rotate
+  (_event) => {
+    insertCube(demo.ptr, demo.cube_fn_ptr);
+  },
+  (_event) => {console.log("toggle")},//toggle
+  (_event) => {console.log("scale")},//scale
   (_event) => {},
   (_event) => {},
   (_event) => {},
@@ -224,12 +232,20 @@ const env = {
     requestAnimationFrame(frame);
     throw new Error("Not an error");
   },
-  setDemoCallBack: function (ptr, angles_fn_ptr, zoom_fn_ptr, insert_fn_ptr, clear_fn_ptr) {
+  setDemoCallBack: function (
+    ptr,
+    angles_fn_ptr,
+    zoom_fn_ptr,
+    insert_fn_ptr,
+    clear_fn_ptr,
+    cube_fn_ptr,
+  ) {
     demo.ptr = ptr;
     demo.angles_fn_ptr = angles_fn_ptr;
     demo.zoom_fn_ptr = zoom_fn_ptr;
     demo.insert_fn_ptr = insert_fn_ptr;
     demo.clear_fn_ptr = clear_fn_ptr;
+    demo.cube_fn_ptr = cube_fn_ptr
   },
   _log: function (ptr, len) {
     console.log(getStr(ptr, len));

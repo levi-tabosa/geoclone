@@ -109,9 +109,18 @@ pub const Scene = struct {
             rotateV3(&.{ 0.0, 0.0, fixed }, self.angle_x, self.angle_z),
             rotateV3(&.{ 0.0, 0.0, -fixed }, self.angle_x, self.angle_z),
         };
+
         if (self.vectors) |vectors| {
             for (vectors) |*vec| {
                 vec.* = rotateV3(&vec.coords, self.angle_x, self.angle_z);
+            }
+        }
+
+        if (self.shapes) |shapes| {
+            for (shapes) |shape| {
+                for (shape) |*vec| {
+                    vec.* = rotateV3(&vec.coords, self.angle_x, self.angle_z);
+                }
             }
         }
     }
@@ -129,7 +138,7 @@ pub const Scene = struct {
     }
 
     pub fn addVector(self: *Self, x: f32, y: f32, z: f32) void {
-        const len = if (self.vectors) |vecs| vecs.len else 0;
+        const len = if (self.vectors) |vectors| vectors.len else 0;
 
         const origin = V3{ .coords = .{ 0.0, 0.0, 0.0 }, .changed = .{ 0.0, 0.0, 0.0 } };
         const new_vector = rotateV3(&.{ x * self.zoom, y * self.zoom, z * self.zoom }, self.angle_x, self.angle_z);
@@ -142,6 +151,11 @@ pub const Scene = struct {
 
         new_vector_array[len] = origin;
         new_vector_array[len + 1] = new_vector;
+
+        if (self.vectors) |v| {
+            self.allocator.free(v);
+        }
+
         self.vectors = new_vector_array;
     }
 
@@ -151,11 +165,47 @@ pub const Scene = struct {
             self.vectors = null;
         }
     }
+
+    pub fn insertCube(self: *Self) void {
+        const len = if (self.shapes) |shapes| shapes.len else 0;
+
+        var new_shape_array = self.allocator.alloc([]V3, len + 1) catch @panic("OOM");
+
+        for (0..len) |i| {
+            new_shape_array[i] = self.shapes.?[i];
+        }
+        new_shape_array[len] = self.allocator.alloc(V3, 8) catch @panic("OOM");
+        new_shape_array[len] = @constCast(Shape.CUBE.getVectors(null));
+
+        self.shapes = new_shape_array;
+    }
 };
+
+pub const Shape = enum {
+    CUBE,
+    PYRAMID,
+    // SPHERE,
+
+    pub fn getVectors(self: Shape, res: ?usize) []const V3 {
+        _ = res;
+        return switch (self) {
+            .CUBE => &[_]V3{
+                V3{ .coords = .{ -1, 1, 1 } }, V3{ .coords = .{ -1, 1, -1 } }, V3{ .coords = .{ 1, 1, -1 } },   V3{ .coords = .{ 1, 1, 1 } },
+                V3{ .coords = .{ 1, -1, 1 } }, V3{ .coords = .{ 1, -1, -1 } }, V3{ .coords = .{ -1, -1, -1 } }, V3{ .coords = .{ -1, -1, 1 } },
+            },
+            .PYRAMID => &[_]V3{
+                V3{ .coords = .{ 0, 0, 1 } },   V3{ .coords = .{ -1, 1, -1 } },  V3{ .coords = .{ 1, 1, -1 } },
+                V3{ .coords = .{ 1, -1, -1 } }, V3{ .coords = .{ -1, -1, -1 } },
+            },
+        };
+    }
+};
+
 pub const State = struct {
     ptr: *anyopaque,
     angles_fn_ptr: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
     zoom_fn_ptr: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
     insert_fn_ptr: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
     clear_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
+    cube_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
 };

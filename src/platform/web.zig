@@ -33,9 +33,14 @@ const js = struct { //TODO remove all unused fn
         zoom_fn_ptr: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
         insert_fn_ptr: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
         clear_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
+        cube_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
     ) void;
     extern fn drawArrays(mode: geoclone.DrawMode, first: usize, count: usize) void;
 };
+
+export fn callPtr(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void {
+    drawFn(ptr);
+}
 
 export fn callSetAnglesPtr(
     ptr: *anyopaque,
@@ -71,8 +76,11 @@ export fn callClearVectors(
     clear_fn_ptr(ptr);
 }
 
-export fn callPtr(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void {
-    drawFn(ptr);
+export fn callInsertCube(
+    ptr: *anyopaque,
+    cube_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
+) void {
+    cube_fn_ptr(ptr);
 }
 
 pub fn log(message: []const u8) void {
@@ -183,6 +191,7 @@ pub const State = struct {
             state.zoom_fn_ptr,
             state.insert_fn_ptr,
             state.clear_fn_ptr,
+            state.cube_fn_ptr,
         );
     }
 

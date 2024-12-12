@@ -160,7 +160,7 @@ pub const Geoc = struct {
     }
 
     pub fn setSceneCallBack(self: Self, state: canvas.State) void {
-        self.platform.setDemoCallBack(state);
+        self.platform.setSceneCallBack(state);
     }
 
     pub fn currentTime(self: Self) f32 {

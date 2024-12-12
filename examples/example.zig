@@ -40,13 +40,17 @@ pub const State = struct {
             .insert_fn_ptr = insertFn,
             .clear_fn_ptr = clearFn,
             .cube_fn_ptr = cubeFn,
+            .pyramid_fn_ptr = pyramidFn,
         });
 
         const vertex_shader_source =
             \\attribute vec3 coords;
             \\attribute vec3 changed;
             \\void main() {
-            \\    gl_Position = vec4(changed.x * 10.0 / (changed.z + 35.0), changed.y * 10.0 / (changed.z + 35.0), 1.0, 1.0);
+            \\    float d = changed.z + 35.0;
+            \\    float factor = 10.0 / d;
+            \\    float aspect_ratio = 16.0/9.0;
+            \\    gl_Position = vec4(changed.x * factor, changed.y * factor * aspect_ratio, 1.0, 1.0);
             \\}
         ;
         const fragment_shader_source =
@@ -143,12 +147,17 @@ fn insertFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
 
 fn clearFn(ptr: *anyopaque) callconv(.C) void {
     const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
-    scene.clearVectors();
+    scene.clear();
 }
 
 fn cubeFn(ptr: *anyopaque) callconv(.C) void {
     const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
     scene.insertCube();
+}
+
+fn pyramidFn(ptr: *anyopaque) callconv(.C) void {
+    const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
+    scene.insertPyramid();
 }
 
 pub fn main() void {

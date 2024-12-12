@@ -27,13 +27,14 @@ const js = struct { //TODO remove all unused fn
         stride: usize,
         offset: usize,
     ) void;
-    extern fn setDemoCallBack(
+    extern fn setSceneCallBack(
         ptr: *anyopaque,
         angles_fn_ptr: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
         zoom_fn_ptr: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
         insert_fn_ptr: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
         clear_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
         cube_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
+        pyramid_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
     ) void;
     extern fn drawArrays(mode: geoclone.DrawMode, first: usize, count: usize) void;
 };
@@ -69,7 +70,7 @@ export fn callInsertVector(
     insert_fn_ptr(ptr, x, y, z);
 }
 
-export fn callClearVectors(
+export fn callClear(
     ptr: *anyopaque,
     clear_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
 ) void {
@@ -81,6 +82,13 @@ export fn callInsertCube(
     cube_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
 ) void {
     cube_fn_ptr(ptr);
+}
+
+export fn callInsertPyramid(
+    ptr: *anyopaque,
+    pyramid_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
+) void {
+    pyramid_fn_ptr(ptr);
 }
 
 pub fn log(message: []const u8) void {
@@ -184,14 +192,15 @@ pub const State = struct {
         js.run(state.ptr, state.drawFn);
     }
 
-    pub fn setDemoCallBack(_: Self, state: canvas.State) void {
-        js.setDemoCallBack(
+    pub fn setSceneCallBack(_: Self, state: canvas.State) void {
+        js.setSceneCallBack(
             state.ptr,
             state.angles_fn_ptr,
             state.zoom_fn_ptr,
             state.insert_fn_ptr,
             state.clear_fn_ptr,
             state.cube_fn_ptr,
+            state.pyramid_fn_ptr,
         );
     }
 

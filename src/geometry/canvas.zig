@@ -127,14 +127,29 @@ pub const Scene = struct {
         self.vectors = new_vector_array;
     }
 
-    pub fn clearVectors(self: *Self) void {
+    pub fn clear(self: *Self) void {
         if (self.vectors) |vectors| {
             self.allocator.free(vectors);
             self.vectors = null;
         }
+        if (self.shapes) |shapes| {
+            // for (shapes) |shape| {
+            //     self.allocator.free(shape);
+            // }
+            self.allocator.free(shapes);
+            self.shapes = null;
+        }
     }
 
     pub fn insertCube(self: *Self) void {
+        self.insertShape(Shape.CUBE);
+    }
+
+    pub fn insertPyramid(self: *Self) void {
+        self.insertShape(Shape.PYRAMID);
+    }
+
+    fn insertShape(self: *Self, shape: Shape) void {
         const len = if (self.shapes) |shapes| shapes.len else 0;
 
         var new_shape = self.allocator.alloc([]V3, len + 1) catch @panic("OOM");
@@ -142,8 +157,8 @@ pub const Scene = struct {
         for (0..len) |i| {
             new_shape[i] = self.shapes.?[i];
         }
-        new_shape[len] = self.allocator.alloc(V3, 8) catch @panic("OOM");
-        new_shape[len] = @constCast(Shape.CUBE.getVectors(null));
+
+        new_shape[len] = @constCast(shape.getVectors(null));
 
         self.shapes = new_shape;
     }
@@ -166,7 +181,7 @@ pub const Shape = enum {
     PYRAMID,
     // SPHERE,
 
-    pub fn getVectors(self: Shape, res: ?usize) []const V3 {
+    pub fn getVectors(self: Shape, res: ?usize) []const V3 { //TODO: res used on sphere
         _ = res;
         return switch (self) {
             .CUBE => &[_]V3{
@@ -191,4 +206,5 @@ pub const State = struct {
     insert_fn_ptr: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
     clear_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
     cube_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
+    pyramid_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
 };

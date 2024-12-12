@@ -20,7 +20,8 @@
 *    zoom_fn_ptr: number
 *    insert_fn_ptr: number
 *    clear_fn_ptr: number
-*    cube_fn_ptr: number}
+*    cube_fn_ptr: number
+*    pyramid_fn_ptr: number}
 * } Demo
 * */
 
@@ -51,6 +52,7 @@ let demo = {
   insert_fn_ptr: 0,
   clear_fn_ptr: 0,
   cube_fn_ptr: 0,
+  pyramid_fn_ptr: 0,
 }
 
 function getData(c_ptr, len) {
@@ -77,14 +79,17 @@ function insertVector(ptr, fnPtr, x, y, z) {
   wasm_instance.exports.callInsertVector(ptr, fnPtr, x, y, z);
 }
 
-function clearVectors(ptr, fnPtr) {
-  wasm_instance.exports.callClearVectors(ptr, fnPtr);
+function clear(ptr, fnPtr) {
+  wasm_instance.exports.callClear(ptr, fnPtr);
 }
 
 function insertCube(ptr, fnPtr) {
   wasm_instance.exports.callInsertCube(ptr, fnPtr);
 }
 
+function insertPyramid(ptr, fnPtr) {
+  wasm_instance.exports.callInsertPyramid(ptr, fnPtr);
+}
 const up_listener = (_event) => {
   is_pressed = false;
 };
@@ -117,7 +122,7 @@ const listeners = [
     input3.value = "";
   },
   (_event) => {
-    clearVectors(demo.ptr, demo.clear_fn_ptr);
+    clear(demo.ptr, demo.clear_fn_ptr);
   },
   (_event) => {console.log("rotate")}, //rotate
   (_event) => {
@@ -125,7 +130,9 @@ const listeners = [
   },
   (_event) => {console.log("toggle")},//toggle
   (_event) => {console.log("scale")},//scale
-  (_event) => {},
+  (_event) => {
+    insertPyramid(demo.ptr, demo.pyramid_fn_ptr);
+  },
   (_event) => {},
   (_event) => {},
   (_event) => {},,
@@ -232,20 +239,22 @@ const env = {
     requestAnimationFrame(frame);
     throw new Error("Not an error");
   },
-  setDemoCallBack: function (
+  setSceneCallBack: function (
     ptr,
     angles_fn_ptr,
     zoom_fn_ptr,
     insert_fn_ptr,
     clear_fn_ptr,
     cube_fn_ptr,
+    pyramid_fn_ptr,
   ) {
     demo.ptr = ptr;
     demo.angles_fn_ptr = angles_fn_ptr;
     demo.zoom_fn_ptr = zoom_fn_ptr;
     demo.insert_fn_ptr = insert_fn_ptr;
     demo.clear_fn_ptr = clear_fn_ptr;
-    demo.cube_fn_ptr = cube_fn_ptr
+    demo.cube_fn_ptr = cube_fn_ptr;
+    demo.pyramid_fn_ptr = pyramid_fn_ptr;
   },
   _log: function (ptr, len) {
     console.log(getStr(ptr, len));
@@ -454,7 +463,7 @@ const env = {
         gl_mode = webgl.TRIANGLE_FAN;
         break;
       default:
-        throw new Error("No support for modes beside triangles");
+        throw new Error("Unsupported draw mode");
     }
 
     webgl.drawArrays(gl_mode, first, count);

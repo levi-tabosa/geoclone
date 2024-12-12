@@ -159,7 +159,7 @@ pub const Geoc = struct {
         self.platform.run(state);
     }
 
-    pub fn setDemoCallBack(self: Self, state: canvas.State) void {
+    pub fn setSceneCallBack(self: Self, state: canvas.State) void {
         self.platform.setDemoCallBack(state);
     }
 

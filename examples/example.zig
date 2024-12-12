@@ -33,7 +33,7 @@ pub const State = struct {
     scene: *canvas.Scene,
 
     pub fn init(geoc_instance: g.Geoc, scene: *canvas.Scene) Self {
-        geoc_instance.setDemoCallBack(.{
+        geoc_instance.setSceneCallBack(.{
             .ptr = scene,
             .angles_fn_ptr = anglesFn,
             .zoom_fn_ptr = zoomFn,
@@ -101,7 +101,7 @@ pub const State = struct {
             for (shapes) |s| {
                 const shapes_buffer = g.VertexBuffer(V3).init(s);
                 defer shapes_buffer.deinit();
-                self.geoc.draw(V3, self.program, shapes_buffer, g.DrawMode.Triangles);
+                self.geoc.draw(V3, self.program, shapes_buffer, g.DrawMode.Line_loop);
             }
         }
     }

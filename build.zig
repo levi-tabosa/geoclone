@@ -75,7 +75,7 @@ fn setupWasmDistribution(
     exe: *std.Build.Step.Compile,
 ) void {
     const install_dir = b.addInstallDirectory(.{
-        .source_dir = b.path("dir"),
+        .source_dir = b.path("docs"),
         .install_dir = .{
             .custom = "",
         },
@@ -123,7 +123,7 @@ fn setupJSFileStep(
 
     only_js_step.dependOn(&remove_js.step);
     only_js_step.dependOn(&b.addInstallFile(
-        b.path("dir/geoc.js"),
+        b.path("docs/geoc.js"),
         "dist/geoc.js",
     ).step);
 }

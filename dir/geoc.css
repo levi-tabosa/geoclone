@@ -73,3 +73,37 @@ body {
    writing-mode: vertical-rl;
    text-orientation: mixed;
 }
+#vector-list {
+   position: absolute;
+   top: 10px;
+   left: 10px;
+   width: 200px;
+   height: 300px;
+   background-color: rgba(255, 255, 255, 0.6); /* Transparência aumentada */
+   border: 1px solid #322d2d;
+   overflow-y: auto;
+   padding: 10px;
+}
+#vector-list.hidden {
+   display: none;
+}
+.vector-item {
+   padding: 10px;
+   margin: 5px 0;
+   background-color: #e0e0e0;
+   border: 1px solid #b0b0b0;
+   cursor: pointer;
+}
+.vector-item.selected {
+   background-color: #c0c0c0;
+}
+#toggle-vector-list-btn {
+   position: absolute;
+   top: 10px;
+   left: 220px; /* Ajustado para ficar próximo da lista */
+   background-color: #2196F3;
+   color: white;
+   border: none;
+   padding: 10px;
+   cursor: pointer;
+}

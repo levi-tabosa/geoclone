@@ -1,30 +1,33 @@
 /**
  * @typedef {{
-*    index: number,
-*    info: WebGLActiveInfo}
-* } Attribute
-*
-* @typedef {{
-*    gl: WebGLProgram,
-*    attributes: Map<string, Attribute>,
-*    uniforms: Map<string, WebGLActiveInfo>}
-* } Program
-*
-* @typedef {{
-*    x: number,
-*    y: number}
-* } Pos
-*  @typedef {{
-*    ptr: number,
-*    angles_fn_ptr: number
-*    zoom_fn_ptr: number
-*    insert_fn_ptr: number
-*    clear_fn_ptr: number
-*    cube_fn_ptr: number
-*    pyramid_fn_ptr: number
-*    }
-* } Demo
-* */
+ *    index: number,
+ *    info: WebGLActiveInfo}
+ * } Attribute
+ *
+ * @typedef {{
+ *    gl: WebGLProgram,
+ *    attributes: Map<string, Attribute>,
+ *    uniforms: Map<string, WebGLActiveInfo>}
+ * } Program
+ *
+ * @typedef {{
+ *    x: number,
+ *    y: number}
+ * } Pos
+ *
+ * @typedef
+ *
+ * @typedef {{
+ *    ptr: number,
+ *    angles_fn_ptr: number
+ *    zoom_fn_ptr: number
+ *    insert_fn_ptr: number
+ *    clear_fn_ptr: number
+ *    cube_fn_ptr: number
+ *    pyramid_fn_ptr: number
+ *    rotate_fn_ptr: number}
+ * } Demo
+ * */
 
 /** @type { HTMLCanvasElement } */
 let canvas;
@@ -45,7 +48,7 @@ let buffers = new Map();
 let next_buffer = 0;
 
 let is_pressed = false;
-
+/** @type { Demo } */
 let demo = {
   ptr: 0,
   angles_fn_ptr: 0,
@@ -54,7 +57,11 @@ let demo = {
   clear_fn_ptr: 0,
   cube_fn_ptr: 0,
   pyramid_fn_ptr: 0,
-}
+  rotate_fn_ptr: 0,
+};
+
+const indexes = [];
+const shapes = [];
 
 function getData(c_ptr, len) {
   return new Uint8Array(wasm_memory.buffer, c_ptr, len);
@@ -91,6 +98,12 @@ function insertCube(ptr, fnPtr) {
 function insertPyramid(ptr, fnPtr) {
   wasm_instance.exports.callInsertPyramid(ptr, fnPtr);
 }
+
+function rotate(ptr, fnPtr, indexes, angle_x, angle_y, angle_z) {
+  //TODO:pass in indexes array or -1 or null
+  //wasm_instance.exports.callRotate(ptr, fnPtr, indexes, angle_x, angle_y, angle_z);
+}
+
 const up_listener = (_event) => {
   is_pressed = false;
 };
@@ -105,7 +118,7 @@ const move_listener = (event) => {
     const pos = { x: event.clientX - rect.left, y: event.clientY - rect.top };
     const angle_x = (pos.y * 6.283185) / rect.height;
     const angle_z = (pos.x * 6.283185) / rect.width;
-    
+
     setAngles(demo.ptr, demo.angles_fn_ptr, angle_x, angle_z);
   }
 };
@@ -116,8 +129,18 @@ const wheel_listener = (event) => {
 
 const listeners = [
   (_event) => {
-    insertVector(demo.ptr, demo.insert_fn_ptr, input1.value, input2.value, input3.value);
-    
+    const x = input1.value;
+    const y = input2.value;
+    const z = input3.value;
+    if (
+      !isNaN(parseFloat(x)) &&
+      !isNaN(parseFloat(y)) &&
+      !isNaN(parseFloat(z))
+    ) {
+      insertVector(demo.ptr, demo.insert_fn_ptr, x, y, z);
+      addVectorToList(parseFloat(x), parseFloat(y), parseFloat(z));
+    }
+
     input1.value = "";
     input2.value = "";
     input3.value = "";
@@ -125,18 +148,32 @@ const listeners = [
   (_event) => {
     clear(demo.ptr, demo.clear_fn_ptr);
   },
-  (_event) => {console.log("rotate")}, //rotate
+  (_event) => {
+    rotate(
+      demo.ptr,
+      demo.rotate_fn_ptr,
+      indexes,
+      input1.value,
+      input2.value,
+      input3.value
+    );
+  },
   (_event) => {
     insertCube(demo.ptr, demo.cube_fn_ptr);
   },
-  (_event) => {console.log("toggle")},//toggle
-  (_event) => {console.log("scale")},//scale
+  (_event) => {
+    console.log("toggle");
+  },
+  (_event) => {
+    console.log("scale");
+  },
   (_event) => {
     insertPyramid(demo.ptr, demo.pyramid_fn_ptr);
   },
   (_event) => {},
   (_event) => {},
-  (_event) => {},,
+  (_event) => {},
+  ,
   (_event) => {},
   (_event) => {},
   (_event) => {},
@@ -148,40 +185,88 @@ const listeners = [
 ];
 
 function createButtonGrid() {
-  const buttonGrid = document.createElement('div');
-  buttonGrid.id = 'button-grid';
+  const buttonGrid = document.createElement("div");
+  buttonGrid.id = "button-grid";
 
   const buttonLabels = [
-    'Insert', 'Clear', 'Rotate',
-    'Cube', 'Toggle', 'Scale',
-    'Pyramid', 'GROUP', 'UNGROUP',
-    'Sphere', 'DISTRIBUTE', 'SNAP', 
-    'Cone', 'PAN', 'UNDO',
-    'REDO', 'SAVE', 'LOAD'
+    "Insert",
+    "Clear",
+    "Rotate",
+    "Cube",
+    "Toggle",
+    "Scale",
+    "Pyramid",
+    "GROUP",
+    "UNGROUP",
+    "Sphere",
+    "DISTRIBUTE",
+    "SNAP",
+    "Cone",
+    "PAN",
+    "UNDO",
+    "REDO",
+    "SAVE",
+    "LOAD",
   ];
 
   buttonLabels.forEach((label, index) => {
-    const btn = document.createElement('button');
+    const btn = document.createElement("button");
     btn.textContent = label;
-    btn.className = 'floating-button';
+    btn.className = "floating-button";
     btn.id = `grid-btn-${index + 1}`;
-    btn.addEventListener('click', listeners[index]);
+    btn.addEventListener("click", listeners[index]);
     buttonGrid.appendChild(btn);
   });
-  
+
   return buttonGrid;
 }
 
 function createToggleGridButton() {
-  const toggleBtn = document.createElement('button');
-  toggleBtn.id = 'toggle-grid-btn';
-  toggleBtn.textContent = 'BUTTONS';
-  
-  toggleBtn.addEventListener('click', () => {
-     const buttonGrid = document.getElementById('button-grid');
-     buttonGrid.classList.toggle('hidden');
+  const toggleBtn = document.createElement("button");
+  toggleBtn.id = "toggle-grid-btn";
+  toggleBtn.textContent = "<>";
+
+  toggleBtn.addEventListener("click", () => {
+    const buttonGrid = document.getElementById("button-grid");
+    buttonGrid.classList.toggle("hidden");
   });
-  
+
+  return toggleBtn;
+}
+
+function createVectorList() {
+  const vectorList = document.createElement("div");
+  vectorList.id = "vector-list";
+  vectorList.className = "floating-list";
+  return vectorList;
+}
+
+function addVectorToList(x, y, z) {
+  const vectorList = document.getElementById("vector-list");
+
+  const vectorItem = document.createElement("div");
+  vectorItem.textContent = `(${x}, ${y}, ${z})`;
+  vectorItem.className = "vector-item";
+
+  vectorItem.addEventListener("click", () => {
+    document.querySelectorAll(".vector-item").forEach((item) => {
+      item.classList.remove("selected");
+    });
+
+    vectorItem.classList.add("selected");
+  });
+
+  vectorList.appendChild(vectorItem);
+}
+
+function createToggleVectorListButton() {
+  const toggleBtn = document.createElement("button");
+  toggleBtn.id = "toggle-vector-list-btn";
+  toggleBtn.textContent = "VECTORS";
+  toggleBtn.addEventListener("click", () => {
+    const vectorList = document.getElementById("vector-list");
+    vectorList.classList.toggle("hidden");
+  });
   return toggleBtn;
 }
 
@@ -202,7 +287,7 @@ const env = {
     input1.id = "input1";
     input2.id = "input2";
     input3.id = "input3";
-    
+
     if (webgl == null) {
       throw new Error("No WebGL support on browser");
     }
@@ -211,15 +296,17 @@ const env = {
     canvas.addEventListener("mouseup", up_listener);
     canvas.addEventListener("mousemove", move_listener);
     canvas.addEventListener("wheel", wheel_listener);
-    
+
     body.append(container);
     container.appendChild(canvas);
     container.appendChild(createButtonGrid());
     container.appendChild(createToggleGridButton());
+    container.appendChild(createVectorList()); 
+    container.appendChild(createToggleVectorListButton());
     container.appendChild(text_fields);
     text_fields.appendChild(input1);
     text_fields.appendChild(input2);
-    text_fields.appendChild(input3);    
+    text_fields.appendChild(input3);
   },
   deinit: function () {
     webgl.finish();
@@ -247,7 +334,7 @@ const env = {
     insert_fn_ptr,
     clear_fn_ptr,
     cube_fn_ptr,
-    pyramid_fn_ptr,
+    pyramid_fn_ptr
   ) {
     demo.ptr = ptr;
     demo.angles_fn_ptr = angles_fn_ptr;

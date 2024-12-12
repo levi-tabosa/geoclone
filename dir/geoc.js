@@ -21,7 +21,8 @@
 *    insert_fn_ptr: number
 *    clear_fn_ptr: number
 *    cube_fn_ptr: number
-*    pyramid_fn_ptr: number}
+*    pyramid_fn_ptr: number
+*    }
 * } Demo
 * */
 

@@ -8,7 +8,7 @@ pub const platform = switch (builtin.target.isWasm()) {
 
 pub const canvas = @import("geometry/canvas.zig");
 
-pub var gpa = std.heap.GeneralPurposeAllocator(.{}){};
+var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true }){};
 
 pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral), comptime format: []const u8, args: anytype) void {
     const scope_prefix = "(" ++ switch (scope) {

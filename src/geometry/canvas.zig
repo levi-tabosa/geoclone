@@ -11,13 +11,13 @@ fn _LOGF(allocator: std.mem.Allocator, comptime txt: []const u8, args: anytype) 
     _log(std.fmt.allocPrint(allocator, txt, args) catch @panic("OOM"));
 }
 
-fn rV3(u: *V3, angle_x: f32, angle_z: f32, zoom: f32) void {
+fn rV3(u: *_V3, angle_x: f32, angle_z: f32, zoom: f32) void {
     u.changed[0] = zoom * (u.coords[0] * @cos(angle_z) + u.coords[1] * @sin(angle_z));
     u.changed[1] = zoom * ((u.coords[1] * @cos(angle_z) - u.coords[0] * @sin(angle_z)) * @cos(angle_x) + u.coords[2] * @sin(angle_x));
     u.changed[2] = zoom * (u.coords[2] * @cos(angle_x) - (u.coords[1] * @cos(angle_z) - u.coords[0] * @sin(angle_z)) * @sin(angle_x));
 }
 
-fn rotateV3(coords: *const [3]f32, angle_x: f32, angle_z: f32, zoom: f32) V3 {
+fn _V3(coords: *const [3]f32, angle_x: f32, angle_z: f32, zoom: f32) _V3 {
     return .{ .coords = coords.*, .changed = rotZX(coords.*, angle_x, angle_z, zoom) };
 }
 
@@ -36,47 +36,47 @@ pub const V3 = struct {
 
 pub const Scene = struct {
     const Self = @This();
-    const res = 11;
+    const res = 21;
 
     allocator: Allocator,
     zoom: f32,
     angle_x: f32,
     angle_z: f32,
-    axis: [6]V3,
-    grid: [res * 4]V3,
-    vectors: ?[]V3 = null,
-    shapes: ?[][]V3 = null,
+    axis: [6]_V3,
+    grid: [res * 4]_V3,
+    vectors: ?[]_V3 = null,
+    shapes: ?[][]_V3 = null,
 
     pub fn init(allocator: std.mem.Allocator) Self {
         const j = res / 2;
         const upperLimit = if (res & 1 == 1) j + 1 else j;
         var i: i32 = -j;
-        var grid: [res * 4]V3 = undefined;
+        var grid: [res * 4]_V3 = undefined;
         const fixed: f32 = j;
 
         while (i < upperLimit) : (i += 1) {
             const idx: f32 = @as(f32, @floatFromInt(i));
             const index = @as(usize, @intCast((i + j) * 4));
-            grid[index] = rotateV3(&.{ idx, fixed, 0.0 }, 0.0, 0.0, 0.3);
-            grid[index + 1] = rotateV3(&.{ idx, -fixed, 0.0 }, 0.0, 0.0, 0.3);
-            grid[index + 2] = rotateV3(&.{ fixed, idx, 0.0 }, 0.0, 0.0, 0.3);
-            grid[index + 3] = rotateV3(&.{ -fixed, idx, 0.0 }, 0.0, 0.0, 0.3);
+            grid[index] = _V3(&.{ idx, fixed, 0.0 }, 0.0, 0.0, 0.3);
+            grid[index + 1] = _V3(&.{ idx, -fixed, 0.0 }, 0.0, 0.0, 0.3);
+            grid[index + 2] = _V3(&.{ fixed, idx, 0.0 }, 0.0, 0.0, 0.3);
+            grid[index + 3] = _V3(&.{ -fixed, idx, 0.0 }, 0.0, 0.0, 0.3);
         }
 
-        const axis = [_]V3{
-            rotateV3(&.{ fixed, 0.0, 0.0 }, 0.0, 0.0, 0.3),
-            rotateV3(&.{ -fixed, 0.0, 0.0 }, 0.0, 0.0, 0.3),
-            rotateV3(&.{ 0.0, fixed, 0.0 }, 0.0, 0.0, 0.3),
-            rotateV3(&.{ 0.0, -fixed, 0.0 }, 0.0, 0.0, 0.3),
-            rotateV3(&.{ 0.0, 0.0, fixed }, 0.0, 0.0, 0.3),
-            rotateV3(&.{ 0.0, 0.0, -fixed }, 0.0, 0.0, 0.3),
+        const axis = [_]_V3{
+            _V3(&.{ fixed, 0.0, 0.0 }, 0.0, 0.0, 0.3),
+            _V3(&.{ -fixed, 0.0, 0.0 }, 0.0, 0.0, 0.3),
+            _V3(&.{ 0.0, fixed, 0.0 }, 0.0, 0.0, 0.3),
+            _V3(&.{ 0.0, -fixed, 0.0 }, 0.0, 0.0, 0.3),
+            _V3(&.{ 0.0, 0.0, fixed }, 0.0, 0.0, 0.3),
+            _V3(&.{ 0.0, 0.0, -fixed }, 0.0, 0.0, 0.3),
         };
 
         return .{
             .allocator = allocator,
             .zoom = 0.3,
-            .angle_x = 0.0,
-            .angle_z = 0.0,
+            .angle_x = 0.7,
+            .angle_z = 0.7,
             .axis = axis,
             .grid = grid,
         };
@@ -109,22 +109,20 @@ pub const Scene = struct {
     pub fn addVector(self: *Self, x: f32, y: f32, z: f32) void {
         const len = if (self.vectors) |vectors| vectors.len else 0;
 
-        const origin = V3{ .coords = .{ 0.0, 0.0, 0.0 }, .changed = .{ 0.0, 0.0, 0.0 } };
-        const new_vector = rotateV3(&.{ x, y, z }, self.angle_x, self.angle_z, self.zoom);
-
-        var new_vector_array = self.allocator.alloc(V3, len + 2) catch @panic("OOM");
+        var new_vector_array = self.allocator.alloc(_V3, len + 2) catch @panic("OOM");
 
         for (0..len) |i| {
             new_vector_array[i] = self.vectors.?[i];
         }
-        new_vector_array[len] = origin;
-        new_vector_array[len + 1] = new_vector;
+        new_vector_array[len] = _V3{ .coords = .{ 0.0, 0.0, 0.0 }, .changed = .{ 0.0, 0.0, 0.0 } };
+        new_vector_array[len + 1] = _V3(&.{ x, y, z }, self.angle_x, self.angle_z, self.zoom);
 
         if (self.vectors) |vec| {
             self.allocator.free(vec);
         }
 
         self.vectors = new_vector_array;
+        self.updateLines();
     }
 
     pub fn clear(self: *Self) void {
@@ -133,9 +131,6 @@ pub const Scene = struct {
             self.vectors = null;
         }
         if (self.shapes) |shapes| {
-            // for (shapes) |shape| {
-            //     self.allocator.free(shape);
-            // }
             self.allocator.free(shapes);
             self.shapes = null;
         }
@@ -152,7 +147,7 @@ pub const Scene = struct {
     fn insertShape(self: *Self, shape: Shape) void {
         const len = if (self.shapes) |shapes| shapes.len else 0;
 
-        var new_shape = self.allocator.alloc([]V3, len + 1) catch @panic("OOM");
+        var new_shape = self.allocator.alloc([]_V3, len + 1) catch @panic("OOM");
 
         for (0..len) |i| {
             new_shape[i] = self.shapes.?[i];
@@ -161,6 +156,7 @@ pub const Scene = struct {
         new_shape[len] = @constCast(shape.getVectors(null));
 
         self.shapes = new_shape;
+        self.updateLines();
     }
 
     pub fn setAngleX(self: *Self, angle: f32) void {
@@ -181,19 +177,19 @@ pub const Shape = enum {
     PYRAMID,
     // SPHERE,
 
-    pub fn getVectors(self: Shape, res: ?usize) []const V3 { //TODO: res used on sphere
+    pub fn getVectors(self: Shape, res: ?usize) []const _V3 { //TODO: res used on sphere
         _ = res;
         return switch (self) {
-            .CUBE => &[_]V3{
-                V3{ .coords = .{ -1, 1, 1 } },   V3{ .coords = .{ -1, 1, -1 } },
-                V3{ .coords = .{ 1, 1, -1 } },   V3{ .coords = .{ 1, 1, 1 } },
-                V3{ .coords = .{ 1, -1, 1 } },   V3{ .coords = .{ 1, -1, -1 } },
-                V3{ .coords = .{ -1, -1, -1 } }, V3{ .coords = .{ -1, -1, 1 } },
+            .CUBE => &[_]_V3{
+                _V3{ .coords = .{ -1, 1, 1 } },   _V3{ .coords = .{ -1, 1, -1 } },
+                _V3{ .coords = .{ 1, 1, -1 } },   _V3{ .coords = .{ 1, 1, 1 } },
+                _V3{ .coords = .{ 1, -1, 1 } },   _V3{ .coords = .{ 1, -1, -1 } },
+                _V3{ .coords = .{ -1, -1, -1 } }, _V3{ .coords = .{ -1, -1, 1 } },
             },
-            .PYRAMID => &[_]V3{
-                V3{ .coords = .{ 0, 0, 1 } },    V3{ .coords = .{ -1, 1, -1 } },
-                V3{ .coords = .{ 1, 1, -1 } },   V3{ .coords = .{ 1, -1, -1 } },
-                V3{ .coords = .{ -1, -1, -1 } },
+            .PYRAMID => &[_]_V3{
+                _V3{ .coords = .{ 0, 0, 1 } },    _V3{ .coords = .{ -1, 1, -1 } },
+                _V3{ .coords = .{ 1, 1, -1 } },   _V3{ .coords = .{ 1, -1, -1 } },
+                _V3{ .coords = .{ -1, -1, -1 } },
             },
         };
     }

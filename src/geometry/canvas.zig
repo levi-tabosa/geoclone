@@ -17,7 +17,7 @@ fn rV3(u: *V3, angle_x: f32, angle_z: f32, zoom: f32) void {
     u.changed[2] = zoom * (u.coords[2] * @cos(angle_x) - (u.coords[1] * @cos(angle_z) - u.coords[0] * @sin(angle_z)) * @sin(angle_x));
 }
 
-fn vector3(coords: *const [3]f32, angle_x: f32, angle_z: f32, zoom: f32) V3 {
+fn vec3(coords: *const [3]f32, angle_x: f32, angle_z: f32, zoom: f32) V3 {
     return .{ .coords = coords.*, .changed = rotZX(coords.*, angle_x, angle_z, zoom) };
 }
 
@@ -36,7 +36,7 @@ pub const V3 = struct {
 
 pub const Scene = struct {
     const Self = @This();
-    const res = 21;
+    const res = 11;
 
     allocator: Allocator,
     zoom: f32,
@@ -57,19 +57,19 @@ pub const Scene = struct {
         while (i < upperLimit) : (i += 1) {
             const idx: f32 = @as(f32, @floatFromInt(i));
             const index = @as(usize, @intCast((i + j) * 4));
-            grid[index] = vector3(&.{ idx, fixed, 0.0 }, 0.0, 0.0, 0.3);
-            grid[index + 1] = vector3(&.{ idx, -fixed, 0.0 }, 0.0, 0.0, 0.3);
-            grid[index + 2] = vector3(&.{ fixed, idx, 0.0 }, 0.0, 0.0, 0.3);
-            grid[index + 3] = vector3(&.{ -fixed, idx, 0.0 }, 0.0, 0.0, 0.3);
+            grid[index] = vec3(&.{ idx, fixed, 0.0 }, 0.0, 0.0, 0.3);
+            grid[index + 1] = vec3(&.{ idx, -fixed, 0.0 }, 0.0, 0.0, 0.3);
+            grid[index + 2] = vec3(&.{ fixed, idx, 0.0 }, 0.0, 0.0, 0.3);
+            grid[index + 3] = vec3(&.{ -fixed, idx, 0.0 }, 0.0, 0.0, 0.3);
         }
 
         const axis = [_]V3{
-            vector3(&.{ fixed, 0.0, 0.0 }, 0.0, 0.0, 0.3),
-            vector3(&.{ -fixed, 0.0, 0.0 }, 0.0, 0.0, 0.3),
-            vector3(&.{ 0.0, fixed, 0.0 }, 0.0, 0.0, 0.3),
-            vector3(&.{ 0.0, -fixed, 0.0 }, 0.0, 0.0, 0.3),
-            vector3(&.{ 0.0, 0.0, fixed }, 0.0, 0.0, 0.3),
-            vector3(&.{ 0.0, 0.0, -fixed }, 0.0, 0.0, 0.3),
+            vec3(&.{ fixed, 0.0, 0.0 }, 0.0, 0.0, 0.3),
+            vec3(&.{ -fixed, 0.0, 0.0 }, 0.0, 0.0, 0.3),
+            vec3(&.{ 0.0, fixed, 0.0 }, 0.0, 0.0, 0.3),
+            vec3(&.{ 0.0, -fixed, 0.0 }, 0.0, 0.0, 0.3),
+            vec3(&.{ 0.0, 0.0, fixed }, 0.0, 0.0, 0.3),
+            vec3(&.{ 0.0, 0.0, -fixed }, 0.0, 0.0, 0.3),
         };
 
         return .{
@@ -115,7 +115,7 @@ pub const Scene = struct {
             new_vector_array[i] = self.vectors.?[i];
         }
         new_vector_array[len] = V3{ .coords = .{ 0.0, 0.0, 0.0 }, .changed = .{ 0.0, 0.0, 0.0 } };
-        new_vector_array[len + 1] = vector3(&.{ x, y, z }, self.angle_x, self.angle_z, self.zoom);
+        new_vector_array[len + 1] = vec3(&.{ x, y, z }, self.angle_x, self.angle_z, self.zoom);
 
         if (self.vectors) |vec| {
             self.allocator.free(vec);

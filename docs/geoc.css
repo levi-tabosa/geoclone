@@ -7,8 +7,8 @@ body {
    font-family: Arial, sans-serif;
 }
 #container {
-   width: 100%;
-   height: 100%;
+   width: 99%;
+   height: 98%;
    position: relative;
 }
 #canvas {
@@ -18,7 +18,7 @@ body {
    background-color: white;
 }
 .floating-button {
-   padding: 15px;
+   padding: 8px;
    background-color: #4CAF50;
    color: white;
    border: none;
@@ -50,7 +50,7 @@ body {
    transform: translateY(-50%);
    display: grid;
    grid-template-columns: repeat(3, 1fr);
-   grid-gap: 10px;
+   grid-gap: 1px;
    background-color: rgba(255, 255, 255, 0.8);
    padding: 15px;
    border-radius: 10px;

@@ -60,8 +60,8 @@ let demo = {
   rotate_fn_ptr: 0,
 };
 
-const indexes = [];
-const shapes = [];
+let indexes = [];
+let shapes = [];
 
 function getData(c_ptr, len) {
   return new Uint8Array(wasm_memory.buffer, c_ptr, len);
@@ -127,6 +127,17 @@ const wheel_listener = (event) => {
   setZoom(demo.ptr, demo.zoom_fn_ptr, (event.deltaY >> 6) * 0.1);
 };
 
+const resize_listener = () => {
+  canvas.width = canvas.clientWidth;
+  canvas.height = canvas.clientHeight;
+
+  webgl.viewport(0, 0, canvas.width, canvas.height);
+
+  const program = programs.get(0);
+  const uniformLocation = webgl.getUniformLocation(program.gl, "aspect_ratio");
+  webgl.uniform1f(uniformLocation, canvas.width / canvas.height);
+};
+
 const listeners = [
   (_event) => {
     const x = input1.value;
@@ -147,6 +158,7 @@ const listeners = [
   },
   (_event) => {
     clear(demo.ptr, demo.clear_fn_ptr);
+    clearVectorList();
   },
   (_event) => {
     rotate(
@@ -243,20 +255,37 @@ function createVectorList() {
 
 function addVectorToList(x, y, z) {
   const vectorList = document.getElementById("vector-list");
-
   const vectorItem = document.createElement("div");
   vectorItem.textContent = `(${x}, ${y}, ${z})`;
   vectorItem.className = "vector-item";
 
-  vectorItem.addEventListener("click", () => {
-    document.querySelectorAll(".vector-item").forEach((item) => {
-      item.classList.remove("selected");
-    });
+  vectorItem.addEventListener("click", (event) => {
+    if (event.ctrlKey) {
+      vectorItem.classList.toggle("selected");
+    } else {
+      document.querySelectorAll(".vector-item").forEach((item) => {
+        item.classList.remove("selected");
+      });
+      vectorItem.classList.add("selected");
+    }
 
-    vectorItem.classList.add("selected");
+    updateSelectedIndexes();
   });
 
   vectorList.appendChild(vectorItem);
+}
+
+function clearVectorList() {
+  const vectorList = document.getElementById("vector-list");
+  vectorList.innerHTML = ""; // Clear all vector items
+  updateSelectedIndexes();
+}
+
+function updateSelectedIndexes() {
+  const vectorItems = Array.from(document.querySelectorAll(".vector-item"));
+  const indexes = vectorItems
+    .map((item, index) => (item.classList.contains("selected") ? index : -1))
+    .filter((index) => index !== -1);
 }
 
 function createToggleVectorListButton() {
@@ -296,12 +325,13 @@ const env = {
     canvas.addEventListener("mouseup", up_listener);
     canvas.addEventListener("mousemove", move_listener);
     canvas.addEventListener("wheel", wheel_listener);
+    window.addEventListener("resize", resize_listener);
 
     body.append(container);
     container.appendChild(canvas);
     container.appendChild(createButtonGrid());
     container.appendChild(createToggleGridButton());
-    container.appendChild(createVectorList()); 
+    container.appendChild(createVectorList());
     container.appendChild(createToggleVectorListButton());
     container.appendChild(text_fields);
     text_fields.appendChild(input1);
@@ -313,11 +343,6 @@ const env = {
   },
   run: function (ptr, fnPtr) {
     function frame() {
-      canvas.width = canvas.clientWidth;
-      canvas.height = canvas.clientHeight;
-
-      webgl.viewport(0, 0, canvas.width, canvas.height);
-
       call(ptr, fnPtr);
 
       setTimeout(() => {
@@ -436,6 +461,10 @@ const env = {
     }
 
     webgl.useProgram(program);
+    webgl.uniform1f(
+      webgl.getUniformLocation(program, "aspect_ratio"),
+      canvas.width / canvas.height
+    );
 
     const handle = next_program++;
     programs.set(handle, {

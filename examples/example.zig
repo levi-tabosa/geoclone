@@ -44,12 +44,12 @@ pub const State = struct {
         });
 
         const vertex_shader_source =
+            \\uniform float aspect_ratio;
             \\attribute vec3 coords;
             \\attribute vec3 changed;
             \\void main() {
             \\    float d = changed.z + 35.0;
             \\    float factor = 10.0 / d;
-            \\    float aspect_ratio = 16.0/9.0;
             \\    gl_Position = vec4(changed.x * factor, changed.y * factor * aspect_ratio, 1.0, 1.0);
             \\}
         ;

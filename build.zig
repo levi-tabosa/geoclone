@@ -20,6 +20,8 @@ pub fn build(b: *std.Build) void {
     setupWasmFileStep(b, exe);
 
     setupJSFileStep(b);
+
+    setupCSSFileStep(b);
 }
 
 fn createExecutable(
@@ -125,5 +127,20 @@ fn setupJSFileStep(
     only_js_step.dependOn(&b.addInstallFile(
         b.path("docs/geoc.js"),
         "dist/geoc.js",
+    ).step);
+}
+
+fn setupCSSFileStep(
+    b: *std.Build,
+) void {
+    const only_css_step = b.step("style", "regenerates css file");
+
+    const css_path = std.fs.path.join(b.allocator, &.{ b.install_prefix, "dist/geoc.css" }) catch @panic("OOM");
+    const remove_css = b.addRemoveDirTree(css_path);
+
+    only_css_step.dependOn(&remove_css.step);
+    only_css_step.dependOn(&b.addInstallFile(
+        b.path("docs/geoc.css"),
+        "dist/geoc.css",
     ).step);
 }

@@ -1,5 +1,5 @@
 const std = @import("std");
-const geoc = @import("../root.zig");
+const geoc = @import("../root.zig"); //TODO: erase
 
 const Allocator = std.mem.Allocator;
 
@@ -7,7 +7,7 @@ fn _log(txt: []const u8) void { //TODO: erase
     geoc.platform.log(txt);
 }
 
-fn _LOGF(allocator: std.mem.Allocator, comptime txt: []const u8, args: anytype) void { //TODO: erase
+fn _LOGF(allocator: Allocator, comptime txt: []const u8, args: anytype) void { //TODO: erase
     _log(std.fmt.allocPrint(allocator, txt, args) catch @panic("OOM"));
 }
 
@@ -47,7 +47,7 @@ pub const Scene = struct {
     vectors: ?[]V3 = null,
     shapes: ?[][]V3 = null,
 
-    pub fn init(allocator: std.mem.Allocator) Self {
+    pub fn init(allocator: Allocator) Self {
         const j = res / 2;
         const upperLimit = if (res & 1 == 1) j + 1 else j;
         var i: i32 = -j;
@@ -114,7 +114,7 @@ pub const Scene = struct {
         for (0..len) |i| {
             new_vector_array[i] = self.vectors.?[i];
         }
-        new_vector_array[len] = V3{ .coords = .{ 0.0, 0.0, 0.0 }, .changed = .{ 0.0, 0.0, 0.0 } };
+        new_vector_array[len] = .{ .coords = .{ 0.0, 0.0, 0.0 }, .changed = .{ 0.0, 0.0, 0.0 } };
         new_vector_array[len + 1] = vec3(&.{ x, y, z }, self.angle_x, self.angle_z, self.zoom);
 
         if (self.vectors) |vec| {
@@ -136,6 +136,28 @@ pub const Scene = struct {
         }
     }
 
+    pub fn rotate(self: *Self, indexes_ptr: [*]const u32, indexes_len: usize, x: f32, y: f32, z: f32) void {
+        _ = x;
+        _ = y;
+        _ = z;
+
+        const is_valid_ptr = @intFromPtr(indexes_ptr) != 0 and indexes_len > 0;
+        if (!is_valid_ptr) {
+            _LOGF(self.allocator, "INVALID POINTER OR LENGTH: ptr={*}, len={}", .{ indexes_ptr, indexes_len });
+        }
+
+        // Adiciona verificação do endereço inicial
+        _LOGF(self.allocator, "Pointer: {*}, Length: {}, Memory at pointer: {}", .{ indexes_ptr, indexes_len, @intFromPtr(indexes_ptr) });
+
+        const safe_len = @min(indexes_len, 1000); // Prevent excessive iteration
+        // Valida a leitura do buffer
+        var i: usize = 0;
+        while (i < safe_len) : (i += 1) {
+            const value = indexes_ptr[i];
+            _LOGF(self.allocator, "Index {}: Value {}", .{ i, value });
+        }
+    }
+
     pub fn insertCube(self: *Self) void {
         self.insertShape(Shape.CUBE);
     }
@@ -153,7 +175,7 @@ pub const Scene = struct {
             new_shape[i] = self.shapes.?[i];
         }
 
-        new_shape[len] = @constCast(shape.getVectors(null));
+        new_shape[len] = @constCast(shape.getVectors(null)); //smelly
 
         self.shapes = new_shape;
         self.updateLines();
@@ -181,15 +203,15 @@ pub const Shape = enum {
         _ = res;
         return switch (self) {
             .CUBE => &[_]V3{
-                V3{ .coords = .{ -1, 1, 1 } },   V3{ .coords = .{ -1, 1, -1 } },
-                V3{ .coords = .{ 1, 1, -1 } },   V3{ .coords = .{ 1, 1, 1 } },
-                V3{ .coords = .{ 1, -1, 1 } },   V3{ .coords = .{ 1, -1, -1 } },
-                V3{ .coords = .{ -1, -1, -1 } }, V3{ .coords = .{ -1, -1, 1 } },
+                .{ .coords = .{ -1, 1, 1 } },   .{ .coords = .{ -1, 1, -1 } },
+                .{ .coords = .{ 1, 1, -1 } },   .{ .coords = .{ 1, 1, 1 } },
+                .{ .coords = .{ 1, -1, 1 } },   .{ .coords = .{ 1, -1, -1 } },
+                .{ .coords = .{ -1, -1, -1 } }, .{ .coords = .{ -1, -1, 1 } },
             },
             .PYRAMID => &[_]V3{
-                V3{ .coords = .{ 0, 0, 1 } },    V3{ .coords = .{ -1, 1, -1 } },
-                V3{ .coords = .{ 1, 1, -1 } },   V3{ .coords = .{ 1, -1, -1 } },
-                V3{ .coords = .{ -1, -1, -1 } },
+                .{ .coords = .{ 0, 0, 1 } },    .{ .coords = .{ -1, 1, -1 } },
+                .{ .coords = .{ 1, 1, -1 } },   .{ .coords = .{ 1, -1, -1 } },
+                .{ .coords = .{ -1, -1, -1 } },
             },
         };
     }
@@ -197,10 +219,11 @@ pub const Shape = enum {
 
 pub const State = struct {
     ptr: *anyopaque,
-    angles_fn_ptr: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
-    zoom_fn_ptr: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
-    insert_fn_ptr: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
-    clear_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
-    cube_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
-    pyramid_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
+    angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
+    zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
+    insert_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
+    clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    cube_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    pyramid_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
 };

@@ -29,40 +29,44 @@ const js = struct { //TODO remove all unused fn
     ) void;
     extern fn setSceneCallBack(
         ptr: *anyopaque,
-        angles_fn_ptr: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
-        zoom_fn_ptr: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
-        insert_fn_ptr: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
-        clear_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
-        cube_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
-        pyramid_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
+        angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
+        zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
+        insert_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
+        clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+        cube_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+        pyramid_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+        rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
     ) void;
     extern fn drawArrays(mode: geoclone.DrawMode, first: usize, count: usize) void;
 };
 
-export fn callPtr(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void {
+export fn draw(
+    ptr: *anyopaque,
+    drawFn: *const fn (*anyopaque) callconv(.C) void,
+) void {
     drawFn(ptr);
 }
 
-export fn callSetAnglesPtr(
+export fn setAngles(
     ptr: *anyopaque,
-    angles_fn_ptr: *const fn (ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void,
+    angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
     angle_x: f32,
     angle_z: f32,
 ) void {
     angles_fn_ptr(ptr, angle_x, angle_z);
 }
 
-export fn callSetZoomPtr(
+export fn setZoom(
     ptr: *anyopaque,
-    zoom_fn_ptr: *const fn (ptr: *anyopaque, zoom: f32) callconv(.C) void,
+    zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
     zoom: f32,
 ) void {
     zoom_fn_ptr(ptr, zoom);
 }
 
-export fn callInsertVector(
+export fn insertVector(
     ptr: *anyopaque,
-    insert_fn_ptr: *const fn (ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void,
+    insert_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
     x: f32,
     y: f32,
     z: f32,
@@ -70,25 +74,37 @@ export fn callInsertVector(
     insert_fn_ptr(ptr, x, y, z);
 }
 
-export fn callClear(
+export fn clear(
     ptr: *anyopaque,
-    clear_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
+    clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
 ) void {
     clear_fn_ptr(ptr);
 }
 
-export fn callInsertCube(
+export fn insertCube(
     ptr: *anyopaque,
-    cube_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
+    cube_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
 ) void {
     cube_fn_ptr(ptr);
 }
 
 export fn callInsertPyramid(
     ptr: *anyopaque,
-    pyramid_fn_ptr: *const fn (ptr: *anyopaque) callconv(.C) void,
+    pyramid_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
 ) void {
     pyramid_fn_ptr(ptr);
+}
+
+export fn rotate(
+    ptr: *anyopaque,
+    rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
+    indexes_ptr: [*]const u32,
+    indexes_len: usize,
+    x: f32,
+    y: f32,
+    z: f32,
+) void {
+    rotate_fn_ptr(ptr, indexes_ptr, indexes_len, x, y, z);
 }
 
 pub fn log(message: []const u8) void {
@@ -201,6 +217,7 @@ pub const State = struct {
             state.clear_fn_ptr,
             state.cube_fn_ptr,
             state.pyramid_fn_ptr,
+            state.rotate_fn_ptr,
         );
     }
 

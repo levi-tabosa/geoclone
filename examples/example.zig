@@ -41,6 +41,7 @@ pub const State = struct {
             .clear_fn_ptr = clearFn,
             .cube_fn_ptr = cubeFn,
             .pyramid_fn_ptr = pyramidFn,
+            .rotate_fn_ptr = rotateFn,
         });
 
         const vertex_shader_source =
@@ -158,6 +159,11 @@ fn cubeFn(ptr: *anyopaque) callconv(.C) void {
 fn pyramidFn(ptr: *anyopaque) callconv(.C) void {
     const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
     scene.insertPyramid();
+}
+
+fn rotateFn(ptr: *anyopaque, indexes_ptr: [*]const u32, indexes_len: usize, x: f32, y: f32, z: f32) callconv(.C) void {
+    const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
+    scene.rotate(indexes_ptr, indexes_len, x, y, z);
 }
 
 pub fn main() void {

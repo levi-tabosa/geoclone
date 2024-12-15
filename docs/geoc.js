@@ -161,7 +161,7 @@ class SceneHandler {
   // Delegate methods matching Zig Scene/Handler methods
 
   addVector(x, y, z) {
-    if ( // You'd think passing nan as a f32 to a V3 would crash or something ...
+    if (
       !isNaN(parseFloat(x)) &&
       !isNaN(parseFloat(y)) &&
       !isNaN(parseFloat(z))
@@ -194,12 +194,12 @@ class SceneHandler {
     );
   }
 
-  handleRotation(x, y, z) {
+  rotate(angle_x, angle_y, angle_z) {
     const idxs_len = this.selected_indexes.length;
     if (idxs_len > 0) {
       const buffer = new Uint32Array(wasm_memory.buffer);
       const offset = buffer.length - idxs_len;
-      
+
       buffer.set(this.selected_indexes, offset);
 
       this.wasm_instance.exports.rotate(
@@ -207,11 +207,12 @@ class SceneHandler {
         this.demo.rotate_fn_ptr,
         offset * 4, // u32 4 bytes pointer alignment
         idxs_len,
-        x,
-        y,
-        z
+        angle_x,
+        angle_y,
+        angle_z
       );
 
+      this.updateVectorListItem(angle_x, angle_y, angle_z);
     } else {
       toggleAutoRotation();
     }
@@ -220,7 +221,7 @@ class SceneHandler {
   addVectorToList(x, y, z) {
     const list = document.getElementById("vector-list");
     const item = document.createElement("div");
-    item.textContent = `(${x}, ${y}, ${z})`;
+    item.textContent = `${x}, ${y}, ${z}`;
     item.className = "vector-item";
 
     item.addEventListener("click", (event) => {
@@ -243,6 +244,32 @@ class SceneHandler {
     this.selected_indexes = Array.from(
       document.querySelectorAll(".vector-item.selected")
     ).map((item) => Array.from(item.parentElement.children).indexOf(item));
+  }
+
+  updateVectorListItem(angle_x, angle_y, angle_z) {
+    Array.from(document.querySelectorAll(".vector-item.selected")).map(
+      (item) => {
+        const tmp = item.textContent.split(",");
+        let x = parseFloat(tmp[0]);
+        let y = parseFloat(tmp[1]);
+        let z = parseFloat(tmp[2]);
+
+        const tmp_x = x * Math.cos(angle_z) - y * Math.sin(angle_z); //Z
+        let tmp_y = x * Math.sin(angle_z) + y * Math.cos(angle_z);
+        x = tmp_x;
+        y = tmp_y;
+
+        const tmp_z = z * Math.cos(angle_y) - x * Math.sin(angle_y); //Y
+        x = z * Math.sin(angle_y) + x * Math.cos(angle_y);
+        z = tmp_z;
+
+        tmp_y = y * Math.cos(angle_x) - z * Math.sin(angle_x); //X
+        z = y * Math.sin(angle_x) + z * Math.cos(angle_x);
+        y = tmp_y;
+
+        item.textContent = `${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)}`;
+      }
+    );
   }
 
   clearVectorList() {
@@ -277,7 +304,7 @@ function createButtonListeners(scene_handler) {
       const z = input3.value;
 
       if (x || y || z) {
-        scene_handler.handleRotation(x, y, z);
+        scene_handler.rotate(x, y, z);
       } else {
         toggleAutoRotation();
       }

@@ -18,6 +18,7 @@
  * @typedef {{
  *    ptr: number,
  *    angles_fn_ptr: number
+ *    get_ax_fn_ptr: number
  *    zoom_fn_ptr: number
  *    insert_fn_ptr: number
  *    clear_fn_ptr: number
@@ -45,14 +46,15 @@ let next_program = 0;
 let buffers = new Map();
 let next_buffer = 0;
 
-let is_pressed = false;
 let isAutoRotating = false;
 let autoRotationInterval = null;
+let is_pressed = false;
 
 /** @type { Scene } */
-let demo = {
+let scene = {
   ptr: 0,
   angles_fn_ptr: 0,
+  get_ax_fn_ptr: 0,
   zoom_fn_ptr: 0,
   insert_fn_ptr: 0,
   clear_fn_ptr: 0,
@@ -73,14 +75,6 @@ function call(ptr, fnPtr) {
   wasm_instance.exports.draw(ptr, fnPtr);
 }
 
-function setAngles(ptr, fnPtr, angle_x, angle_z) {
-  wasm_instance.exports.setAngles(ptr, fnPtr, angle_x, angle_z);
-}
-
-function setZoom(ptr, fnPtr, i) {
-  wasm_instance.exports.setZoom(ptr, fnPtr, i);
-}
-
 const up_listener = () => {
   is_pressed = false;
 };
@@ -96,12 +90,21 @@ const move_listener = (event) => {
     const angle_x = (pos.y * 6.283185) / rect.height;
     const angle_z = (pos.x * 6.283185) / rect.width;
 
-    setAngles(demo.ptr, demo.angles_fn_ptr, angle_x, angle_z);
+    wasm_instance.exports.setAngles(
+      scene.ptr,
+      scene.angles_fn_ptr,
+      angle_x,
+      angle_z
+    );
   }
 };
 
 const wheel_listener = (event) => {
-  setZoom(demo.ptr, demo.zoom_fn_ptr, (event.deltaY >> 6) * 0.1);
+  wasm_instance.exports.setZoom(
+    scene.ptr,
+    scene.zoom_fn_ptr,
+    (event.deltaY >> 6) * 0.1
+  );
 };
 
 const resize_listener = (width, height) => {
@@ -132,10 +135,18 @@ function toggleAutoRotation() {
     let angle_z = 0;
 
     autoRotationInterval = setInterval(() => {
+      const angle_x = wasm_instance.exports.getAngleX(
+        scene.ptr,
+        scene.get_ax_fn_ptr
+      );
       angle_z += 0.03;
       angle_z %= Math.PI * 2;
-
-      setAngles(demo.ptr, demo.angles_fn_ptr, 0.9, angle_z);
+      wasm_instance.exports.setAngles(
+        scene.ptr,
+        scene.angles_fn_ptr,
+        angle_x,
+        angle_z
+      );
     }, 15);
   }
 }
@@ -144,12 +155,13 @@ class SceneHandler {
   constructor(wasm_instance, demo) {
     this.wasm_instance = wasm_instance;
     this.demo = demo;
+    // this.vectors = [];
     this.selected_indexes = [];
   }
-
   // Delegate methods matching Zig Scene/Handler methods
+
   addVector(x, y, z) {
-    if (
+    if ( // You'd think passing nan as a f32 to a V3 would crash or something ...
       !isNaN(parseFloat(x)) &&
       !isNaN(parseFloat(y)) &&
       !isNaN(parseFloat(z))
@@ -161,12 +173,13 @@ class SceneHandler {
         y,
         z
       );
+      // this.vectors.push({ x, y, z });
       this.addVectorToList(parseFloat(x), parseFloat(y), parseFloat(z));
     }
   }
 
   clear() {
-    this.wasm_instance.exports(this.demo.ptr, this.demo.clear_fn_ptr);
+    this.wasm_instance.exports.clear(this.demo.ptr, this.demo.clear_fn_ptr);
     this.clearVectorList();
   }
 
@@ -182,83 +195,81 @@ class SceneHandler {
   }
 
   handleRotation(x, y, z) {
-    if (this.selected_indexes.length > 0) {
-      const wasmView = new Uint32Array(wasm_memory.buffer);
-      const offset = wasmView.length - this.selected_indexes.length;
-      wasmView.set(this.selected_indexes, offset);
-
-      console.log(
-        "Memory after copy:",
-        wasmView.slice(offset, offset + this.selected_indexes.length)
-      );
+    const idxs_len = this.selected_indexes.length;
+    if (idxs_len > 0) {
+      const buffer = new Uint32Array(wasm_memory.buffer);
+      const offset = buffer.length - idxs_len;
+      
+      buffer.set(this.selected_indexes, offset);
 
       this.wasm_instance.exports.rotate(
         this.demo.ptr,
-        offset * 4, // Ponteiro em bytes
-        this.selected_indexes.length,
+        this.demo.rotate_fn_ptr,
+        offset * 4, // u32 4 bytes pointer alignment
+        idxs_len,
         x,
         y,
         z
       );
+
     } else {
-      this.wasm_instance.exports.setAngles(
-        this.demo.ptr,
-        this.demo.angles_fn_ptr
-      );
+      toggleAutoRotation();
     }
   }
 
   addVectorToList(x, y, z) {
-    const vectorList = document.getElementById("vector-list");
-    const vectorItem = document.createElement("div");
-    vectorItem.textContent = `(${x}, ${y}, ${z})`;
-    vectorItem.className = "vector-item";
+    const list = document.getElementById("vector-list");
+    const item = document.createElement("div");
+    item.textContent = `(${x}, ${y}, ${z})`;
+    item.className = "vector-item";
 
-    vectorItem.addEventListener("click", (event) => {
+    item.addEventListener("click", (event) => {
       if (event.ctrlKey) {
-        vectorItem.classList.toggle("selected");
+        item.classList.toggle("selected");
       } else {
         document.querySelectorAll(".vector-item").forEach((item) => {
           item.classList.remove("selected");
         });
-        vectorItem.classList.add("selected");
+        item.classList.add("selected");
       }
 
       this.updateSelectedIndexes();
     });
 
-    vectorList.appendChild(vectorItem);
-  }
-
-  clearVectorList() {
-    const vectorList = document.getElementById("vector-list");
-    vectorList.innerHTML = "";
-    this.updateSelectedIndexes();
+    list.appendChild(item);
   }
 
   updateSelectedIndexes() {
-    const vectorItems = Array.from(document.querySelectorAll(".vector-item"));
-    this.selected_indexes = vectorItems
-      .map((item, index) => (item.classList.contains("selected") ? index : -1))
-      .filter((index) => index !== -1);
+    this.selected_indexes = Array.from(
+      document.querySelectorAll(".vector-item.selected")
+    ).map((item) => Array.from(item.parentElement.children).indexOf(item));
+  }
+
+  clearVectorList() {
+    const list = document.getElementById("vector-list");
+    list.innerHTML = "";
+    // this.vectors = [];
+    this.updateSelectedIndexes();
   }
 }
-
-function createButtonListeners(sceneHandler) {
+/**
+ * @param {SceneHandler} scene_handler
+ */
+function createButtonListeners(scene_handler) {
   return [
     // Insert Vector
     () => {
       const x = input1.value;
       const y = input2.value;
       const z = input3.value;
-      sceneHandler.addVector(x, y, z);
+      scene_handler.addVector(x, y, z);
 
-      // input1.value = "";
-      // input2.value = "";
-      // input3.value = "";
+      input1.value = "";
+      input2.value = "";
+      input3.value = "";
     },
     // Clear
-    () => sceneHandler.clear(),
+    () => scene_handler.clear(),
     // Rotate
     () => {
       const x = input1.value;
@@ -266,26 +277,19 @@ function createButtonListeners(sceneHandler) {
       const z = input3.value;
 
       if (x || y || z) {
-        sceneHandler.handleRotation(
-          demo.ptr,
-          demo.rotate_fn_ptr,
-          sceneHandler.selected_indexes,
-          x,
-          y,
-          z
-        );
+        scene_handler.handleRotation(x, y, z);
       } else {
         toggleAutoRotation();
       }
     },
     // Insert Cube
-    () => sceneHandler.insertCube(),
+    () => scene_handler.insertCube(),
     // Toggle (placeholder)
     () => console.log("Toggle"),
     // Scale (placeholder)
     () => console.log("Scale"),
     // Insert Pyramid
-    () => sceneHandler.insertPyramid(),
+    () => scene_handler.insertPyramid(),
     // Remaining placeholder methods
     ...Array(11).fill(() => console.log("Placeholder")),
   ];
@@ -364,7 +368,7 @@ function createToggleVectorListButton() {
 
 const env = {
   init: function () {
-    const scene_handler = new SceneHandler(wasm_instance, demo);
+    const scene_handler = new SceneHandler(wasm_instance, scene);
 
     btn_listeners.splice(
       0,
@@ -431,9 +435,11 @@ const env = {
     requestAnimationFrame(frame);
     throw new Error("Not an error");
   },
+  //TODO: pass in a array of pointers from zig instead
   setSceneCallBack: function (
     ptr,
     angles_fn_ptr,
+    get_ax_fn_ptr,
     zoom_fn_ptr,
     insert_fn_ptr,
     clear_fn_ptr,
@@ -441,14 +447,15 @@ const env = {
     pyramid_fn_ptr,
     rotate_fn_ptr
   ) {
-    demo.ptr = ptr;
-    demo.angles_fn_ptr = angles_fn_ptr;
-    demo.zoom_fn_ptr = zoom_fn_ptr;
-    demo.insert_fn_ptr = insert_fn_ptr;
-    demo.clear_fn_ptr = clear_fn_ptr;
-    demo.cube_fn_ptr = cube_fn_ptr;
-    demo.pyramid_fn_ptr = pyramid_fn_ptr;
-    demo.rotate_fn_ptr = rotate_fn_ptr;
+    scene.ptr = ptr;
+    scene.angles_fn_ptr = angles_fn_ptr;
+    scene.get_ax_fn_ptr = get_ax_fn_ptr;
+    scene.zoom_fn_ptr = zoom_fn_ptr;
+    scene.insert_fn_ptr = insert_fn_ptr;
+    scene.clear_fn_ptr = clear_fn_ptr;
+    scene.cube_fn_ptr = cube_fn_ptr;
+    scene.pyramid_fn_ptr = pyramid_fn_ptr;
+    scene.rotate_fn_ptr = rotate_fn_ptr;
   },
   _log: function (ptr, len) {
     console.log(getStr(ptr, len));

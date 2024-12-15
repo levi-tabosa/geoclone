@@ -1,7 +1,7 @@
 const g = @import("geoc");
 const std = @import("std");
 const canvas = g.canvas;
-
+const Scene = canvas.Scene;
 fn _log(txt: []const u8) void { //TODO: erase
     g.platform.log(txt);
 }
@@ -15,11 +15,6 @@ pub const std_options = .{
     .logFn = g.logFn,
 };
 
-const V2 = struct {
-    coords: [2]f32,
-    offset: [2]f32 = .{ 0.0, 0.0 },
-};
-
 const V3 = canvas.V3;
 
 pub const State = struct {
@@ -27,15 +22,17 @@ pub const State = struct {
 
     axis_buffer: g.VertexBuffer(V3), //TODO look into VAO and VBO
     grid_buffer: g.VertexBuffer(V3),
-    vectors_buffer: g.VertexBuffer(V2),
+    // vectors_buffer: g.VertexBuffer(V3), maybe it is possible to reuse this
+    // shapes_buffer: (...)
     program: g.Program,
     geoc: g.Geoc,
-    scene: *canvas.Scene,
+    scene: *Scene,
 
-    pub fn init(geoc_instance: g.Geoc, scene: *canvas.Scene) Self {
+    pub fn init(geoc_instance: g.Geoc, scene: *Scene) Self {
         geoc_instance.setSceneCallBack(.{
             .ptr = scene,
             .angles_fn_ptr = anglesFn,
+            .get_ax_fn_ptr = getAngleXFn,
             .zoom_fn_ptr = zoomFn,
             .insert_fn_ptr = insertFn,
             .clear_fn_ptr = clearFn,
@@ -68,7 +65,6 @@ pub const State = struct {
         return .{
             .axis_buffer = g.VertexBuffer(V3).init(&scene.axis),
             .grid_buffer = g.VertexBuffer(V3).init(&scene.grid),
-            .vectors_buffer = g.VertexBuffer(V2).init(&[_]V2{V2{ .coords = .{ 0, 0 } }}),
             .program = program,
             .geoc = geoc_instance,
             .scene = scene,
@@ -129,48 +125,49 @@ fn drawFn(ptr: *anyopaque) callconv(.C) void {
 }
 
 fn anglesFn(ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void {
-    const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
+    const scene: *Scene = @ptrCast(@alignCast(ptr));
     scene.setAngleZ(angle_z);
     scene.setAngleX(angle_x);
     scene.updateLines();
 }
 
+fn getAngleXFn(ptr: *anyopaque) callconv(.C) f32 {
+    return @as(*Scene, @ptrCast(@alignCast(ptr))).angle_x;
+}
+
 fn zoomFn(ptr: *anyopaque, zoom: f32) callconv(.C) void {
-    const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
+    const scene: *Scene = @ptrCast(@alignCast(ptr));
     scene.setZoom(zoom);
     scene.updateLines();
 }
 
 fn insertFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
-    const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
-    scene.addVector(x, y, z);
+    Scene.addVector(@ptrCast(@alignCast(ptr)), x, y, z);
 }
 
 fn clearFn(ptr: *anyopaque) callconv(.C) void {
-    const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
-    scene.clear();
+    Scene.clear(@ptrCast(@alignCast(ptr)));
 }
 
 fn cubeFn(ptr: *anyopaque) callconv(.C) void {
-    const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
-    scene.insertCube();
+    Scene.insertCube(@ptrCast(@alignCast(ptr)));
 }
 
 fn pyramidFn(ptr: *anyopaque) callconv(.C) void {
-    const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
-    scene.insertPyramid();
+    Scene.insertPyramid(@ptrCast(@alignCast(ptr)));
 }
 
-fn rotateFn(ptr: *anyopaque, indexes_ptr: [*]const u32, indexes_len: usize, x: f32, y: f32, z: f32) callconv(.C) void {
-    const scene: *canvas.Scene = @ptrCast(@alignCast(ptr));
-    scene.rotate(indexes_ptr, indexes_len, x, y, z);
+fn rotateFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, x: f32, y: f32, z: f32) callconv(.C) void {
+    const scene: *Scene = @ptrCast(@alignCast(ptr));
+    scene.rotate(idxs_ptr, idxs_len, x, y, z);
+    scene.updateLines();
 }
 
 pub fn main() void {
     var engine = g.Geoc.init();
     defer engine.deinit();
 
-    var scene = canvas.Scene.init(engine.allocator);
+    var scene = Scene.init(engine.allocator);
 
     var state = State.init(engine, &scene);
     defer state.deinit();

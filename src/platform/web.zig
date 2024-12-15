@@ -30,6 +30,7 @@ const js = struct { //TODO remove all unused fn
     extern fn setSceneCallBack(
         ptr: *anyopaque,
         angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
+        get_ax_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
         zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
         insert_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
         clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
@@ -54,6 +55,13 @@ export fn setAngles(
     angle_z: f32,
 ) void {
     angles_fn_ptr(ptr, angle_x, angle_z);
+}
+
+export fn getAngleX(
+    ptr: *anyopaque,
+    get_ax_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
+) f32 {
+    return get_ax_fn_ptr(ptr);
 }
 
 export fn setZoom(
@@ -212,6 +220,7 @@ pub const State = struct {
         js.setSceneCallBack(
             state.ptr,
             state.angles_fn_ptr,
+            state.get_ax_fn_ptr,
             state.zoom_fn_ptr,
             state.insert_fn_ptr,
             state.clear_fn_ptr,

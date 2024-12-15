@@ -18,15 +18,46 @@ fn rV3(u: *V3, angle_x: f32, angle_z: f32, zoom: f32) void {
 }
 
 fn vec3(coords: *const [3]f32, angle_x: f32, angle_z: f32, zoom: f32) V3 {
-    return .{ .coords = coords.*, .changed = rotZX(coords.*, angle_x, angle_z, zoom) };
+    return .{ .coords = coords.*, .changed = rotXZ(coords.*, angle_x, angle_z, zoom) };
 }
 
-fn rotZX(u: [3]f32, angle_x: f32, angle_z: f32, zoom: f32) [3]f32 {
+fn rotXZ(u: [3]f32, angle_x: f32, angle_z: f32, zoom: f32) [3]f32 {
     return .{
         zoom * (u[0] * @cos(angle_z) + u[1] * @sin(angle_z)),
         zoom * ((u[1] * @cos(angle_z) - u[0] * @sin(angle_z)) * @cos(angle_x) + u[2] * @sin(angle_x)),
         zoom * (u[2] * @cos(angle_x) - (u[1] * @cos(angle_z) - u[0] * @sin(angle_z)) * @sin(angle_x)),
     };
+}
+
+fn rotXYZ(
+    u: *V3,
+    angle_x: f32,
+    angle_y: f32,
+    angle_z: f32,
+) void {
+    var x = u.coords[0];
+    var y = u.coords[1];
+    var z = u.coords[2];
+
+    //Z
+    const tmp_x = x * @cos(angle_z) - y * @sin(angle_z);
+    var tmp_y = x * @sin(angle_z) + y * @cos(angle_z);
+    x = tmp_x;
+    y = tmp_y;
+
+    //Y
+    const tmp_z = z * @cos(angle_y) - x * @sin(angle_y);
+    x = z * @sin(angle_y) + x * @cos(angle_y);
+    z = tmp_z;
+
+    //X
+    tmp_y = y * @cos(angle_x) - z * @sin(angle_x);
+    z = y * @sin(angle_x) + z * @cos(angle_x);
+    y = tmp_y;
+
+    u.coords[0] = x;
+    u.coords[1] = y;
+    u.coords[2] = z;
 }
 
 pub const V3 = struct {
@@ -114,8 +145,8 @@ pub const Scene = struct {
         for (0..len) |i| {
             new_vector_array[i] = self.vectors.?[i];
         }
-        new_vector_array[len] = .{ .coords = .{ 0.0, 0.0, 0.0 }, .changed = .{ 0.0, 0.0, 0.0 } };
-        new_vector_array[len + 1] = vec3(&.{ x, y, z }, self.angle_x, self.angle_z, self.zoom);
+        new_vector_array[len] = vec3(&.{ x, y, z }, self.angle_x, self.angle_z, self.zoom);
+        new_vector_array[len + 1] = .{ .coords = .{ 0.0, 0.0, 0.0 }, .changed = .{ 0.0, 0.0, 0.0 } };
 
         if (self.vectors) |vec| {
             self.allocator.free(vec);
@@ -136,26 +167,15 @@ pub const Scene = struct {
         }
     }
 
-    pub fn rotate(self: *Self, indexes_ptr: [*]const u32, indexes_len: usize, x: f32, y: f32, z: f32) void {
-        _ = x;
-        _ = y;
-        _ = z;
+    pub fn rotate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, x: f32, y: f32, z: f32) void {
+        for (0..idxs_len) |i| {
+            const idx = idxs_ptr[i] * 2;
 
-        const is_valid_ptr = @intFromPtr(indexes_ptr) != 0 and indexes_len > 0;
-        if (!is_valid_ptr) {
-            _LOGF(self.allocator, "INVALID POINTER OR LENGTH: ptr={*}, len={}", .{ indexes_ptr, indexes_len });
+            _LOGF(self.allocator, "Index {}: before rotation {any}", .{ idxs_ptr[i], self.vectors.?[idx] });
+            rotXYZ(&self.vectors.?[idx], x, y, z);
+            _LOGF(self.allocator, "Index {}: after rotation {any}", .{ idxs_ptr[i], self.vectors.?[idx] });
         }
-
-        // Adiciona verificação do endereço inicial
-        _LOGF(self.allocator, "Pointer: {*}, Length: {}, Memory at pointer: {}", .{ indexes_ptr, indexes_len, @intFromPtr(indexes_ptr) });
-
-        const safe_len = @min(indexes_len, 1000); // Prevent excessive iteration
-        // Valida a leitura do buffer
-        var i: usize = 0;
-        while (i < safe_len) : (i += 1) {
-            const value = indexes_ptr[i];
-            _LOGF(self.allocator, "Index {}: Value {}", .{ i, value });
-        }
+        self.updateLines();
     }
 
     pub fn insertCube(self: *Self) void {
@@ -175,7 +195,7 @@ pub const Scene = struct {
             new_shape[i] = self.shapes.?[i];
         }
 
-        new_shape[len] = @constCast(shape.getVectors(null)); //smelly
+        new_shape[len] = @constCast(shape.getVectors(null)); //TODO: get rid of this cast
 
         self.shapes = new_shape;
         self.updateLines();
@@ -220,6 +240,7 @@ pub const Shape = enum {
 pub const State = struct {
     ptr: *anyopaque,
     angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
+    get_ax_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
     zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
     insert_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
     clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,

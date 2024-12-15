@@ -47,7 +47,7 @@ body {
    position: absolute;
    top: 50%;
    right: 0;
-   transform: translateY(-50%);
+   transform: translateY(-50%) translateX(-10%);
    display: grid;
    grid-template-columns: repeat(3, 1fr);
    grid-gap: 1px;
@@ -64,7 +64,7 @@ body {
    position: absolute;
    top: 50%;
    right: 0;
-   transform: translateY(-50%) translateX(-100%);
+   transform: translateY(-50%);
    background-color: #2196F3;
    color: white;
    border: none;
@@ -77,9 +77,9 @@ body {
    position: absolute;
    top: 10px;
    left: 10px;
-   width: 200px;
+   width: 160px;
    height: 300px;
-   background-color: rgba(255, 255, 255, 0.6); /* Transparência aumentada */
+   background-color: rgba(255, 255, 255, 0.1);
    border: 1px solid #322d2d;
    overflow-y: auto;
    padding: 10px;
@@ -100,7 +100,7 @@ body {
 #toggle-vector-list-btn {
    position: absolute;
    top: 10px;
-   left: 220px; /* Ajustado para ficar próximo da lista */
+   left: 200px;
    background-color: #2196F3;
    color: white;
    border: none;

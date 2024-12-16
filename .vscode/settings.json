@@ -3,5 +3,6 @@
    "liveServer.settings.root": "/zig-out/dist/",
    "[javascript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
-  }
+  },
+  "window.title": "${dirty}${activeEditorShort}${separator}${rootName}${separator}${profileName}${separator}${appName}${separator}[Branch: scene-event-handlers]"
 }

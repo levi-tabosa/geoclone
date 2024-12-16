@@ -107,19 +107,19 @@ const wheel_listener = (event) => {
   );
 };
 
-const resize_listener = (width, height) => {
-  canvas.width = width;
-  canvas.height = height;
+const resize_listener = (entries) => {
+  const { width, height } = entries[0].contentRect;
+    canvas.width = width;
+    canvas.height = height;
 
-  const program = programs.get(0);
-  if (program) {
-    const uniformLocation = webgl.getUniformLocation(
-      program.gl,
-      "aspect_ratio"
-    );
-    webgl.uniform1f(uniformLocation, width / height);
-  }
-  webgl.viewport(0, 0, width, height);
+    const program = programs.get(0);
+    if (program) {
+      const aspectUniform = webgl.getUniformLocation(
+        program.gl, 'aspect_ratio'
+      );
+      webgl.uniform1f(aspectUniform, width / height);
+    }
+    webgl.viewport(0, 0, width, height);
 };
 
 function toggleAutoRotation() {
@@ -430,11 +430,12 @@ const env = {
 
     new ResizeObserver((entries) => {
       //maybe change to named
-      for (let entry of entries) {
-        const width = entry.contentRect.width;
-        const height = entry.contentRect.height;
-        resize_listener(width, height);
-      }
+      resize_listener(entries);
+      // for (let entry of entries) {
+      //   const width = entry.contentRect.width;
+      //   const height = entry.contentRect.height;
+      //   resize_listener(width, height);
+      // }
     }).observe(canvas);
 
     body.append(container);

@@ -63,15 +63,15 @@ let scene = {
   rotate_fn_ptr: 0,
 };
 
-function getData(c_ptr, len) {
+function getData(c_ptr, len) { //TODO: move to scene handler
   return new Uint8Array(wasm_memory.buffer, c_ptr, len);
 }
 
-function getStr(c_ptr, len) {
+function getStr(c_ptr, len) { //TODO: move to scene handler
   return new TextDecoder().decode(getData(c_ptr, len));
 }
 
-function call(ptr, fnPtr) {
+function call(ptr, fnPtr) { //TODO: move to scene handler
   wasm_instance.exports.draw(ptr, fnPtr);
 }
 
@@ -107,17 +107,15 @@ const wheel_listener = (event) => {
   );
 };
 
-const resize_listener = (width, height) => {
+const resize_listener = (entries) => {
+  const { width, height } = entries[0].contentRect;
   canvas.width = width;
   canvas.height = height;
 
   const program = programs.get(0);
   if (program) {
-    const uniformLocation = webgl.getUniformLocation(
-      program.gl,
-      "aspect_ratio"
-    );
-    webgl.uniform1f(uniformLocation, width / height);
+    const aspectUniform = webgl.getUniformLocation(program.gl, "aspect_ratio");
+    webgl.uniform1f(aspectUniform, width / height);
   }
   webgl.viewport(0, 0, width, height);
 };
@@ -428,14 +426,7 @@ const env = {
     canvas.addEventListener("mousemove", move_listener);
     canvas.addEventListener("wheel", wheel_listener);
 
-    new ResizeObserver((entries) => {
-      //maybe change to named
-      for (let entry of entries) {
-        const width = entry.contentRect.width;
-        const height = entry.contentRect.height;
-        resize_listener(width, height);
-      }
-    }).observe(canvas);
+    new ResizeObserver((entries) => resize_listener(entries)).observe(canvas);
 
     body.append(container);
     container.appendChild(canvas);

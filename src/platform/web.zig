@@ -36,7 +36,10 @@ const js = struct { //TODO remove all unused fn
         clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
         cube_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
         pyramid_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+        sphere_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+        cone_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
         rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
+        scale_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32) callconv(.C) void,
     ) void;
     extern fn drawArrays(mode: geoclone.DrawMode, first: usize, count: usize) void;
 };
@@ -96,11 +99,25 @@ export fn insertCube(
     cube_fn_ptr(ptr);
 }
 
-export fn callInsertPyramid(
+export fn insertPyramid(
     ptr: *anyopaque,
     pyramid_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
 ) void {
     pyramid_fn_ptr(ptr);
+}
+
+export fn insertSphere(
+    ptr: *anyopaque,
+    sphere_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+) void {
+    sphere_fn_ptr(ptr);
+}
+
+export fn insertCone(
+    ptr: *anyopaque,
+    cone_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+) void {
+    cone_fn_ptr(ptr);
 }
 
 export fn rotate(
@@ -113,6 +130,16 @@ export fn rotate(
     z: f32,
 ) void {
     rotate_fn_ptr(ptr, indexes_ptr, indexes_len, x, y, z);
+}
+
+export fn scale(
+    ptr: *anyopaque,
+    scale_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32) callconv(.C) void,
+    indexes_ptr: [*]const u32,
+    indexes_len: usize,
+    factor: f32,
+) void {
+    scale_fn_ptr(ptr, indexes_ptr, indexes_len, factor);
 }
 
 pub fn log(message: []const u8) void {
@@ -226,7 +253,10 @@ pub const State = struct {
             state.clear_fn_ptr,
             state.cube_fn_ptr,
             state.pyramid_fn_ptr,
+            state.sphere_fn_ptr,
+            state.cone_fn_ptr,
             state.rotate_fn_ptr,
+            state.scale_fn_ptr,
         );
     }
 

@@ -38,17 +38,20 @@ pub const State = struct {
             .clear_fn_ptr = clearFn,
             .cube_fn_ptr = cubeFn,
             .pyramid_fn_ptr = pyramidFn,
+            .sphere_fn_ptr = sphereFn,
+            .cone_fn_ptr = coneFn,
             .rotate_fn_ptr = rotateFn,
+            .scale_fn_ptr = scaleFn,
         });
 
         const vertex_shader_source =
             \\uniform float aspect_ratio;
             \\attribute vec3 coords;
             \\attribute vec3 changed;
+            \\
             \\void main() {
-            \\    float d = changed.z + 35.0;
-            \\    float factor = 10.0 / d;
-            \\    gl_Position = vec4(changed.x * factor, changed.y * factor * aspect_ratio, 1.0, 1.0);
+            \\    float factor = 10.0 / (changed.z + 35.0);
+            \\    gl_Position = vec4(changed.xy * vec2(factor, factor * aspect_ratio), 1.0, 1.0);
             \\}
         ;
         const fragment_shader_source =
@@ -157,12 +160,21 @@ fn pyramidFn(ptr: *anyopaque) callconv(.C) void {
     Scene.insertPyramid(@ptrCast(@alignCast(ptr)));
 }
 
-fn rotateFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, x: f32, y: f32, z: f32) callconv(.C) void {
-    const scene: *Scene = @ptrCast(@alignCast(ptr));
-    scene.rotate(idxs_ptr, idxs_len, x, y, z);
-    scene.updateLines();
+fn sphereFn(ptr: *anyopaque) callconv(.C) void {
+    Scene.insertSphere(@ptrCast(@alignCast(ptr)));
 }
 
+fn coneFn(ptr: *anyopaque) callconv(.C) void {
+    Scene.insertCone(@ptrCast(@alignCast(ptr)));
+}
+
+fn rotateFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, x: f32, y: f32, z: f32) callconv(.C) void {
+    Scene.rotate(@ptrCast(@alignCast(ptr)), idxs_ptr, idxs_len, x, y, z);
+}
+
+fn scaleFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, factor: f32) callconv(.C) void {
+    Scene.scale(@ptrCast(@alignCast(ptr)), idxs_ptr, idxs_len, factor);
+}
 pub fn main() void {
     var engine = g.Geoc.init();
     defer engine.deinit();

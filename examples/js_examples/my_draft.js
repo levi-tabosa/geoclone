@@ -1,4 +1,3 @@
-/** WebGL and WASM Definitions **/
 /**
  * @typedef {{
  *    index: number,
@@ -25,22 +24,27 @@
  *    clear_fn_ptr: number
  *    cube_fn_ptr: number
  *    pyramid_fn_ptr: number
- *    sphere_fn_ptr: number
- *    cone_fn_ptr: number
- *    rotate_fn_ptr: number
- *    scale_fn_ptr: number
- *    }
+ *    rotate_fn_ptr: number}
  * } Scene
  * */
 
-/** Context and Globals **/
-let canvas, webgl, wasm_instance, wasm_memory;
-let shaders = new Map(),
-  programs = new Map(),
-  buffers = new Map();
-let next_shader = 0,
-  next_program = 0,
-  next_buffer = 0;
+/** @type { HTMLCanvasElement } */
+let canvas;
+/** @type { WebGLRenderingContext } */
+let webgl;
+/** @type { WebAssembly.Instance } */
+let wasm_instance;
+/** @type { WebAssembly.Memory } */
+let wasm_memory;
+/** @type { Map<number, WebGLShader> } */
+let shaders = new Map();
+let next_shader = 0;
+/** @type { Map<number, Program> } */
+let programs = new Map();
+let next_program = 0;
+/** @type { Map<number, WebGLBuffer> } */
+let buffers = new Map();
+let next_buffer = 0;
 
 let isAutoRotating = false;
 let autoRotationInterval = null;
@@ -56,10 +60,7 @@ let scene = {
   clear_fn_ptr: 0,
   cube_fn_ptr: 0,
   pyramid_fn_ptr: 0,
-  sphere_fn_ptr: 0,
-  cone_fn_ptr: 0,
   rotate_fn_ptr: 0,
-  scale_fn_ptr: 0,
 };
 
 function getData(c_ptr, len) {
@@ -85,23 +86,27 @@ const down_listener = () => {
   is_pressed = true;
 };
 
-const move_listener = (e) => {
-  const { left, top, width, height } = canvas.getBoundingClientRect();
+const move_listener = (event) => {
   if (is_pressed) {
+    const rect = canvas.getBoundingClientRect();
+    const pos = { x: event.clientX - rect.left, y: event.clientY - rect.top };
+    const angle_x = (pos.y * 6.283185) / rect.height;
+    const angle_z = (pos.x * 6.283185) / rect.width;
+
     wasm_instance.exports.setAngles(
       scene.ptr,
       scene.angles_fn_ptr,
-      ((e.clientY - top) * Math.PI * 2) / height,
-      ((e.clientX - left) * Math.PI * 2) / width
+      angle_x,
+      angle_z
     );
   }
 };
 
-const wheel_listener = (e) => {
+const wheel_listener = (event) => {
   wasm_instance.exports.setZoom(
     scene.ptr,
     scene.zoom_fn_ptr,
-    (e.deltaY >> 6) * 0.1
+    (event.deltaY >> 6) * 0.1
   );
 };
 
@@ -109,11 +114,13 @@ const resize_listener = (entries) => {
   const { width, height } = entries[0].contentRect;
   canvas.width = width;
   canvas.height = height;
-  webgl.viewport(0, 0, width, height);
 
   const program = programs.get(0);
-  const u_aspect_ratio = webgl.getUniformLocation(program.gl, "aspect_ratio");
-  webgl.uniform1f(u_aspect_ratio, width / height);
+  if (program) {
+    const aspectUniform = webgl.getUniformLocation(program.gl, "aspect_ratio");
+    webgl.uniform1f(aspectUniform, width / height);
+  }
+  webgl.viewport(0, 0, width, height);
 };
 
 function toggleAutoRotation() {
@@ -124,7 +131,7 @@ function toggleAutoRotation() {
   }
 
   const selectedVectors = document.querySelectorAll(".vector-item.selected");
-  if (selectedVectors.length == 0) {
+  if (selectedVectors.length === 0) {
     isAutoRotating = true;
     let angle_z = 0;
 
@@ -146,110 +153,49 @@ function toggleAutoRotation() {
 }
 
 class SceneHandler {
-  constructor(wasm_instance, scene) {
+  constructor(wasm_instance, demo) {
     this.wasm_instance = wasm_instance;
-    this.scene = scene;
-    this.vectors = [];
-    this.shapes = [];
+    this.demo = demo;
+    // this.vectors = [];
     this.selected_indexes = [];
-    this.interval = null;
   }
-
   // Delegate methods matching Zig Scene/Handler methods
+
   addVector(x, y, z) {
-    const [xf, yf, zf] = [parseFloat(x), parseFloat(y), parseFloat(z)];
-    if (![xf, yf, zf].some(isNaN)) {
+    if (
+      !isNaN(parseFloat(x)) &&
+      !isNaN(parseFloat(y)) &&
+      !isNaN(parseFloat(z))
+    ) {
       this.wasm_instance.exports.insertVector(
-        this.scene.ptr,
-        this.scene.insert_fn_ptr,
-        xf,
-        yf,
-        zf
+        this.demo.ptr,
+        this.demo.insert_fn_ptr,
+        x,
+        y,
+        z
       );
-      console.log({ xf, yf, zf });
-      this.vectors.push({ x: xf, y: yf, z: zf });
-      this.addVectorToList(xf.toFixed(2), yf.toFixed(2), zf.toFixed(2));
-      console.log(this.vectors);
+      // this.vectors.push({ x, y, z });
+      this.addVectorToList(parseFloat(x), parseFloat(y), parseFloat(z));
     }
   }
 
   clear() {
-    this.wasm_instance.exports.clear(this.scene.ptr, this.scene.clear_fn_ptr);
+    this.wasm_instance.exports.clear(this.demo.ptr, this.demo.clear_fn_ptr);
     this.clearVectorList();
-    this.vectors = [];
   }
 
   insertCube() {
-    this.wasm_instance.exports.insertCube(
-      this.scene.ptr,
-      this.scene.cube_fn_ptr
-    );
-    this.shapes.push("Cube");
+    this.wasm_instance.exports.insertCube(this.demo.ptr, this.demo.cube_fn_ptr);
   }
 
   insertPyramid() {
     this.wasm_instance.exports.insertPyramid(
-      this.scene.ptr,
-      this.scene.pyramid_fn_ptr
+      this.demo.ptr,
+      this.demo.pyramid_fn_ptr
     );
-    this.shapes.push("Pyramid");
-  }
-
-  insertSphere() {
-    this.wasm_instance.exports.insertSphere(
-      this.scene.ptr,
-      this.scene.sphere_fn_ptr
-    );
-    this.shapes.push("Sphere");
-  }
-
-  insertCone() {
-    this.wasm_instance.exports.insertCone(
-      this.scene.ptr,
-      this.scene.cone_fn_ptr
-    );
-    this.shapes.push("Cone");
   }
 
   rotate(angle_x, angle_y, angle_z) {
-    const idxs_len = this.selected_indexes.length;
-    if (idxs_len > 0) {
-      const buffer = new Uint32Array(this.wasm_instance.exports.memory.buffer);
-      const offset = buffer.length - idxs_len;
-      buffer.set(this.selected_indexes, offset);
-      this.wasm_instance.exports.rotate(
-        this.scene.ptr,
-        this.scene.rotate_fn_ptr,
-        offset * 4,
-        idxs_len,
-        angle_x,
-        angle_y,
-        angle_z
-      );
-      this.selected_indexes.forEach((idx) => {
-        let { x, y, z } = this.vectors[idx];
-        let tmp_x = x * Math.cos(angle_z) - y * Math.sin(angle_z);
-        let tmp_y = x * Math.sin(angle_z) + y * Math.cos(angle_z);
-
-        x = tmp_x;
-        y = tmp_y;
-        let tmp_z = z * Math.cos(angle_y) - x * Math.sin(angle_y);
-
-        x = z * Math.sin(angle_y) + x * Math.cos(angle_y);
-        z = tmp_z;
-        tmp_y = y * Math.cos(angle_x) - z * Math.sin(angle_x);
-
-        z = y * Math.sin(angle_x) + z * Math.cos(angle_x);
-        y = tmp_y;
-        this.vectors[idx] = { x, y, z };
-      });
-      this.updateVectorList();
-    } else {
-      alert("Please select elements for rotation");
-    }
-  }
-
-  scale(factor) {
     const idxs_len = this.selected_indexes.length;
     if (idxs_len > 0) {
       const buffer = new Uint32Array(wasm_memory.buffer);
@@ -257,17 +203,19 @@ class SceneHandler {
 
       buffer.set(this.selected_indexes, offset);
 
-      this.wasm_instance.exports.scale(
-        this.scene.ptr,
-        this.scene.scale_fn_ptr,
+      this.wasm_instance.exports.rotate(
+        this.demo.ptr,
+        this.demo.rotate_fn_ptr,
         offset * 4, // u32 4 bytes pointer alignment
         idxs_len,
-        factor
+        angle_x,
+        angle_y,
+        angle_z
       );
 
-      this.updateVectorList();
+      this.updateVectorListItem(angle_x, angle_y, angle_z);
     } else {
-      alert("Please select elements for scaling");
+      toggleAutoRotation();
     }
   }
 
@@ -299,17 +247,30 @@ class SceneHandler {
     ).map((item) => Array.from(item.parentElement.children).indexOf(item));
   }
 
-  updateVectorList() {
-    const vectorList = document.getElementById("vector-list");
-    vectorList.innerHTML = "";
+  updateVectorListItem(angle_x, angle_y, angle_z) {
+    Array.from(document.querySelectorAll(".vector-item.selected")).map(
+      (item) => {
+        const tmp = item.textContent.split(",");
+        let x = parseFloat(tmp[0]);
+        let y = parseFloat(tmp[1]);
+        let z = parseFloat(tmp[2]);
 
-    this.vectors.forEach((vector) => {
-      this.addVectorToList(
-        vector.x.toFixed(2),
-        vector.y.toFixed(2),
-        vector.z.toFixed(2)
-      );
-    });
+        const tmp_x = x * Math.cos(angle_z) - y * Math.sin(angle_z); //Z
+        let tmp_y = x * Math.sin(angle_z) + y * Math.cos(angle_z);
+        x = tmp_x;
+        y = tmp_y;
+
+        const tmp_z = z * Math.cos(angle_y) - x * Math.sin(angle_y); //Y
+        x = z * Math.sin(angle_y) + x * Math.cos(angle_y);
+        z = tmp_z;
+
+        tmp_y = y * Math.cos(angle_x) - z * Math.sin(angle_x); //X
+        z = y * Math.sin(angle_x) + z * Math.cos(angle_x);
+        y = tmp_y;
+
+        item.textContent = `${x.toFixed(2)}, ${y.toFixed(2)}, ${z.toFixed(2)}`;
+      }
+    );
   }
 
   clearVectorList() {
@@ -329,7 +290,9 @@ function createButtonListeners(scene_handler) {
       const z = input3.value;
       scene_handler.addVector(x, y, z);
 
-      input1.value = input2.value = input3.value = "";
+      input1.value = "";
+      input2.value = "";
+      input3.value = "";
     },
     // Clear
     () => scene_handler.clear(),
@@ -347,44 +310,14 @@ function createButtonListeners(scene_handler) {
     },
     // Insert Cube
     () => scene_handler.insertCube(),
-    // Toggle
-    () => {
-      console.log("Toggle");
-    },
-    // Scale
-    () => {
-      const factor = input1.value;
-      if (factor) {
-        scene_handler.scale(factor);
-      } else {
-        alert("Use the left input box to input factor");
-      }
-    },
+    // Toggle (placeholder)
+    () => console.log("Toggle"),
+    // Scale (placeholder)
+    () => console.log("Scale"),
     // Insert Pyramid
     () => scene_handler.insertPyramid(),
-    () => {},
-    // Translate
-    () => {
-      const x = input1.value;
-      const y = input2.value;
-      const z = input3.value;
-      scene_handler.translate(x, y, z);
-    },
-    // Insert Sphere
-    () => {
-      scene_handler.insertSphere();
-    },
-    () => {},
-    () => {},
-    // Insert Cone
-    () => {
-      scene_handler.insertCone();
-    },
-    () => {},
-    () => {},
-    () => {},
-    () => {},
-    () => {},
+    // Remaining placeholder methods
+    ...Array(11).fill(() => console.log("Placeholder")),
   ];
 }
 
@@ -403,7 +336,7 @@ function createButtonGrid() {
     "Scale",
     "Pyramid",
     "Text",
-    "Translate",
+    "Text",
     "Sphere",
     "Text",
     "Text",
@@ -496,16 +429,16 @@ const env = {
 
     new ResizeObserver((entries) => resize_listener(entries)).observe(canvas);
 
-    body.appendChild(container);
-    container.append(
-      canvas,
-      text_fields,
-      createButtonGrid(),
-      createToggleGridButton(),
-      createVectorList(),
-      createToggleVectorListButton()
-    );
-    text_fields.append(input1, input2, input3);
+    body.append(container);
+    container.appendChild(canvas);
+    container.appendChild(createButtonGrid());
+    container.appendChild(createToggleGridButton());
+    container.appendChild(createVectorList());
+    container.appendChild(createToggleVectorListButton());
+    container.appendChild(text_fields);
+    text_fields.appendChild(input1);
+    text_fields.appendChild(input2);
+    text_fields.appendChild(input3);
   },
   deinit: function () {
     webgl.finish();
@@ -531,10 +464,7 @@ const env = {
     clear_fn_ptr,
     cube_fn_ptr,
     pyramid_fn_ptr,
-    sphere_fn_ptr,
-    cone_fn_ptr,
-    rotate_fn_ptr,
-    scale_fn_ptr
+    rotate_fn_ptr
   ) {
     scene.ptr = ptr;
     scene.angles_fn_ptr = angles_fn_ptr;
@@ -544,10 +474,7 @@ const env = {
     scene.clear_fn_ptr = clear_fn_ptr;
     scene.cube_fn_ptr = cube_fn_ptr;
     scene.pyramid_fn_ptr = pyramid_fn_ptr;
-    scene.sphere_fn_ptr = sphere_fn_ptr;
-    scene.cone_fn_ptr = cone_fn_ptr;
     scene.rotate_fn_ptr = rotate_fn_ptr;
-    scene.scale_fn_ptr = scale_fn_ptr;
   },
   _log: function (ptr, len) {
     console.log(getStr(ptr, len));
@@ -767,13 +694,15 @@ const env = {
   },
 };
 
-export async function init(wasm_path) {
-  let promise = fetch(wasm_path);
-  WebAssembly.instantiateStreaming(promise, {
-    env: env,
-  }).then((result) => {
-    wasm_instance = result.instance;
-    wasm_memory = wasm_instance.exports.memory;
-    wasm_instance.exports._start();
-  });
+
+export async function init(wasmPath) {
+  // let promise = fetch(wasmPath);
+  WebAssemblyApp.init(wasmPath);
+  // WebAssembly.instantiateStreaming(promise, {
+  //   env: env,
+  // }).then((result) => {
+  //   wasm_instance = result.instance;
+  //   wasm_memory = wasm_instance.exports.memory;
+  //   wasm_instance.exports._start();
+  // });
 }

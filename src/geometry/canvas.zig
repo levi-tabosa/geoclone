@@ -171,9 +171,18 @@ pub const Scene = struct {
         for (0..idxs_len) |i| {
             const idx = idxs_ptr[i] * 2;
 
-            _LOGF(self.allocator, "Index {}: before rotation {any}", .{ idxs_ptr[i], self.vectors.?[idx] });
             rotXYZ(&self.vectors.?[idx], x, y, z);
-            _LOGF(self.allocator, "Index {}: after rotation {any}", .{ idxs_ptr[i], self.vectors.?[idx] });
+        }
+        self.updateLines();
+    }
+
+    pub fn scale(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, factor: f32) void {
+        for (0..idxs_len) |i| {
+            const idx = idxs_ptr[i] * 2;
+
+            for (&self.vectors.?[idx].coords) |*value| {
+                value.* *= factor;
+            }
         }
         self.updateLines();
     }
@@ -184,6 +193,14 @@ pub const Scene = struct {
 
     pub fn insertPyramid(self: *Self) void {
         self.insertShape(Shape.PYRAMID);
+    }
+
+    pub fn insertSphere(self: *Self) void {
+        self.insertShape(Shape.SPHERE);
+    }
+
+    pub fn insertCone(self: *Self) void {
+        self.insertShape(Shape.CONE);
     }
 
     fn insertShape(self: *Self, shape: Shape) void {
@@ -217,10 +234,11 @@ pub const Scene = struct {
 pub const Shape = enum {
     CUBE,
     PYRAMID,
-    // SPHERE,
+    SPHERE,
+    CONE,
 
-    pub fn getVectors(self: Shape, res: ?usize) []const V3 { //TODO: res used on sphere
-        _ = res;
+    pub fn getVectors(self: Shape, res: ?usize) []const V3 { // `res` é opcional e utilizado apenas para formas paramétricas
+        const resolution = res orelse 16; // Valor padrão para a resolução
         return switch (self) {
             .CUBE => &[_]V3{
                 .{ .coords = .{ -1, 1, 1 } },   .{ .coords = .{ -1, 1, -1 } },
@@ -233,7 +251,63 @@ pub const Shape = enum {
                 .{ .coords = .{ 1, 1, -1 } },   .{ .coords = .{ 1, -1, -1 } },
                 .{ .coords = .{ -1, -1, -1 } },
             },
+            .SPHERE => Sphere.generate(resolution),
+            .CONE => Cone.generate(resolution),
         };
+    }
+};
+
+pub const Sphere = struct {
+    /// Gera os vértices da esfera com a resolução especificada.
+    pub fn generate(res: usize) []const V3 {
+        const pi = 3.14159265;
+        const stacks = res; // Número de divisões verticais (latitude)
+        const slices = res; // Número de divisões horizontais (longitude)
+        const radius: f32 = 1.0;
+        const vertexes = std.heap.page_allocator.alloc(V3, res * res) catch @panic("OOM"); // Placeholder para os vértices gerados dinamicamente
+
+        // Iterar pelas divisões (latitude e longitude)
+        for (0..stacks) |i| {
+            const theta = @as(f32, @floatFromInt(i)) * pi / @as(f32, @floatFromInt(stacks - 1)); // Ângulo da latitude
+            const y = @cos(theta) * radius; // Altura na esfera
+            const ring_radius = @sin(theta) * radius; // Raio do anel
+
+            for (0..slices) |j| {
+                const phi = @as(f32, @floatFromInt(j)) * 2.0 * pi / @as(f32, @floatFromInt(slices)); // Ângulo da longitude
+                const x = ring_radius * @cos(phi);
+                const z = ring_radius * @sin(phi);
+
+                vertexes[i * j + j] = .{ .coords = .{ x, y, z } }; // Adiciona o vértice
+            }
+        }
+
+        return vertexes;
+    }
+};
+
+pub const Cone = struct {
+    /// Gera os vértices do cone com a resolução especificada.
+    pub fn generate(res: usize) []const V3 {
+        const pi = 3.14159265;
+
+        const slices = res; // Número de segmentos da base
+        const radius: f32 = 1.0;
+        const height: f32 = 2.0;
+        const vertexes = std.heap.page_allocator.alloc(V3, slices + 1) catch @panic("OOM");
+
+        // Vértice do topo do cone
+        vertexes[0] = .{ .coords = .{ 0, 0, height } };
+
+        // Vértices da base
+        for (1..slices) |i| {
+            const theta = @as(f32, @floatFromInt(i)) * 2.0 * pi / @as(f32, @floatFromInt(slices)); // Ângulo do segmento
+            const x = @cos(theta) * radius;
+            const z = @sin(theta) * radius;
+
+            vertexes[i] = .{ .coords = .{ x, z, 0 } };
+        }
+
+        return vertexes;
     }
 };
 
@@ -246,5 +320,8 @@ pub const State = struct {
     clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
     cube_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
     pyramid_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    sphere_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    cone_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
     rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
+    scale_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32) callconv(.C) void,
 };

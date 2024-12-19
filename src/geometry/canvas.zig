@@ -187,6 +187,17 @@ pub const Scene = struct {
         self.updateLines();
     }
 
+    pub fn translate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, dx: f32, dy: f32, dz: f32) void {
+        for (0..idxs_len) |i| {
+            const idx = idxs_ptr[i] * 2;
+
+            self.vectors.?[idx].coords[0] += dx;
+            self.vectors.?[idx].coords[1] += dy;
+            self.vectors.?[idx].coords[2] += dz;
+        }
+        self.updateLines();
+    }
+
     pub fn insertCube(self: *Self) void {
         self.insertShape(Shape.CUBE);
     }
@@ -324,4 +335,5 @@ pub const State = struct {
     cone_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
     rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
     scale_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32) callconv(.C) void,
+    translate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
 };

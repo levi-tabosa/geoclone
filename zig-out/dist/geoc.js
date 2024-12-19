@@ -18,36 +18,48 @@
  *
  * @typedef {{
  *    ptr: number,
- *    angles_fn_ptr: number
- *    get_ax_fn_ptr: number
- *    zoom_fn_ptr: number
- *    insert_fn_ptr: number
- *    clear_fn_ptr: number
- *    cube_fn_ptr: number
- *    pyramid_fn_ptr: number
- *    sphere_fn_ptr: number
- *    cone_fn_ptr: number
- *    rotate_fn_ptr: number
- *    scale_fn_ptr: number
+ *    angles_fn_ptr: number,
+ *    get_ax_fn_ptr: number,
+ *    zoom_fn_ptr: number,
+ *    insert_fn_ptr: number,
+ *    clear_fn_ptr: number,
+ *    cube_fn_ptr: number,
+ *    pyramid_fn_ptr: number,
+ *    sphere_fn_ptr: number,
+ *    cone_fn_ptr: number,
+ *    rotate_fn_ptr: number,
+ *    scale_fn_ptr: number,
+ *    translate_fn_ptr: number
  *    }
  * } Scene
  * */
 
 /** Context and Globals **/
-let canvas, webgl, wasm_instance, wasm_memory;
-let shaders = new Map(),
-  programs = new Map(),
-  buffers = new Map();
-let next_shader = 0,
-  next_program = 0,
-  next_buffer = 0;
+/** @type { HTMLCanvasElement } */
+let canvas;
+/** @type { WebGLRenderingContext } */
+let webgl;
+/** @type { WebAssembly.Instance } */
+let wasm_instance;
+/** @type { WebAssembly.Memory } */
+let wasm_memory;
+/** @type { Map<number, WebGLShader> } */
+const shaders = new Map();
+let next_shader = 0;
+/** @type { Map<number, Program> } */
+const programs = new Map();
+let next_program = 0;
+/** @type { Map<number, WebGLBuffer> } */
+const buffers = new Map();
+let next_buffer = 0;
 
-let isAutoRotating = false;
-let autoRotationInterval = null;
+const interval = 30,
+  frames = 25,
+  fps = 200;
 let is_pressed = false;
 
 /** @type { Scene } */
-let scene = {
+const scene = {
   ptr: 0,
   angles_fn_ptr: 0,
   get_ax_fn_ptr: 0,
@@ -60,20 +72,18 @@ let scene = {
   cone_fn_ptr: 0,
   rotate_fn_ptr: 0,
   scale_fn_ptr: 0,
+  translate_fn_ptr: 0,
 };
 
 function getData(c_ptr, len) {
-  //TODO: move to scene handler
   return new Uint8Array(wasm_memory.buffer, c_ptr, len);
 }
 
 function getStr(c_ptr, len) {
-  //TODO: move to scene handler
   return new TextDecoder().decode(getData(c_ptr, len));
 }
 
 function call(ptr, fnPtr) {
-  //TODO: move to scene handler
   wasm_instance.exports.draw(ptr, fnPtr);
 }
 
@@ -85,7 +95,7 @@ const down_listener = () => {
   is_pressed = true;
 };
 
-const move_listener = (e) => {
+const mouse_listener = (e) => {
   const { left, top, width, height } = canvas.getBoundingClientRect();
   if (is_pressed) {
     wasm_instance.exports.setAngles(
@@ -93,6 +103,18 @@ const move_listener = (e) => {
       scene.angles_fn_ptr,
       ((e.clientY - top) * Math.PI * 2) / height,
       ((e.clientX - left) * Math.PI * 2) / width
+    );
+  }
+};
+
+const swipe_listener = (e) => {
+  const { left, top, width, height } = canvas.getBoundingClientRect();
+  if (is_pressed) {
+    wasm_instance.exports.setAngles(
+      scene.ptr,
+      scene.angles_fn_ptr,
+      ((e.touches[0].clientY - top) * Math.PI * 2) / height,
+      ((e.touches[0].clientX - left) * Math.PI * 2) / width
     );
   }
 };
@@ -116,46 +138,140 @@ const resize_listener = (entries) => {
   webgl.uniform1f(u_aspect_ratio, width / height);
 };
 
-function toggleAutoRotation() {
-  if (isAutoRotating) {
-    clearInterval(autoRotationInterval);
-    isAutoRotating = false;
-    return;
-  }
-
-  const selectedVectors = document.querySelectorAll(".vector-item.selected");
-  if (selectedVectors.length == 0) {
-    isAutoRotating = true;
-    let angle_z = 0;
-
-    autoRotationInterval = setInterval(() => {
-      const angle_x = wasm_instance.exports.getAngleX(
-        scene.ptr,
-        scene.get_ax_fn_ptr
-      );
-      angle_z += 0.03;
-      angle_z %= Math.PI * 2;
-      wasm_instance.exports.setAngles(
-        scene.ptr,
-        scene.angles_fn_ptr,
-        angle_x,
-        angle_z
-      );
-    }, 15);
-  }
+function createButtonListeners(scene_handler) {
+  return [
+    () => {
+      const x = input1.value;
+      const y = input2.value;
+      const z = input3.value;
+      scene_handler.addVector(x, y, z);
+      input1.value = input2.value = input3.value = "";
+    },
+    () => scene_handler.clear(),
+    () => {
+      const x = input1.value;
+      const y = input2.value;
+      const z = input3.value;
+      if (x || y || z) {
+        scene_handler.rotate(x, y, z);
+      } else {
+        scene_handler.toggleAutoRotation();
+      }
+    },
+    () => scene_handler.insertCube(),
+    () => console.log("Toggle"),
+    () => {
+      const factor = input1.value;
+      if (factor) {
+        scene_handler.scale(factor);
+      } else {
+        alert("Use the left input box to input factor");
+      }
+    },
+    () => scene_handler.insertPyramid(),
+    () => {},
+    () => {
+      const x = input1.value;
+      const y = input2.value;
+      const z = input3.value;
+      if (x || y || z) {
+        scene_handler.translate(x, y, z);
+      }
+    },
+    () => scene_handler.insertSphere(),
+    () => {},
+    () => {},
+    () => scene_handler.insertCone(),
+    () => scene_handler.project(),
+    () => {},
+    () => {},
+    () => scene_handler.reflect(),
+    () => {},
+  ];
 }
 
+const btn_listeners = [];
+
+function createButtonGrid() {
+  const grid = document.createElement("div");
+  grid.id = "button-grid";
+
+  const labels = [
+    "Insert",
+    "Clear",
+    "Rotate",
+    "Cube",
+    "Toggle",
+    "Scale",
+    "Pyramid",
+    "Text",
+    "Translate",
+    "Sphere",
+    "Text",
+    "Text",
+    "Cone",
+    "Projection",
+    "Text",
+    "Text",
+    "Reflection",
+    "Text",
+  ];
+
+  labels.forEach((label, index) => {
+    const btn = createButton(
+      `grid-btn-${index + 1}`,
+      label,
+      btn_listeners[index]
+    );
+    btn.className = "floating-button";
+    grid.appendChild(btn);
+  });
+
+  return grid;
+}
+
+function createToggleGridButton() {
+  return createButton("toggle-grid-btn", "Btns", () => {
+    document.getElementById("button-grid").classList.toggle("hidden");
+  });
+}
+
+function createVectorList() {
+  const vectorList = document.createElement("div");
+  vectorList.id = "vector-list";
+  vectorList.className = "floating-list";
+  return vectorList;
+}
+
+function createToggleVectorListButton() {
+  return createButton("toggle-vector-list-btn", "VECTORS", () => {
+    document.getElementById("vector-list").classList.toggle("hidden");
+  });
+}
+
+function createButton(id, text, onClick) {
+  const btn = document.createElement("button");
+  btn.id = id;
+  btn.textContent = text;
+  btn.addEventListener("click", onClick);
+  return btn;
+} // Delegate methods matching Zig Scene/Handler methods
 class SceneHandler {
+  /**
+   * Creates an instance of SceneHandler.
+   * @param {Object} wasm_instance - The WebAssembly instance.
+   * @param {Object} scene - The scene object.
+   */
   constructor(wasm_instance, scene) {
     this.wasm_instance = wasm_instance;
     this.scene = scene;
     this.vectors = [];
     this.shapes = [];
     this.selected_indexes = [];
-    this.interval = null;
+    this.is_rotating = false;
+    this.rotation_interval = null;
   }
 
-  // Delegate methods matching Zig Scene/Handler methods
   addVector(x, y, z) {
     const [xf, yf, zf] = [parseFloat(x), parseFloat(y), parseFloat(z)];
     if (![xf, yf, zf].some(isNaN)) {
@@ -166,10 +282,8 @@ class SceneHandler {
         yf,
         zf
       );
-      console.log({ xf, yf, zf });
       this.vectors.push({ x: xf, y: yf, z: zf });
       this.addVectorToList(xf.toFixed(2), yf.toFixed(2), zf.toFixed(2));
-      console.log(this.vectors);
     }
   }
 
@@ -179,68 +293,108 @@ class SceneHandler {
     this.vectors = [];
   }
 
+  insertShape(shape) {
+    const shapeMap = {
+      Cube: this.scene.cube_fn_ptr,
+      Pyramid: this.scene.pyramid_fn_ptr,
+      Sphere: this.scene.sphere_fn_ptr,
+      Cone: this.scene.cone_fn_ptr,
+    };
+
+    if (shapeMap[shape]) {
+      this.wasm_instance.exports[`insert${shape}`](
+        this.scene.ptr,
+        shapeMap[shape]
+      );
+      this.shapes.push(shape);
+    } else {
+      console.error(`Shape ${shape} is not supported.`);
+    }
+  }
+
   insertCube() {
-    this.wasm_instance.exports.insertCube(
-      this.scene.ptr,
-      this.scene.cube_fn_ptr
-    );
-    this.shapes.push("Cube");
+    this.insertShape("Cube");
   }
 
   insertPyramid() {
-    this.wasm_instance.exports.insertPyramid(
-      this.scene.ptr,
-      this.scene.pyramid_fn_ptr
-    );
-    this.shapes.push("Pyramid");
+    this.insertShape("Pyramid");
   }
 
   insertSphere() {
-    this.wasm_instance.exports.insertSphere(
-      this.scene.ptr,
-      this.scene.sphere_fn_ptr
-    );
-    this.shapes.push("Sphere");
+    this.insertShape("Sphere");
   }
 
   insertCone() {
-    this.wasm_instance.exports.insertCone(
-      this.scene.ptr,
-      this.scene.cone_fn_ptr
-    );
-    this.shapes.push("Cone");
+    this.insertShape("Cone");
   }
-
   rotate(angle_x, angle_y, angle_z) {
     const idxs_len = this.selected_indexes.length;
     if (idxs_len > 0) {
+      const r_step = {
+        x: angle_x / frames,
+        y: angle_y / frames,
+        z: angle_z / frames,
+      };
+      let curr = 0;
       const buffer = new Uint32Array(this.wasm_instance.exports.memory.buffer);
       const offset = buffer.length - idxs_len;
+
       buffer.set(this.selected_indexes, offset);
-      this.wasm_instance.exports.rotate(
-        this.scene.ptr,
-        this.scene.rotate_fn_ptr,
-        offset * 4,
-        idxs_len,
-        angle_x,
-        angle_y,
-        angle_z
-      );
+
+      const rotateAxis = (axis, step) => {
+        this.wasm_instance.exports.rotate(
+          this.scene.ptr,
+          this.scene.rotate_fn_ptr,
+          offset * 4,
+          idxs_len,
+          axis === "x" ? step : 0,
+          axis === "y" ? step : 0,
+          axis === "z" ? step : 0
+        );
+      };
+
+      const r_interval = setInterval(() => {
+        if (curr <= frames) {
+          if (angle_x !== 0) rotateAxis("x", r_step.x);
+        } else if (curr <= frames * 2) {
+          if (angle_y !== 0) rotateAxis("y", r_step.y);
+        } else {
+          if (angle_z !== 0) rotateAxis("z", r_step.z);
+        }
+        curr++;
+      }, interval);
+      setTimeout(() => clearInterval(r_interval), frames * 3 * interval);
+
       this.selected_indexes.forEach((idx) => {
         let { x, y, z } = this.vectors[idx];
-        let tmp_x = x * Math.cos(angle_z) - y * Math.sin(angle_z);
-        let tmp_y = x * Math.sin(angle_z) + y * Math.cos(angle_z);
 
-        x = tmp_x;
-        y = tmp_y;
-        let tmp_z = z * Math.cos(angle_y) - x * Math.sin(angle_y);
+        const rotateVector = (x, y, z, angle, axis) => {
+          switch (axis) {
+            case "x":
+              return {
+                x,
+                y: y * Math.cos(angle) - z * Math.sin(angle),
+                z: y * Math.sin(angle) + z * Math.cos(angle),
+              };
+            case "y":
+              return {
+                x: z * Math.sin(angle) + x * Math.cos(angle),
+                y,
+                z: z * Math.cos(angle) - x * Math.sin(angle),
+              };
+            case "z":
+              return {
+                x: x * Math.cos(angle) - y * Math.sin(angle),
+                y: x * Math.sin(angle) + y * Math.cos(angle),
+                z,
+              };
+          }
+        };
 
-        x = z * Math.sin(angle_y) + x * Math.cos(angle_y);
-        z = tmp_z;
-        tmp_y = y * Math.cos(angle_x) - z * Math.sin(angle_x);
+        ({ x, y, z } = rotateVector(x, y, z, angle_z, "z"));
+        ({ x, y, z } = rotateVector(x, y, z, angle_y, "y"));
+        ({ x, y, z } = rotateVector(x, y, z, angle_x, "x"));
 
-        z = y * Math.sin(angle_x) + z * Math.cos(angle_x);
-        y = tmp_y;
         this.vectors[idx] = { x, y, z };
       });
       this.updateVectorList();
@@ -252,22 +406,68 @@ class SceneHandler {
   scale(factor) {
     const idxs_len = this.selected_indexes.length;
     if (idxs_len > 0) {
+      const s_step = Math.pow(factor, 1 / frames);
+
       const buffer = new Uint32Array(wasm_memory.buffer);
       const offset = buffer.length - idxs_len;
 
       buffer.set(this.selected_indexes, offset);
+      const s_interval = setInterval(() => {
+        this.wasm_instance.exports.scale(
+          this.scene.ptr,
+          this.scene.scale_fn_ptr,
+          offset * 4, // u32 4 bytes pointer alignment
+          idxs_len,
+          s_step
+        );
+      }, interval);
+      setTimeout(() => clearInterval(s_interval), frames * interval);
 
-      this.wasm_instance.exports.scale(
-        this.scene.ptr,
-        this.scene.scale_fn_ptr,
-        offset * 4, // u32 4 bytes pointer alignment
-        idxs_len,
-        factor
-      );
+      this.selected_indexes.forEach((idx) => {
+        let { x, y, z } = this.vectors[idx];
+        x *= factor;
+        y *= factor;
+        z *= factor;
+        this.vectors[idx] = { x, y, z };
+      });
 
       this.updateVectorList();
     } else {
       alert("Please select elements for scaling");
+    }
+  }
+
+  translate(dx, dy, dz) {
+    const idxs_len = this.selected_indexes.length;
+    if (idxs_len > 0) {
+      const t_step = { x: dx / frames, y: dy / frames, z: dz / frames };
+      const buffer = new Uint32Array(wasm_memory.buffer);
+      const offset = buffer.length - idxs_len;
+
+      buffer.set(this.selected_indexes, offset);
+      const t_interval = setInterval(() => {
+        this.wasm_instance.exports.translate(
+          this.scene.ptr,
+          this.scene.translate_fn_ptr,
+          offset * 4,
+          idxs_len,
+          t_step.x,
+          t_step.y,
+          t_step.z
+        );
+      }, interval);
+      setTimeout(() => clearInterval(t_interval), frames * interval);
+
+      this.selected_indexes.forEach((idx) => {
+        let { x, y, z } = this.vectors[idx];
+        x += dx;
+        y += dy;
+        z += dz;
+        this.vectors[idx] = { x, y, z };
+      });
+      this.updateVectorList();
+    } else {
+      alert("Please select elements translation");
     }
   }
 
@@ -312,151 +512,40 @@ class SceneHandler {
     });
   }
 
+  toggleAutoRotation() {
+    if (this.is_rotating) {
+      clearInterval(this.rotation_interval);
+      this.is_rotating = false;
+      return;
+    }
+
+    const selectedVectors = document.querySelectorAll(".vector-item.selected");
+    if (selectedVectors.length === 0) {
+      this.is_rotating = true;
+      let angle_z = 0;
+
+      this.rotation_interval = setInterval(() => {
+        const angle_x = wasm_instance.exports.getAngleX(
+          scene.ptr,
+          scene.get_ax_fn_ptr
+        );
+        angle_z += 0.03;
+        angle_z %= Math.PI * 2;
+        wasm_instance.exports.setAngles(
+          scene.ptr,
+          scene.angles_fn_ptr,
+          angle_x,
+          angle_z
+        );
+      }, interval);
+    }
+  }
+
   clearVectorList() {
     const list = document.getElementById("vector-list");
     list.innerHTML = "";
-    // this.vectors = [];
     this.updateSelectedIndexes();
   }
-}
-
-function createButtonListeners(scene_handler) {
-  return [
-    // Insert Vector
-    () => {
-      const x = input1.value;
-      const y = input2.value;
-      const z = input3.value;
-      scene_handler.addVector(x, y, z);
-
-      input1.value = input2.value = input3.value = "";
-    },
-    // Clear
-    () => scene_handler.clear(),
-    // Rotate
-    () => {
-      const x = input1.value;
-      const y = input2.value;
-      const z = input3.value;
-
-      if (x || y || z) {
-        scene_handler.rotate(x, y, z);
-      } else {
-        toggleAutoRotation();
-      }
-    },
-    // Insert Cube
-    () => scene_handler.insertCube(),
-    // Toggle
-    () => {
-      console.log("Toggle");
-    },
-    // Scale
-    () => {
-      const factor = input1.value;
-      if (factor) {
-        scene_handler.scale(factor);
-      } else {
-        alert("Use the left input box to input factor");
-      }
-    },
-    // Insert Pyramid
-    () => scene_handler.insertPyramid(),
-    () => {},
-    // Translate
-    () => {
-      const x = input1.value;
-      const y = input2.value;
-      const z = input3.value;
-      scene_handler.translate(x, y, z);
-    },
-    // Insert Sphere
-    () => {
-      scene_handler.insertSphere();
-    },
-    () => {},
-    () => {},
-    // Insert Cone
-    () => {
-      scene_handler.insertCone();
-    },
-    () => {},
-    () => {},
-    () => {},
-    () => {},
-    () => {},
-  ];
-}
-
-const btn_listeners = [];
-
-function createButtonGrid() {
-  const grid = document.createElement("div");
-  grid.id = "button-grid";
-
-  const labels = [
-    "Insert",
-    "Clear",
-    "Rotate",
-    "Cube",
-    "Toggle",
-    "Scale",
-    "Pyramid",
-    "Text",
-    "Translate",
-    "Sphere",
-    "Text",
-    "Text",
-    "Cone",
-    "Text",
-    "Text",
-    "Text",
-    "Text",
-    "Text",
-  ];
-
-  labels.forEach((label, index) => {
-    const btn = document.createElement("button");
-    btn.textContent = label;
-    btn.className = "floating-button";
-    btn.id = `grid-btn-${index + 1}`;
-    btn.addEventListener("click", btn_listeners[index]);
-    grid.appendChild(btn);
-  });
-
-  return grid;
-}
-
-function createToggleGridButton() {
-  const toggleBtn = document.createElement("button");
-  toggleBtn.id = "toggle-grid-btn";
-  toggleBtn.textContent = "Btns";
-
-  toggleBtn.addEventListener("click", () => {
-    const buttonGrid = document.getElementById("button-grid");
-    buttonGrid.classList.toggle("hidden");
-  });
-
-  return toggleBtn;
-}
-
-function createVectorList() {
-  const vectorList = document.createElement("div");
-  vectorList.id = "vector-list";
-  vectorList.className = "floating-list";
-  return vectorList;
-}
-
-function createToggleVectorListButton() {
-  const toggleBtn = document.createElement("button");
-  toggleBtn.id = "toggle-vector-list-btn";
-  toggleBtn.textContent = "VECTORS";
-  toggleBtn.addEventListener("click", () => {
-    const vectorList = document.getElementById("vector-list");
-    vectorList.classList.toggle("hidden");
-  });
-
-  return toggleBtn;
 }
 
 const env = {
@@ -471,30 +560,32 @@ const env = {
 
     canvas = document.createElement("canvas");
     webgl = canvas.getContext("webgl");
-    const body = document.getElementsByTagName("body").item(0);
-    const container = document.createElement("div");
-    const text_fields = document.createElement("div");
-    const input1 = document.createElement("input");
-    const input2 = document.createElement("input");
-    const input3 = document.createElement("input");
-
-    canvas.id = "canvas";
-    container.id = "container";
-    text_fields.id = "text-inputs";
-    input1.id = "input1";
-    input2.id = "input2";
-    input3.id = "input3";
-
     if (webgl == null) {
       throw new Error("No WebGL support on browser");
     }
 
+    const body = document.body;
+    const container = document.createElement("div");
+    const text_fields = document.createElement("div");
+    const inputs = ["input1", "input2", "input3"].map((id) => {
+      const input = document.createElement("input");
+      input.id = id;
+      return input;
+    });
+
+    canvas.id = "canvas";
+    container.id = "container";
+    text_fields.id = "text-inputs";
+
     canvas.addEventListener("mousedown", down_listener);
     canvas.addEventListener("mouseup", up_listener);
-    canvas.addEventListener("mousemove", move_listener);
+    canvas.addEventListener("touchstart", down_listener);
+    canvas.addEventListener("touchend", up_listener);
+    canvas.addEventListener("touchmove", swipe_listener);
+    canvas.addEventListener("mousemove", mouse_listener);
     canvas.addEventListener("wheel", wheel_listener);
 
-    new ResizeObserver((entries) => resize_listener(entries)).observe(canvas);
+    new ResizeObserver(resize_listener).observe(canvas);
 
     body.appendChild(container);
     container.append(
@@ -505,23 +596,39 @@ const env = {
       createVectorList(),
       createToggleVectorListButton()
     );
-    text_fields.append(input1, input2, input3);
+    text_fields.append(...inputs);
   },
+
   deinit: function () {
     webgl.finish();
   },
+
   run: function (ptr, fnPtr) {
     function frame() {
       call(ptr, fnPtr);
-
-      setTimeout(() => {
-        requestAnimationFrame(frame);
-      }, 15);
+      setTimeout(() => requestAnimationFrame(frame), 1000 / fps);
     }
     requestAnimationFrame(frame);
     throw new Error("Not an error");
   },
-  //TODO: better way to pass fn pointers from zig to this
+  setScene: function (ptr) {
+    const state = new DataView(wasm_memory.buffer, ptr, 52);
+
+    scene.ptr = state.getUint32(0, true);
+    scene.angles_fn_ptr = state.getUint32(4, true);
+    scene.get_ax_fn_ptr = state.getUint32(8, true);
+    scene.zoom_fn_ptr = state.getUint32(12, true);
+    scene.insert_fn_ptr = state.getUint32(16, true);
+    scene.clear_fn_ptr = state.getUint32(20, true);
+    scene.cube_fn_ptr = state.getUint32(24, true);
+    scene.pyramid_fn_ptr = state.getUint32(28, true);
+    scene.sphere_fn_ptr = state.getUint32(32, true);
+    scene.cone_fn_ptr = state.getUint32(36, true);
+    scene.rotate_fn_ptr = state.getUint32(40, true);
+    scene.scale_fn_ptr = state.getUint32(44, true);
+    scene.translate_fn_ptr = state.getUint32(48, true);
+    console.log(scene); // printa ponteiros invalidos
+  },
   setSceneCallBack: function (
     ptr,
     angles_fn_ptr,
@@ -534,41 +641,34 @@ const env = {
     sphere_fn_ptr,
     cone_fn_ptr,
     rotate_fn_ptr,
-    scale_fn_ptr
+    scale_fn_ptr,
+    translate_fn_ptr
   ) {
-    scene.ptr = ptr;
-    scene.angles_fn_ptr = angles_fn_ptr;
-    scene.get_ax_fn_ptr = get_ax_fn_ptr;
-    scene.zoom_fn_ptr = zoom_fn_ptr;
-    scene.insert_fn_ptr = insert_fn_ptr;
-    scene.clear_fn_ptr = clear_fn_ptr;
-    scene.cube_fn_ptr = cube_fn_ptr;
-    scene.pyramid_fn_ptr = pyramid_fn_ptr;
-    scene.sphere_fn_ptr = sphere_fn_ptr;
-    scene.cone_fn_ptr = cone_fn_ptr;
-    scene.rotate_fn_ptr = rotate_fn_ptr;
-    scene.scale_fn_ptr = scale_fn_ptr;
+    Object.assign(scene, {
+      ptr,
+      angles_fn_ptr,
+      get_ax_fn_ptr,
+      zoom_fn_ptr,
+      insert_fn_ptr,
+      clear_fn_ptr,
+      cube_fn_ptr,
+      pyramid_fn_ptr,
+      sphere_fn_ptr,
+      cone_fn_ptr,
+      rotate_fn_ptr,
+      scale_fn_ptr,
+      translate_fn_ptr,
+    });
+    console.log(scene);
+
   },
-  _log: function (ptr, len) {
+  _log(ptr, len) {
     console.log(getStr(ptr, len));
   },
-  clear: function (r, g, b, a) {
-    webgl.clearColor(r, g, b, a);
-    webgl.clear(webgl.COLOR_BUFFER_BIT);
-  },
-  time: function () {
-    return performance.now() / 1000;
-  },
-  initShader: function (type, source_ptr, source_len) {
-    const shader =
-      {
-        0: webgl.createShader(webgl.VERTEX_SHADER),
-        1: webgl.createShader(webgl.FRAGMENT_SHADER),
-      }[type] || null;
-
-    if (shader == null) {
-      throw new Error("Invalid shader type");
-    }
+  initShader(type, source_ptr, source_len) {
+    const shaderType = type === 0 ? webgl.VERTEX_SHADER : webgl.FRAGMENT_SHADER;
+    const shader = webgl.createShader(shaderType);
+    if (!shader) throw new Error("Invalid shader type");
 
     webgl.shaderSource(
       shader,
@@ -581,63 +681,52 @@ const env = {
         `Failed to compile shader ${webgl.getShaderInfoLog(shader)}`
       );
     }
+
     const handle = next_shader++;
     shaders.set(handle, shader);
     return handle;
   },
-  deinitShader: function (handle) {
+  deinitShader(handle) {
     webgl.deleteShader(shaders.get(handle) ?? null);
     next_shader--;
   },
-  initProgram: function (shader1_handle, shader2_handle) {
+  initProgram(shader1_handle, shader2_handle) {
     const program = webgl.createProgram();
-    if (program == null) {
-      throw new Error(`Failed to create program}`);
-    }
+    if (!program) throw new Error("Failed to create program");
 
     const shader1 = shaders.get(shader1_handle);
     const shader2 = shaders.get(shader2_handle);
+    if (!shader1 || !shader2) throw new Error("Failed to attach shaders");
 
-    if (!shader1 || !shader2) {
-      throw new Error("Failed to shaders attach, shader is not");
-    }
     webgl.attachShader(program, shader1);
     webgl.attachShader(program, shader2);
     webgl.linkProgram(program);
 
     if (!webgl.getProgramParameter(program, webgl.LINK_STATUS)) {
       throw new Error(
-        `Failed to link program:${gl.getProgramInfoLog(program)}`
+        `Failed to link program: ${webgl.getProgramInfoLog(program)}`
       );
     }
 
-    const attribute_count = webgl.getProgramParameter(
+    const attributes = new Map();
+    const attributeCount = webgl.getProgramParameter(
       program,
       webgl.ACTIVE_ATTRIBUTES
     );
-
-    /** @type {Map<string, Attribute>}*/
-    const attributes = new Map();
-
-    for (let i = 0; i < attribute_count; i++) {
+    for (let i = 0; i < attributeCount; i++) {
       const attribute = webgl.getActiveAttrib(program, i);
-      if (attribute) {
+      if (attribute)
         attributes.set(attribute.name, { index: i, info: attribute });
-      }
     }
-    const uniform_count = webgl.getProgramParameter(
+
+    const uniforms = new Map();
+    const uniformCount = webgl.getProgramParameter(
       program,
       webgl.ACTIVE_UNIFORMS
     );
-
-    /** @type {Map<string, WebGLActiveInfo>}*/
-    const uniforms = new Map();
-
-    for (let i = 0; i < uniform_count; i++) {
+    for (let i = 0; i < uniformCount; i++) {
       const uniform = webgl.getActiveUniform(program, i);
-      if (uniform) {
-        uniforms.set(uniform.name, uniform);
-      }
+      if (uniform) uniforms.set(uniform.name, uniform);
     }
 
     webgl.useProgram(program);
@@ -645,35 +734,28 @@ const env = {
       webgl.getUniformLocation(program, "aspect_ratio"),
       canvas.width / canvas.height
     );
+    webgl.uniform1f(webgl.getUniformLocation(program, "near"), 10);
+    webgl.uniform1f(webgl.getUniformLocation(program, "far"), 45);
 
     const handle = next_program++;
-    programs.set(handle, {
-      gl: program,
-      attributes: attributes,
-      uniforms: uniforms,
-    });
+    programs.set(handle, { gl: program, attributes, uniforms });
     return handle;
   },
-  useProgram: function (handle) {
+  useProgram(handle) {
+    const program = programs.get(handle);
+    if (program) webgl.useProgram(program.gl);
+  },
+  deinitProgram(handle) {
     const program = programs.get(handle);
     if (program) {
-      webgl.useProgram(program.gl);
+      programs.delete(handle);
+      webgl.deleteProgram(program.gl);
+      next_program--;
     }
   },
-  deinitProgram: function (handle) {
-    const program = programs.get(handle);
-    if (program) {
-      return;
-    }
-    programs.delete(handle);
-    webgl.deleteProgram(program.gl);
-    next_program--;
-  },
-  initVertexBuffer: function (data_ptr, data_len) {
+  initVertexBuffer(data_ptr, data_len) {
     const vertex_buffer = webgl.createBuffer();
-    if (vertex_buffer == null) {
-      throw new Error("Failed to create buffer");
-    }
+    if (!vertex_buffer) throw new Error("Failed to create buffer");
 
     webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
     webgl.bufferData(
@@ -686,17 +768,17 @@ const env = {
     buffers.set(handle, vertex_buffer);
     return handle;
   },
-  deinitVertexBuffer: function (handle) {
+  deinitVertexBuffer(handle) {
     const buffer = buffers.get(handle) ?? null;
     buffers.delete(handle);
     webgl.deleteBuffer(buffer);
     next_buffer--;
   },
-  bindVertexBuffer: function (handle) {
+  bindVertexBuffer(handle) {
     const vertex_buffer = buffers.get(handle) ?? null;
     webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
   },
-  vertexAttribPointer: function (
+  vertexAttribPointer(
     program_handle,
     name_ptr,
     name_len,
@@ -707,23 +789,13 @@ const env = {
     offset
   ) {
     const program = programs.get(program_handle);
-    if (!program) {
-      return;
-    }
+    if (!program) return;
 
     const attribute = program.attributes.get(getStr(name_ptr, name_len));
-    if (!attribute) {
-      return;
-    }
+    if (!attribute) return;
 
-    let gl_type;
-    switch (type) {
-      case 0:
-        gl_type = webgl.FLOAT;
-        break;
-      default:
-        throw new Error("Unknown type");
-    }
+    const gl_type = type === 0 ? webgl.FLOAT : null;
+    if (!gl_type) throw new Error("Unknown type");
 
     webgl.enableVertexAttribArray(attribute.index);
     webgl.vertexAttribPointer(
@@ -735,45 +807,26 @@ const env = {
       offset
     );
   },
-  drawArrays: function (mode, first, count) {
-    let gl_mode;
-    switch (mode) {
-      case 0:
-        gl_mode = webgl.POINTS;
-        break;
-      case 1:
-        gl_mode = webgl.LINES;
-        break;
-      case 2:
-        gl_mode = webgl.LINE_LOOP;
-        break;
-      case 3:
-        gl_mode = webgl.LINE_STRIP;
-        break;
-      case 4:
-        gl_mode = webgl.TRIANGLES;
-        break;
-      case 5:
-        gl_mode = webgl.TRIANGLE_STRIP;
-        break;
-      case 6:
-        gl_mode = webgl.TRIANGLE_FAN;
-        break;
-      default:
-        throw new Error("Unsupported draw mode");
-    }
+  drawArrays(mode, first, count) {
+    const gl_mode = [
+      webgl.POINTS,
+      webgl.LINES,
+      webgl.LINE_LOOP,
+      webgl.LINE_STRIP,
+      webgl.TRIANGLES,
+      webgl.TRIANGLE_STRIP,
+      webgl.TRIANGLE_FAN,
+    ][mode];
+    if (gl_mode === undefined) throw new Error("Unsupported draw mode");
 
     webgl.drawArrays(gl_mode, first, count);
   },
 };
 
 export async function init(wasm_path) {
-  let promise = fetch(wasm_path);
-  WebAssembly.instantiateStreaming(promise, {
-    env: env,
-  }).then((result) => {
-    wasm_instance = result.instance;
-    wasm_memory = wasm_instance.exports.memory;
-    wasm_instance.exports._start();
-  });
+  const response = await fetch(wasm_path);
+  const result = await WebAssembly.instantiateStreaming(response, { env });
+  wasm_instance = result.instance;
+  wasm_memory = wasm_instance.exports.memory;
+  wasm_instance.exports._start();
 }

@@ -159,6 +159,10 @@ pub const Geoc = struct {
         self.platform.run(state);
     }
 
+    pub fn setScene(self: Self, state: canvas.State) void {
+        self.platform.setScene(state);
+    }
+
     pub fn setSceneCallBack(self: Self, state: canvas.State) void {
         self.platform.setSceneCallBack(state);
     }

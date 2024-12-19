@@ -29,7 +29,7 @@ pub const State = struct {
     scene: *Scene,
 
     pub fn init(geoc_instance: g.Geoc, scene: *Scene) Self {
-        geoc_instance.setSceneCallBack(.{
+        const s = canvas.State{
             .ptr = scene,
             .angles_fn_ptr = anglesFn,
             .get_ax_fn_ptr = getAngleXFn,
@@ -42,15 +42,20 @@ pub const State = struct {
             .cone_fn_ptr = coneFn,
             .rotate_fn_ptr = rotateFn,
             .scale_fn_ptr = scaleFn,
-        });
+            .translate_fn_ptr = translateFn,
+        };
+        // geoc_instance.setScene(s);
+        geoc_instance.setSceneCallBack(s);
 
         const vertex_shader_source =
             \\uniform float aspect_ratio;
+            \\uniform float near;
+            \\uniform float far;
             \\attribute vec3 coords;
             \\attribute vec3 changed;
             \\
             \\void main() {
-            \\    float factor = 10.0 / (changed.z + 35.0);
+            \\    float factor = near / (changed.z + far);
             \\    gl_Position = vec4(changed.xy * vec2(factor, factor * aspect_ratio), 1.0, 1.0);
             \\}
         ;
@@ -175,6 +180,11 @@ fn rotateFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, x: f32, y:
 fn scaleFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, factor: f32) callconv(.C) void {
     Scene.scale(@ptrCast(@alignCast(ptr)), idxs_ptr, idxs_len, factor);
 }
+
+fn translateFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, dx: f32, dy: f32, dz: f32) callconv(.C) void {
+    Scene.translate(@ptrCast(@alignCast(ptr)), idxs_ptr, idxs_len, dx, dy, dz);
+}
+
 pub fn main() void {
     var engine = g.Geoc.init();
     defer engine.deinit();

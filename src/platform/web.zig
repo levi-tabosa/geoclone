@@ -5,9 +5,7 @@ const canvas = geoclone.canvas;
 const js = struct { //TODO remove all unused fn
     extern fn init() void;
     extern fn deinit() void;
-    extern fn clear(r: f32, g: f32, b: f32, a: f32) void;
     extern fn run(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void;
-    extern fn time() f32;
     extern fn _log(ptr: [*]const u8, len: usize) void;
     extern fn initShader(@"type": u32, ptr_source: [*]const u8, ptr_len: u32) i32;
     extern fn deinitShader(js_handle: i32) void;
@@ -27,6 +25,7 @@ const js = struct { //TODO remove all unused fn
         stride: usize,
         offset: usize,
     ) void;
+    extern fn setScene(ptr: *anyopaque) callconv(.C) void;
     extern fn setSceneCallBack(
         ptr: *anyopaque,
         angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
@@ -40,6 +39,7 @@ const js = struct { //TODO remove all unused fn
         cone_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
         rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
         scale_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32) callconv(.C) void,
+        translate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
     ) void;
     extern fn drawArrays(mode: geoclone.DrawMode, first: usize, count: usize) void;
 };
@@ -140,6 +140,18 @@ export fn scale(
     factor: f32,
 ) void {
     scale_fn_ptr(ptr, indexes_ptr, indexes_len, factor);
+}
+
+export fn translate(
+    ptr: *anyopaque,
+    translate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
+    indexes_ptr: [*]const u32,
+    indexes_len: usize,
+    dx: f32,
+    dy: f32,
+    dz: f32,
+) void {
+    translate_fn_ptr(ptr, indexes_ptr, indexes_len, dx, dy, dz);
 }
 
 pub fn log(message: []const u8) void {
@@ -243,6 +255,10 @@ pub const State = struct {
         js.run(state.ptr, state.drawFn);
     }
 
+    pub fn setScene(_: Self, state: canvas.State) void {
+        js.setScene(state.ptr);
+    }
+
     pub fn setSceneCallBack(_: Self, state: canvas.State) void {
         js.setSceneCallBack(
             state.ptr,
@@ -257,6 +273,7 @@ pub const State = struct {
             state.cone_fn_ptr,
             state.rotate_fn_ptr,
             state.scale_fn_ptr,
+            state.translate_fn_ptr,
         );
     }
 

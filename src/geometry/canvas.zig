@@ -240,6 +240,24 @@ pub const Scene = struct {
     pub fn setZoom(self: *Self, zoom: f32) void {
         self.zoom += zoom;
     }
+
+    pub fn setResolution(self: *Self, resolution: usize) void {
+        const j = res / 2;
+        var i: i32 = -j;
+        const fixed: f32 = j;
+        var grid = self.allocator.alloc(V3, resolution * 4) catch @panic("OOM");
+        const upperLimit = if (res & 1 == 1) j + 1 else j;
+        _LOGF(self.allocator, "upper limit : {} \n len : {}", .{ upperLimit, grid.len });
+
+        while (i < grid.len) : (i += 1) {
+            const idx: f32 = @as(f32, @floatFromInt(i));
+            const index = @as(usize, @intCast((i + j) * 4));
+            grid[index] = vec3(&.{ idx, fixed, 0.0 }, 0.0, 0.0, 0.3);
+            grid[index + 1] = vec3(&.{ idx, -fixed, 0.0 }, 0.0, 0.0, 0.3);
+            grid[index + 2] = vec3(&.{ fixed, idx, 0.0 }, 0.0, 0.0, 0.3);
+            grid[index + 3] = vec3(&.{ -fixed, idx, 0.0 }, 0.0, 0.0, 0.3);
+        }
+    }
 };
 
 pub const Shape = enum {
@@ -248,8 +266,8 @@ pub const Shape = enum {
     SPHERE,
     CONE,
 
-    pub fn getVectors(self: Shape, res: ?usize) []const V3 { // `res` é opcional e utilizado apenas para formas paramétricas
-        const resolution = res orelse 16; // Valor padrão para a resolução
+    pub fn getVectors(self: Shape, res: ?usize) []const V3 {
+        const resolution = res orelse 32;
         return switch (self) {
             .CUBE => &[_]V3{
                 .{ .coords = .{ -1, 1, 1 } },   .{ .coords = .{ -1, 1, -1 } },
@@ -271,7 +289,7 @@ pub const Shape = enum {
 pub const Sphere = struct {
     /// Gera os vértices da esfera com a resolução especificada.
     pub fn generate(res: usize) []const V3 {
-        const pi = 3.14159265;
+        const pi = std.math.pi;
         const stacks = res; // Número de divisões verticais (latitude)
         const slices = res; // Número de divisões horizontais (longitude)
         const radius: f32 = 1.0;
@@ -299,7 +317,7 @@ pub const Sphere = struct {
 pub const Cone = struct {
     /// Gera os vértices do cone com a resolução especificada.
     pub fn generate(res: usize) []const V3 {
-        const pi = 3.14159265;
+        const pi = std.math.pi;
 
         const slices = res; // Número de segmentos da base
         const radius: f32 = 1.0;
@@ -329,6 +347,7 @@ pub const State = struct {
     zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
     insert_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
     clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    set_res_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
     cube_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
     pyramid_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
     sphere_fn_ptr: *const fn (*anyopaque) callconv(.C) void,

@@ -24,18 +24,22 @@ pub const State = struct {
     grid_buffer: g.VertexBuffer(V3),
     // vectors_buffer: g.VertexBuffer(V3), maybe it is possible to reuse this
     // shapes_buffer: (...)
-    program: g.Program,
+    axis_program: g.Program,
+    grid_program: g.Program,
+    vectors_program: g.Program,
+    shapes_program: g.Program,
     geoc: g.Geoc,
     scene: *Scene,
 
     pub fn init(geoc_instance: g.Geoc, scene: *Scene) Self {
-        const s = canvas.State{
+        const s: canvas.State = .{
             .ptr = scene,
             .angles_fn_ptr = anglesFn,
             .get_ax_fn_ptr = getAngleXFn,
             .zoom_fn_ptr = zoomFn,
             .insert_fn_ptr = insertFn,
             .clear_fn_ptr = clearFn,
+            .set_res_fn_ptr = setResolutionFn,
             .cube_fn_ptr = cubeFn,
             .pyramid_fn_ptr = pyramidFn,
             .sphere_fn_ptr = sphereFn,
@@ -44,8 +48,56 @@ pub const State = struct {
             .scale_fn_ptr = scaleFn,
             .translate_fn_ptr = translateFn,
         };
-        // geoc_instance.setScene(s);
-        geoc_instance.setSceneCallBack(s);
+        geoc_instance.setScene(s);
+
+        _LOGF(
+            geoc_instance.allocator,
+            \\State values:\n ptr: {} \n angles_fn_ptr: {} \n get_ax_fn_ptr: {} \n zoom_fn_ptr: {} \n insert_fn_ptr: {} \n clear_fn_ptr: {}
+            \\ \n set_res_fn_ptr: {} \n cube_fn_ptr: {} \n pyramid_fn_ptr: {} \n sphere_fn_ptr: {} \n cone_fn_ptr: {} \n rotate_fn_ptr:
+            \\ {} \n scale_fn_ptr: {} \n translate_fn_ptr: {} \n "
+        ,
+            .{
+                @intFromPtr(s.ptr),
+                @intFromPtr(s.angles_fn_ptr),
+                @intFromPtr(s.get_ax_fn_ptr),
+                @intFromPtr(s.zoom_fn_ptr),
+                @intFromPtr(s.insert_fn_ptr),
+                @intFromPtr(s.clear_fn_ptr),
+                @intFromPtr(s.set_res_fn_ptr),
+                @intFromPtr(s.cube_fn_ptr),
+                @intFromPtr(s.pyramid_fn_ptr),
+                @intFromPtr(s.sphere_fn_ptr),
+                @intFromPtr(s.cone_fn_ptr),
+                @intFromPtr(s.rotate_fn_ptr),
+                @intFromPtr(s.scale_fn_ptr),
+                @intFromPtr(s.translate_fn_ptr),
+            },
+        );
+
+        _LOGF(
+            geoc_instance.allocator,
+            "Size of State: \t{}\nAlign of State: \t{}\n",
+            .{
+                @sizeOf(@TypeOf(s)),
+                @alignOf(@TypeOf(s)),
+            },
+        );
+
+        inline for (std.meta.fields(canvas.State)) |field| {
+            _LOGF(
+                geoc_instance.allocator,
+                "Offset of {s}: \t{}\nAlignment :\t{}\nType :\t{any}\n",
+                .{
+                    field.name,
+                    @offsetOf(canvas.State, field.name),
+                    field.alignment,
+                    field.type,
+                },
+            );
+        }
+        geoc_instance.setScene(s);
+        _LOGF(geoc_instance.allocator, "@intFromPtr(s.ptr)\t{}\n", .{@intFromPtr(s.ptr)});
+        // geoc_instance.setSceneCallBack(s);
 
         const vertex_shader_source =
             \\uniform float aspect_ratio;
@@ -59,29 +111,61 @@ pub const State = struct {
             \\    gl_Position = vec4(changed.xy * vec2(factor, factor * aspect_ratio), 1.0, 1.0);
             \\}
         ;
-        const fragment_shader_source =
+        const a_fragment_shader_source =
+            \\uniform vec4 color;
             \\void main() {
             \\    gl_FragColor = vec4(1.0, 0.0, 0.0, 1.0);
             \\}
         ;
+        const g_fragment_shader_source =
+            \\uniform vec4 color;
+            \\void main() {
+            \\    gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+            \\}
+        ;
+        const v_fragment_shader_source =
+            \\uniform vec4 color;
+            \\void main() {
+            \\    gl_FragColor = vec4(0.0, 0.0, 1.0, 1.0);
+            \\}
+        ;
+        const s_fragment_shader_source =
+            \\uniform vec4 color;
+            \\void main() {
+            \\    gl_FragColor = vec4(1.0, 1.0, 0.0, 1.0);
+            \\}
+        ;
         const vertex_shader = g.Shader.init(geoc_instance, g.ShaderType.Vertex, vertex_shader_source);
         defer vertex_shader.deinit();
-        const fragment_shader = g.Shader.init(geoc_instance, g.ShaderType.Fragment, fragment_shader_source);
-        defer fragment_shader.deinit();
-        const program = g.Program.init(geoc_instance, &[_]g.Shader{ vertex_shader, fragment_shader });
+
+        const a_fragment_shader = g.Shader.init(geoc_instance, g.ShaderType.Fragment, a_fragment_shader_source);
+        defer a_fragment_shader.deinit();
+        const g_fragment_shader = g.Shader.init(geoc_instance, g.ShaderType.Fragment, g_fragment_shader_source);
+        defer g_fragment_shader.deinit();
+        const v_fragment_shader = g.Shader.init(geoc_instance, g.ShaderType.Fragment, v_fragment_shader_source);
+        defer v_fragment_shader.deinit();
+        const s_fragment_shader = g.Shader.init(geoc_instance, g.ShaderType.Fragment, s_fragment_shader_source);
+        defer s_fragment_shader.deinit();
 
         return .{
             .axis_buffer = g.VertexBuffer(V3).init(&scene.axis),
             .grid_buffer = g.VertexBuffer(V3).init(&scene.grid),
-            .program = program,
+            .axis_program = g.Program.init(geoc_instance, &.{ vertex_shader, a_fragment_shader }),
+            .grid_program = g.Program.init(geoc_instance, &.{ vertex_shader, g_fragment_shader }),
+            .vectors_program = g.Program.init(geoc_instance, &.{ vertex_shader, v_fragment_shader }),
+            .shapes_program = g.Program.init(geoc_instance, &.{ vertex_shader, s_fragment_shader }),
             .geoc = geoc_instance,
             .scene = scene,
         };
     }
 
     pub fn deinit(self: *Self) void {
-        self.program.deinit();
+        self.axis_program.deinit();
+        self.grid_program.deinit();
+        self.vectors_program.deinit();
+        self.shapes_program.deinit();
         self.axis_buffer.deinit();
+        self.grid_buffer.deinit();
     }
 
     pub fn draw(self: Self) void {
@@ -90,8 +174,8 @@ pub const State = struct {
         const grid_buffer = g.VertexBuffer(V3).init(&self.scene.grid);
         defer grid_buffer.deinit();
 
-        self.geoc.draw(V3, self.program, axis_buffer, g.DrawMode.Lines);
-        self.geoc.draw(V3, self.program, grid_buffer, g.DrawMode.Lines);
+        self.geoc.draw(V3, self.grid_program, grid_buffer, g.DrawMode.Lines);
+        self.geoc.draw(V3, self.axis_program, axis_buffer, g.DrawMode.Lines);
 
         self.drawVectors();
         self.drawShapes();
@@ -101,7 +185,7 @@ pub const State = struct {
         if (self.scene.vectors) |vectors| {
             const vectors_buffer = g.VertexBuffer(V3).init(vectors);
             defer vectors_buffer.deinit();
-            self.geoc.draw(V3, self.program, vectors_buffer, g.DrawMode.Lines);
+            self.geoc.draw(V3, self.vectors_program, vectors_buffer, g.DrawMode.Lines);
         }
     }
 
@@ -110,7 +194,7 @@ pub const State = struct {
             for (shapes) |s| {
                 const shapes_buffer = g.VertexBuffer(V3).init(s);
                 defer shapes_buffer.deinit();
-                self.geoc.draw(V3, self.program, shapes_buffer, g.DrawMode.Line_loop);
+                self.geoc.draw(V3, self.shapes_program, shapes_buffer, g.DrawMode.Line_loop);
             }
         }
     }
@@ -130,6 +214,13 @@ pub const State = struct {
 fn drawFn(ptr: *anyopaque) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
     state.draw();
+}
+
+pub fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
+    const state: *State = @ptrCast(@alignCast(ptr));
+    state.scene.setResolution(res);
+    state.grid_buffer.deinit();
+    state.grid_buffer = g.VertexBuffer(V3).init(&state.scene.grid);
 }
 
 fn anglesFn(ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void {

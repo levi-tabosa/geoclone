@@ -26,21 +26,6 @@ const js = struct { //TODO remove all unused fn
         offset: usize,
     ) void;
     extern fn setScene(ptr: *anyopaque) callconv(.C) void;
-    extern fn setSceneCallBack(
-        ptr: *anyopaque,
-        angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
-        get_ax_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
-        zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
-        insert_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
-        clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
-        cube_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
-        pyramid_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
-        sphere_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
-        cone_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
-        rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
-        scale_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32) callconv(.C) void,
-        translate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
-    ) void;
     extern fn drawArrays(mode: geoclone.DrawMode, first: usize, count: usize) void;
 };
 
@@ -90,6 +75,14 @@ export fn clear(
     clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
 ) void {
     clear_fn_ptr(ptr);
+}
+
+export fn setResolution(
+    ptr: *anyopaque,
+    set_res_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
+    res: usize,
+) void {
+    set_res_fn_ptr(ptr, res);
 }
 
 export fn insertCube(
@@ -256,25 +249,15 @@ pub const State = struct {
     }
 
     pub fn setScene(_: Self, state: canvas.State) void {
+        log(std.fmt.allocPrint(
+            std.heap.page_allocator,
+            "IN platform/web.zig(platform)\nSize of State: \t{}\nAlign of State: \t{}\n",
+            .{
+                @sizeOf(@TypeOf(state)),
+                @alignOf(@TypeOf(state)),
+            },
+        ) catch unreachable);
         js.setScene(state.ptr);
-    }
-
-    pub fn setSceneCallBack(_: Self, state: canvas.State) void {
-        js.setSceneCallBack(
-            state.ptr,
-            state.angles_fn_ptr,
-            state.get_ax_fn_ptr,
-            state.zoom_fn_ptr,
-            state.insert_fn_ptr,
-            state.clear_fn_ptr,
-            state.cube_fn_ptr,
-            state.pyramid_fn_ptr,
-            state.sphere_fn_ptr,
-            state.cone_fn_ptr,
-            state.rotate_fn_ptr,
-            state.scale_fn_ptr,
-            state.translate_fn_ptr,
-        );
     }
 
     pub fn currentTime(_: Self) f32 {

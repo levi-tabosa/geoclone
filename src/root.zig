@@ -160,6 +160,14 @@ pub const Geoc = struct {
     }
 
     pub fn setScene(self: Self, state: canvas.State) void {
+        platform.log(std.fmt.allocPrint(
+            self.allocator,
+            "IN root.zig(geoc_instance)\nSize of State: \t{}\nAlign of State: \t{}\n",
+            .{
+                @sizeOf(@TypeOf(state)),
+                @alignOf(@TypeOf(state)),
+            },
+        ) catch @panic("OOM"));
         self.platform.setScene(state);
     }
 

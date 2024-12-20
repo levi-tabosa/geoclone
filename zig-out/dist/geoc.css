@@ -1,22 +1,25 @@
-body { 
-   display: flex; 
-   justify-content: center; 
+body {
+   display: flex;
+   justify-content: center;
    align-items: center;
    height: 100dvh;
-   margin: 0; 
+   margin: 0;
    font-family: Arial, sans-serif;
 }
+
 #container {
    width: 99%;
    height: 98%;
    position: relative;
 }
+
 #canvas {
    border: 2px solid #322d2d;
    width: 100%;
    height: 100%;
    background-color: white;
 }
+
 .floating-button {
    padding: 8px;
    background-color: #4CAF50;
@@ -26,9 +29,11 @@ body {
    transition: background-color 0.3s;
    margin: 5px;
 }
+
 .floating-button:hover {
    background-color: #45a049;
 }
+
 #text-inputs {
    position: absolute;
    padding: 15px;
@@ -39,10 +44,12 @@ body {
    justify-content: center;
    gap: 10px;
 }
+
 #text-inputs input {
    padding: 5px;
    width: 150px;
 }
+
 #button-grid {
    position: absolute;
    top: 50%;
@@ -56,10 +63,12 @@ body {
    border-radius: 10px;
    transition: opacity 0.3s ease;
 }
+
 #button-grid.hidden {
    opacity: 0;
    pointer-events: none;
 }
+
 #toggle-grid-btn {
    position: absolute;
    top: 50%;
@@ -73,6 +82,7 @@ body {
    writing-mode: vertical-rl;
    text-orientation: mixed;
 }
+
 #vector-list {
    position: absolute;
    top: 10px;
@@ -84,9 +94,11 @@ body {
    overflow-y: auto;
    padding: 10px;
 }
+
 #vector-list.hidden {
    display: none;
 }
+
 .vector-item {
    padding: 10px;
    margin: 5px 0;
@@ -94,9 +106,11 @@ body {
    border: 1px solid #b0b0b0;
    cursor: pointer;
 }
+
 .vector-item.selected {
    background-color: #c0c0c0;
 }
+
 #toggle-vector-list-btn {
    position: absolute;
    top: 10px;
@@ -107,3 +121,79 @@ body {
    padding: 10px;
    cursor: pointer;
 }
+
+#color-button-grid {
+   position: absolute;
+   bottom: 10px;
+   left: 10px;
+   display: flex;
+   flex-direction: column;
+   gap: 10px;
+   background-color: rgba(255, 255, 255, 0.8);
+   padding: 10px;
+   border-radius: 10px;
+   z-index: 1000;
+}
+
+.color-button {
+   width: 30px;
+   height: 30px;
+   border: none;
+   cursor: pointer;
+   transition: opacity 0.3s;
+}
+
+.color-button.black {
+   background-color: black;
+
+}
+
+.color-button.gray {
+   background-color: gray;
+}
+
+.color-button.green {
+   background-color: green;
+}
+
+.color-button:hover {
+   opacity: 0.8;
+}
+
+#perspective-inputs {
+   position: absolute;
+   top: 10px;
+   right: 10px;
+   display: flex;
+   flex-direction: row;
+   align-items: center;
+   gap: 5px;
+   background-color: rgba(255, 255, 255, 0.8);
+   padding: 10px;
+   border-radius: 10px;
+   z-index: 1000;
+ }
+ 
+ #small-text-inputs input {
+   padding: 3px;
+   width: 100px;
+ }
+ 
+ #small-text-inputs button {
+   padding: 5px;
+   background-color: #4CAF50;
+   color: white;
+   border: none;
+   cursor: pointer;
+   transition: background-color 0.3s;
+ }
+ 
+ #small-text-inputs button:hover {
+   background-color: #45a049;
+ }
+
+ #grid-input {
+   padding: 3px;
+   width: 100px;
+   margin-top: 5px;
+ }

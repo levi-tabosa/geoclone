@@ -192,10 +192,7 @@ fn drawFn(ptr: *anyopaque) callconv(.C) void {
 }
 
 fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
-    const state: *State = @ptrCast(@alignCast(ptr));
-    state.scene.setResolution(res);
-    state.grid_buffer.deinit();
-    state.grid_buffer = g.VertexBuffer(V3).init(state.scene.grid);
+    Scene.setResolution(@ptrCast(@alignCast(ptr)), res);
 }
 
 fn setAnglesFn(ptr: *anyopaque, p_angle: f32, y_angle: f32) callconv(.C) void {

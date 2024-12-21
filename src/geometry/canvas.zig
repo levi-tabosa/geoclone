@@ -67,7 +67,7 @@ pub const V3 = struct {
 
 pub const Scene = struct {
     const Self = @This();
-    const res = 31;
+    const res = 10;
 
     allocator: Allocator,
     zoom: f32,
@@ -242,12 +242,12 @@ pub const Scene = struct {
     }
 
     pub fn setResolution(self: *Self, resolution: usize) void {
-        _log("a");
-
         const j: i32 = @intCast(resolution / 2);
         var i: i32 = -j;
         const fixed: f32 = @floatFromInt(j);
+        _LOGF(self.allocator, "res : {}\tgrid len before : {}\n", .{ resolution, self.grid.len });
         self.grid = self.allocator.alloc(V3, resolution * 4) catch @panic("OOM");
+        _LOGF(self.allocator, "res : {}\n\tgrid len after : {}\n", .{ resolution, self.grid.len });
         const upperLimit = if (resolution & 1 == 1) j + 1 else j;
 
         while (i < upperLimit) : (i += 1) {
@@ -288,47 +288,40 @@ pub const Shape = enum {
 };
 
 pub const Sphere = struct {
-    /// Gera os vértices da esfera com a resolução especificada.
     pub fn generate(res: usize) []const V3 {
-        const pi = std.math.pi;
-        const stacks = res; // Número de divisões verticais (latitude)
-        const slices = res; // Número de divisões horizontais (longitude)
+        const stacks = res;
+        const slices = res;
         const radius: f32 = 1.0;
-        const vertexes = std.heap.page_allocator.alloc(V3, res * res) catch @panic("OOM"); // Placeholder para os vértices gerados dinamicamente
+        const vertexes = std.heap.page_allocator.alloc(V3, res * res) catch @panic("OOM");
 
-        // Iterar pelas divisões (latitude e longitude)
         for (0..stacks) |i| {
-            const theta = @as(f32, @floatFromInt(i)) * pi / @as(f32, @floatFromInt(stacks - 1)); // Ângulo da latitude
-            const y = @cos(theta) * radius; // Altura na esfera
-            const ring_radius = @sin(theta) * radius; // Raio do anel
+            const theta = @as(f32, @floatFromInt(i)) * std.math.pi / @as(f32, @floatFromInt(stacks - 1));
+            const y = @cos(theta) * radius;
+            const ring_radius = @sin(theta) * radius;
 
             for (0..slices) |j| {
-                const phi = @as(f32, @floatFromInt(j)) * 2.0 * pi / @as(f32, @floatFromInt(slices)); // Ângulo da longitude
+                const phi = @as(f32, @floatFromInt(j)) * 2.0 * std.math.pi / @as(f32, @floatFromInt(slices));
                 const x = ring_radius * @cos(phi);
                 const z = ring_radius * @sin(phi);
 
-                vertexes[i * j + j] = .{ .coords = .{ x, y, z } }; // Adiciona o vértice
+                vertexes[i * j + j] = .{ .coords = .{ x, y, z } };
             }
         }
-
         return vertexes;
     }
 };
 
 pub const Cone = struct {
-    /// Gera os vértices do cone com a resolução especificada.
     pub fn generate(res: usize) []const V3 {
         const pi = std.math.pi;
 
-        const slices = res; // Número de segmentos da base
+        const slices = res;
         const radius: f32 = 1.0;
         const height: f32 = 2.0;
         const vertexes = std.heap.page_allocator.alloc(V3, slices + 1) catch @panic("OOM");
 
-        // Vértice do topo do cone
         vertexes[0] = .{ .coords = .{ 0, 0, height } };
 
-        // Vértices da base
         for (1..slices) |i| {
             const theta = @as(f32, @floatFromInt(i)) * 2.0 * pi / @as(f32, @floatFromInt(slices)); // Ângulo do segmento
             const x = @cos(theta) * radius;
@@ -336,7 +329,6 @@ pub const Cone = struct {
 
             vertexes[i] = .{ .coords = .{ x, z, 0 } };
         }
-
         return vertexes;
     }
 };

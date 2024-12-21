@@ -18,8 +18,8 @@
  *
  * @typedef {{
  *    ptr: number,
- *    angles_fn_ptr: number,
- *    get_ax_fn_ptr: number,
+ *    set_angles_fn_ptr: number,
+ *    get_pitch_fn_ptr: number,
  *    zoom_fn_ptr: number,
  *    insert_fn_ptr: number,
  *    clear_fn_ptr: number,
@@ -56,14 +56,14 @@ let next_buffer = 0;
 
 const interval = 30,
   frames = 25,
-  fps = 60;
+  fps = 100;
 let is_pressed = false;
 
 /** @type { Scene } */
 const scene = {
   ptr: 0,
-  angles_fn_ptr: 1,
-  get_ax_fn_ptr: 2,
+  set_angles_fn_ptr: 1,
+  get_pitch_fn_ptr: 2,
   zoom_fn_ptr: 3,
   insert_fn_ptr: 4,
   clear_fn_ptr: 5,
@@ -105,6 +105,15 @@ class SceneHandler {
     this.rotation_interval = null;
   }
 
+  setAngles(p_angle, y_angle) {
+    this.wasm_instance.exports.setAngles(
+      this.scene.ptr,
+      this.scene.set_angles_fn_ptr,
+      parseFloat(p_angle) || 0.7,
+      parseFloat(y_angle) || 0.7
+    );
+  }
+
   addVector(x, y, z) {
     const [xf, yf, zf] = [parseFloat(x), parseFloat(y), parseFloat(z)];
     if (![xf, yf, zf].some(isNaN)) {
@@ -126,16 +135,12 @@ class SceneHandler {
     this.vectors = [];
   }
 
-  setGridRes(res) {
-    res = parseInt(res);
-    if (!isNaN(res)) {
-      console.log(res);
-      this.wasm_instance.exports.setResolution(
-        this.scene.ptr,
-        this.scene.set_res_fn_ptr,
-        res
-      );
-    }
+  setResolution(res) {
+    console.log("on JS \n res : ", res, "\t ptr : ", this.scene.set_res_fn_ptr);
+    this.wasm_instance.exports.setResolution(
+      this.scene.ptr,
+      parseInt(res) || 11
+    );
   }
 
   insertShape(shape) {
@@ -172,6 +177,7 @@ class SceneHandler {
   insertCone() {
     this.insertShape("Cone");
   }
+
   rotate(angle_x, angle_y, angle_z) {
     const len = this.selected_indexes.length;
     if (len > 0) {
@@ -180,7 +186,7 @@ class SceneHandler {
         y: angle_y / frames,
         z: angle_z / frames,
       };
-      let curr = 0;
+      let count = 0;
       const buffer = new Uint32Array(this.wasm_instance.exports.memory.buffer);
       const offset = buffer.length - len;
 
@@ -199,15 +205,16 @@ class SceneHandler {
       };
 
       const r_interval = setInterval(() => {
-        if (curr <= frames) {
+        if (count <= frames) {
           if (angle_x !== 0) rotateAxis("x", r_step.x);
-        } else if (curr <= frames * 2) {
+        } else if (count <= frames * 2) {
           if (angle_y !== 0) rotateAxis("y", r_step.y);
         } else {
           if (angle_z !== 0) rotateAxis("z", r_step.z);
         }
-        curr++;
+        count++;
       }, interval);
+
       setTimeout(() => clearInterval(r_interval), frames * 3 * interval);
 
       this.selected_indexes.forEach((idx) => {
@@ -242,6 +249,7 @@ class SceneHandler {
 
         this.vectors[idx] = { x, y, z };
       });
+
       this.updateVectorList();
     } else {
       alert("Please select elements for rotation");
@@ -371,15 +379,15 @@ class SceneHandler {
       let angle_z = 0;
 
       this.rotation_interval = setInterval(() => {
-        const angle_x = wasm_instance.exports.getAngleX(
+        const angle_x = wasm_instance.exports.getPitch(
           scene.ptr,
-          scene.get_ax_fn_ptr
+          scene.get_pitch_fn_ptr
         );
         angle_z += 0.03;
         angle_z %= Math.PI * 2;
         wasm_instance.exports.setAngles(
           scene.ptr,
-          scene.angles_fn_ptr,
+          scene.set_angles_fn_ptr,
           angle_x,
           angle_z
         );
@@ -407,7 +415,7 @@ const mouse_listener = (e) => {
   if (is_pressed) {
     wasm_instance.exports.setAngles(
       scene.ptr,
-      scene.angles_fn_ptr,
+      scene.set_angles_fn_ptr,
       ((e.clientY - top) * Math.PI * 2) / height,
       ((e.clientX - left) * Math.PI * 2) / width
     );
@@ -419,7 +427,7 @@ const swipe_listener = (e) => {
   if (is_pressed) {
     wasm_instance.exports.setAngles(
       scene.ptr,
-      scene.angles_fn_ptr,
+      scene.set_angles_fn_ptr,
       ((e.touches[0].clientY - top) * Math.PI * 2) / height,
       ((e.touches[0].clientX - left) * Math.PI * 2) / width
     );
@@ -634,9 +642,10 @@ function createPerspectiveInputs(/** @type {SceneHandler} */ scene_handler) {
       _setPerspectiveUniforms(parseFloat(near), parseFloat(far));
     }
 
-    if (resolution.length > 0) {
-      scene_handler.setGridRes(resolution);
+    if (resolution.length > 0 && !isNaN(resolution)) {
+      scene_handler.setResolution(resolution);
     }
+
     input1.value = input2.value = input3.value = "";
   });
 

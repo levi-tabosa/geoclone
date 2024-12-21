@@ -11,10 +11,10 @@ fn _LOGF(allocator: Allocator, comptime txt: []const u8, args: anytype) void { /
     _log(std.fmt.allocPrint(allocator, txt, args) catch @panic("OOM"));
 }
 
-fn rV3(u: *V3, angle_x: f32, angle_z: f32, zoom: f32) void {
-    u.changed[0] = zoom * (u.coords[0] * @cos(angle_z) + u.coords[1] * @sin(angle_z));
-    u.changed[1] = zoom * ((u.coords[1] * @cos(angle_z) - u.coords[0] * @sin(angle_z)) * @cos(angle_x) + u.coords[2] * @sin(angle_x));
-    u.changed[2] = zoom * (u.coords[2] * @cos(angle_x) - (u.coords[1] * @cos(angle_z) - u.coords[0] * @sin(angle_z)) * @sin(angle_x));
+fn rV3(u: *V3, p_angle: f32, y_angle: f32, zoom: f32) void { // rotates a V3 based on yaw, pitch and zoom
+    u.changed[0] = zoom * (u.coords[0] * @cos(y_angle) + u.coords[1] * @sin(y_angle));
+    u.changed[1] = zoom * ((u.coords[1] * @cos(y_angle) - u.coords[0] * @sin(y_angle)) * @cos(p_angle) + u.coords[2] * @sin(p_angle));
+    u.changed[2] = zoom * (u.coords[2] * @cos(p_angle) - (u.coords[1] * @cos(y_angle) - u.coords[0] * @sin(y_angle)) * @sin(p_angle));
 }
 
 fn vec3(coords: *const [3]f32, angle_x: f32, angle_z: f32, zoom: f32) V3 {
@@ -67,14 +67,14 @@ pub const V3 = struct {
 
 pub const Scene = struct {
     const Self = @This();
-    const res = 11;
+    const res = 31;
 
     allocator: Allocator,
     zoom: f32,
-    angle_x: f32,
-    angle_z: f32,
+    pitch: f32,
+    yaw: f32,
     axis: [6]V3,
-    grid: [res * 4]V3,
+    grid: []V3,
     vectors: ?[]V3 = null,
     shapes: ?[][]V3 = null,
 
@@ -82,7 +82,7 @@ pub const Scene = struct {
         const j = res / 2;
         const upperLimit = if (res & 1 == 1) j + 1 else j;
         var i: i32 = -j;
-        var grid: [res * 4]V3 = undefined;
+        var grid = allocator.alloc(V3, res * 4) catch @panic("OOM");
         const fixed: f32 = j;
 
         while (i < upperLimit) : (i += 1) {
@@ -106,32 +106,32 @@ pub const Scene = struct {
         return .{
             .allocator = allocator,
             .zoom = 0.3,
-            .angle_x = 0.7,
-            .angle_z = 0.7,
+            .pitch = 0.7,
+            .yaw = 0.7,
             .axis = axis,
             .grid = grid,
         };
     }
 
     pub fn updateLines(self: *Self) void {
-        for (&self.grid) |*vec| {
-            rV3(vec, self.angle_x, self.angle_z, self.zoom);
+        for (self.grid) |*vec| {
+            rV3(vec, self.pitch, self.yaw, self.zoom);
         }
 
         for (&self.axis) |*vec| {
-            rV3(vec, self.angle_x, self.angle_z, self.zoom);
+            rV3(vec, self.pitch, self.yaw, self.zoom);
         }
 
         if (self.vectors) |vectors| {
             for (vectors) |*vec| {
-                rV3(vec, self.angle_x, self.angle_z, self.zoom);
+                rV3(vec, self.pitch, self.yaw, self.zoom);
             }
         }
 
         if (self.shapes) |shapes| {
             for (shapes) |shape| {
                 for (shape) |*vec| {
-                    rV3(vec, self.angle_x, self.angle_z, self.zoom);
+                    rV3(vec, self.pitch, self.yaw, self.zoom);
                 }
             }
         }
@@ -145,7 +145,7 @@ pub const Scene = struct {
         for (0..len) |i| {
             new_vector_array[i] = self.vectors.?[i];
         }
-        new_vector_array[len] = vec3(&.{ x, y, z }, self.angle_x, self.angle_z, self.zoom);
+        new_vector_array[len] = vec3(&.{ x, y, z }, self.pitch, self.yaw, self.zoom);
         new_vector_array[len + 1] = .{ .coords = .{ 0.0, 0.0, 0.0 }, .changed = .{ 0.0, 0.0, 0.0 } };
 
         if (self.vectors) |vec| {
@@ -229,33 +229,34 @@ pub const Scene = struct {
         self.updateLines();
     }
 
-    pub fn setAngleX(self: *Self, angle: f32) void {
-        self.angle_x = angle;
-    }
-
-    pub fn setAngleZ(self: *Self, angle: f32) void {
-        self.angle_z = angle;
-    }
-
     pub fn setZoom(self: *Self, zoom: f32) void {
         self.zoom += zoom;
     }
 
-    pub fn setResolution(self: *Self, resolution: usize) void {
-        const j = res / 2;
-        var i: i32 = -j;
-        const fixed: f32 = j;
-        var grid = self.allocator.alloc(V3, resolution * 4) catch @panic("OOM");
-        const upperLimit = if (res & 1 == 1) j + 1 else j;
-        _LOGF(self.allocator, "upper limit : {} \n len : {}", .{ upperLimit, grid.len });
+    pub fn setPitch(self: *Self, angle: f32) void {
+        self.pitch = angle;
+    }
 
-        while (i < grid.len) : (i += 1) {
+    pub fn setYaw(self: *Self, angle: f32) void {
+        self.yaw = angle;
+    }
+
+    pub fn setResolution(self: *Self, resolution: usize) void {
+        _log("a");
+
+        const j: i32 = @intCast(resolution / 2);
+        var i: i32 = -j;
+        const fixed: f32 = @floatFromInt(j);
+        self.grid = self.allocator.alloc(V3, resolution * 4) catch @panic("OOM");
+        const upperLimit = if (resolution & 1 == 1) j + 1 else j;
+
+        while (i < upperLimit) : (i += 1) {
             const idx: f32 = @as(f32, @floatFromInt(i));
             const index = @as(usize, @intCast((i + j) * 4));
-            grid[index] = vec3(&.{ idx, fixed, 0.0 }, 0.0, 0.0, 0.3);
-            grid[index + 1] = vec3(&.{ idx, -fixed, 0.0 }, 0.0, 0.0, 0.3);
-            grid[index + 2] = vec3(&.{ fixed, idx, 0.0 }, 0.0, 0.0, 0.3);
-            grid[index + 3] = vec3(&.{ -fixed, idx, 0.0 }, 0.0, 0.0, 0.3);
+            self.grid[index] = vec3(&.{ idx, fixed, 0.0 }, 0.0, 0.0, 0.3);
+            self.grid[index + 1] = vec3(&.{ idx, -fixed, 0.0 }, 0.0, 0.0, 0.3);
+            self.grid[index + 2] = vec3(&.{ fixed, idx, 0.0 }, 0.0, 0.0, 0.3);
+            self.grid[index + 3] = vec3(&.{ -fixed, idx, 0.0 }, 0.0, 0.0, 0.3);
         }
     }
 };
@@ -342,8 +343,8 @@ pub const Cone = struct {
 
 pub const State = struct {
     ptr: *anyopaque,
-    angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
-    get_ax_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
+    set_angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
+    get_pitch_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
     zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
     insert_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
     clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,

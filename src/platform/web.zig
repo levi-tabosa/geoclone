@@ -38,18 +38,18 @@ export fn draw(
 
 export fn setAngles(
     ptr: *anyopaque,
-    angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
-    angle_x: f32,
-    angle_z: f32,
+    set_angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
+    p_angle: f32,
+    y_angle: f32,
 ) void {
-    angles_fn_ptr(ptr, angle_x, angle_z);
+    set_angles_fn_ptr(ptr, p_angle, y_angle);
 }
 
-export fn getAngleX(
+export fn getPitch(
     ptr: *anyopaque,
-    get_ax_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
+    get_pitch_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
 ) f32 {
-    return get_ax_fn_ptr(ptr);
+    return get_pitch_fn_ptr(ptr);
 }
 
 export fn setZoom(
@@ -82,6 +82,11 @@ export fn setResolution(
     set_res_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
     res: usize,
 ) void {
+    log(std.fmt.allocPrint(
+        std.heap.page_allocator,
+        "setResolution \t IN platform/web.zig(platform)\nres: {} \t ptr : {} \t fn_ptr : {}\n",
+        .{ res, ptr, @intFromPtr(set_res_fn_ptr) },
+    ) catch @panic("OOM"));
     set_res_fn_ptr(ptr, res);
 }
 
@@ -256,7 +261,7 @@ pub const State = struct {
                 @sizeOf(@TypeOf(state)),
                 @alignOf(@TypeOf(state)),
             },
-        ) catch unreachable);
+        ) catch @panic("OOM"));
         js.setScene(state.ptr);
     }
 

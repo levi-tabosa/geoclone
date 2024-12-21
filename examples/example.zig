@@ -34,8 +34,8 @@ pub const State = struct {
     pub fn init(geoc_instance: g.Geoc, scene: *Scene) Self {
         const s: canvas.State = .{
             .ptr = scene,
-            .angles_fn_ptr = anglesFn,
-            .get_ax_fn_ptr = getAngleXFn,
+            .set_angles_fn_ptr = setAnglesFn,
+            .get_pitch_fn_ptr = getPitch,
             .zoom_fn_ptr = zoomFn,
             .insert_fn_ptr = insertFn,
             .clear_fn_ptr = clearFn,
@@ -52,50 +52,25 @@ pub const State = struct {
 
         _LOGF(
             geoc_instance.allocator,
-            \\State values:\n ptr: {} \n angles_fn_ptr: {} \n get_ax_fn_ptr: {} \n zoom_fn_ptr: {} \n insert_fn_ptr: {} \n clear_fn_ptr: {}
-            \\ \n set_res_fn_ptr: {} \n cube_fn_ptr: {} \n pyramid_fn_ptr: {} \n sphere_fn_ptr: {} \n cone_fn_ptr: {} \n rotate_fn_ptr:
-            \\ {} \n scale_fn_ptr: {} \n translate_fn_ptr: {} \n "
-        ,
-            .{
-                @intFromPtr(s.ptr),
-                @intFromPtr(s.angles_fn_ptr),
-                @intFromPtr(s.get_ax_fn_ptr),
-                @intFromPtr(s.zoom_fn_ptr),
-                @intFromPtr(s.insert_fn_ptr),
-                @intFromPtr(s.clear_fn_ptr),
-                @intFromPtr(s.set_res_fn_ptr),
-                @intFromPtr(s.cube_fn_ptr),
-                @intFromPtr(s.pyramid_fn_ptr),
-                @intFromPtr(s.sphere_fn_ptr),
-                @intFromPtr(s.cone_fn_ptr),
-                @intFromPtr(s.rotate_fn_ptr),
-                @intFromPtr(s.scale_fn_ptr),
-                @intFromPtr(s.translate_fn_ptr),
-            },
-        );
-
-        _LOGF(
-            geoc_instance.allocator,
-            "Size of State: \t{}\nAlign of State: \t{}\n",
+            "Size of state: \t{}\nAlign of state: \t{}\n",
             .{
                 @sizeOf(@TypeOf(s)),
                 @alignOf(@TypeOf(s)),
             },
         );
-
         inline for (std.meta.fields(canvas.State)) |field| {
             _LOGF(
                 geoc_instance.allocator,
-                "Offset of {s}: \t{}\nAlignment :\t{}\nType :\t{any}\n",
+                "Offset of {s}:\t{}\nAlignment :\t{}\nType :\t{any}\nValue in state:\t{}\n",
                 .{
                     field.name,
                     @offsetOf(canvas.State, field.name),
                     field.alignment,
                     field.type,
+                    @intFromPtr(@field(s, field.name)),
                 },
             );
         }
-        geoc_instance.setScene(s);
         _LOGF(geoc_instance.allocator, "@intFromPtr(s.ptr)\t{}\n", .{@intFromPtr(s.ptr)});
         // geoc_instance.setSceneCallBack(s);
 
@@ -149,7 +124,7 @@ pub const State = struct {
 
         return .{
             .axis_buffer = g.VertexBuffer(V3).init(&scene.axis),
-            .grid_buffer = g.VertexBuffer(V3).init(&scene.grid),
+            .grid_buffer = g.VertexBuffer(V3).init(scene.grid),
             .axis_program = g.Program.init(geoc_instance, &.{ vertex_shader, a_fragment_shader }),
             .grid_program = g.Program.init(geoc_instance, &.{ vertex_shader, g_fragment_shader }),
             .vectors_program = g.Program.init(geoc_instance, &.{ vertex_shader, v_fragment_shader }),
@@ -171,7 +146,7 @@ pub const State = struct {
     pub fn draw(self: Self) void {
         const axis_buffer = g.VertexBuffer(V3).init(&self.scene.axis);
         defer axis_buffer.deinit();
-        const grid_buffer = g.VertexBuffer(V3).init(&self.scene.grid);
+        const grid_buffer = g.VertexBuffer(V3).init(self.scene.grid);
         defer grid_buffer.deinit();
 
         self.geoc.draw(V3, self.grid_program, grid_buffer, g.DrawMode.Lines);
@@ -216,22 +191,22 @@ fn drawFn(ptr: *anyopaque) callconv(.C) void {
     state.draw();
 }
 
-pub fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
+fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
     state.scene.setResolution(res);
     state.grid_buffer.deinit();
-    state.grid_buffer = g.VertexBuffer(V3).init(&state.scene.grid);
+    state.grid_buffer = g.VertexBuffer(V3).init(state.scene.grid);
 }
 
-fn anglesFn(ptr: *anyopaque, angle_x: f32, angle_z: f32) callconv(.C) void {
+fn setAnglesFn(ptr: *anyopaque, p_angle: f32, y_angle: f32) callconv(.C) void {
     const scene: *Scene = @ptrCast(@alignCast(ptr));
-    scene.setAngleZ(angle_z);
-    scene.setAngleX(angle_x);
+    scene.setPitch(p_angle);
+    scene.setYaw(y_angle);
     scene.updateLines();
 }
 
-fn getAngleXFn(ptr: *anyopaque) callconv(.C) f32 {
-    return @as(*Scene, @ptrCast(@alignCast(ptr))).angle_x;
+fn getPitch(ptr: *anyopaque) callconv(.C) f32 {
+    return @as(*Scene, @ptrCast(@alignCast(ptr))).pitch;
 }
 
 fn zoomFn(ptr: *anyopaque, zoom: f32) callconv(.C) void {

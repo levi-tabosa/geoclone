@@ -50,29 +50,28 @@ pub const State = struct {
         };
         geoc_instance.setScene(s);
 
-        _LOGF(
-            geoc_instance.allocator,
-            "Size of state: \t{}\nAlign of state: \t{}\n",
-            .{
-                @sizeOf(@TypeOf(s)),
-                @alignOf(@TypeOf(s)),
-            },
-        );
-        inline for (std.meta.fields(canvas.State)) |field| {
-            _LOGF(
-                geoc_instance.allocator,
-                "Offset of {s}:\t{}\nAlignment :\t{}\nType :\t{any}\nValue in state:\t{}\n",
-                .{
-                    field.name,
-                    @offsetOf(canvas.State, field.name),
-                    field.alignment,
-                    field.type,
-                    @intFromPtr(@field(s, field.name)),
-                },
-            );
-        }
-        _LOGF(geoc_instance.allocator, "@intFromPtr(s.ptr)\t{}\n", .{@intFromPtr(s.ptr)});
-        // geoc_instance.setSceneCallBack(s);
+        // _LOGF(
+        //     geoc_instance.allocator,
+        //     "Size of state: \t{}\nAlign of state: \t{}\n",
+        //     .{
+        //         @sizeOf(@TypeOf(s)),
+        //         @alignOf(@TypeOf(s)),
+        //     },
+        // );
+        // inline for (std.meta.fields(canvas.State)) |field| {
+        //     _LOGF(
+        //         geoc_instance.allocator,
+        //         "Offset of {s}:\t{}\nAlignment :\t{}\nType :\t{any}\nValue in state:\t{}\n",
+        //         .{
+        //             field.name,
+        //             @offsetOf(canvas.State, field.name),
+        //             field.alignment,
+        //             field.type,
+        //             @intFromPtr(@field(s, field.name)),
+        //         },
+        //     );
+        // }
+        // _LOGF(geoc_instance.allocator, "@intFromPtr(s.ptr)\t{}\n", .{@intFromPtr(s.ptr)});
 
         const vertex_shader_source =
             \\uniform float aspect_ratio;

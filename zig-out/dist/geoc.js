@@ -638,17 +638,16 @@ function createPerspectiveInputs(/** @type {SceneHandler} */ scene_handler) {
   button.id = "perspective-input-button";
   button.textContent = "Set";
   button.addEventListener("click", () => {
-    const near = input1.value;
-    const far = input2.value;
-    const resolution = input3.value;
+    const near = parseFloat(input1.value);
+    const far = parseFloat(input2.value);
+    const resolution = parseFloat(input3.value);
 
-    if (!isNaN(near) && !isNaN(far) && near < far) {
+    if (!isNaN(near) && !isNaN(far)) {
       console.log("on JS \n near : ", near, "\t far : ", far);
-      _setPerspectiveUniforms(parseFloat(near), parseFloat(far));
+      _setPerspectiveUniforms(near, far);
     }
 
-    if (resolution.length > 0 && !isNaN(resolution)) {
-      console.log("on JS \n res : ", resolution, "\t ptr : ", scene_handler.scene.set_res_fn_ptr);
+    if (!isNaN(resolution)) {
       scene_handler.setResolution(resolution);
     }
 
@@ -692,10 +691,10 @@ const env = {
 
     canvas.addEventListener("mousedown", down_listener);
     canvas.addEventListener("mouseup", up_listener);
+    canvas.addEventListener("mousemove", mouse_listener);
     canvas.addEventListener("touchstart", down_listener);
     canvas.addEventListener("touchend", up_listener);
     canvas.addEventListener("touchmove", swipe_listener);
-    canvas.addEventListener("mousemove", mouse_listener);
     canvas.addEventListener("wheel", wheel_listener);
 
     new ResizeObserver(resize_listener).observe(canvas);

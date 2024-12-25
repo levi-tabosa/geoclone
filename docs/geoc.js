@@ -16,7 +16,7 @@
 *    y: number}
 * } Pos
 *
-* @typedef {{
+* @typedef  {{
 *    ptr: number,
 *    set_angles_fn_ptr: number,
 *    get_pitch_fn_ptr: number,
@@ -30,8 +30,7 @@
 *    cone_fn_ptr: number,
 *    rotate_fn_ptr: number,
 *    scale_fn_ptr: number,
-*    translate_fn_ptr: number
-*    }
+*    translate_fn_ptr: number}
 * } Scene
 * */
 
@@ -97,6 +96,7 @@ class SceneHandler {
   */
  constructor(wasm_instance, scene) {
    this.wasm_instance = wasm_instance;
+   this.wasm_memory = wasm_memory;
    this.scene = scene;
    this.vectors = [];
    this.shapes = [];
@@ -139,6 +139,7 @@ class SceneHandler {
    console.log("on JS \n res : ", res, "\t ptr : ", this.scene.set_res_fn_ptr);
    this.wasm_instance.exports.setResolution(
      this.scene.ptr,
+     this.scene.set_res_fn_ptr,
      parseInt(res) || 11
    );
  }
@@ -187,7 +188,7 @@ class SceneHandler {
        z: angle_z / frames,
      };
      let count = 0;
-     const buffer = new Uint32Array(this.wasm_instance.exports.memory.buffer);
+     const buffer = new Uint32Array(this.wasm_memory.buffer);
      const offset = buffer.length - len;
 
      buffer.set(this.selected_indexes, offset);
@@ -207,10 +208,13 @@ class SceneHandler {
      const r_interval = setInterval(() => {
        if (count <= frames) {
          if (angle_x !== 0) rotateAxis("x", r_step.x);
+         else count += frames;
        } else if (count <= frames * 2) {
          if (angle_y !== 0) rotateAxis("y", r_step.y);
+         else count += frames;
        } else {
          if (angle_z !== 0) rotateAxis("z", r_step.z);
+         else count += frames;
        }
        count++;
      }, interval);
@@ -634,15 +638,16 @@ function createPerspectiveInputs(/** @type {SceneHandler} */ scene_handler) {
  button.id = "perspective-input-button";
  button.textContent = "Set";
  button.addEventListener("click", () => {
-   const near = input1.value;
-   const far = input2.value;
-   const resolution = input3.value;
+   const near = parseFloat(input1.value);
+   const far = parseFloat(input2.value);
+   const resolution = parseFloat(input3.value);
 
    if (!isNaN(near) && !isNaN(far)) {
-     _setPerspectiveUniforms(parseFloat(near), parseFloat(far));
+     console.log("on JS \n near : ", near, "\t far : ", far);
+     _setPerspectiveUniforms(near, far);
    }
 
-   if (resolution.length > 0 && !isNaN(resolution)) {
+   if (!isNaN(resolution)) {
      scene_handler.setResolution(resolution);
    }
 
@@ -686,10 +691,10 @@ const env = {
 
    canvas.addEventListener("mousedown", down_listener);
    canvas.addEventListener("mouseup", up_listener);
+   canvas.addEventListener("mousemove", mouse_listener);
    canvas.addEventListener("touchstart", down_listener);
    canvas.addEventListener("touchend", up_listener);
    canvas.addEventListener("touchmove", swipe_listener);
-   canvas.addEventListener("mousemove", mouse_listener);
    canvas.addEventListener("wheel", wheel_listener);
 
    new ResizeObserver(resize_listener).observe(canvas);

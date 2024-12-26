@@ -81,10 +81,17 @@ pub const State = struct {
             \\attribute vec3 changed;
             \\
             \\void main() {
-            \\    float factor = near / (changed.z + far);
-            \\    gl_Position = vec4(changed.xy * vec2(factor, factor * aspect_ratio), 1.0, 1.0);
+            // \\    if(changed.z < -near) {
+            // \\        float factor = near / (changed.z + near);
+            // \\        gl_Position = vec4(changed.xy * vec2(factor, factor * aspect_ratio), 1.0, 0.0);
+            // \\        return;
+            // \\    }
+            // \\    float factor = near / (changed.z + far);
+            // \\    gl_Position = vec4(changed.xy * vec2(factor, factor * aspect_ratio), 1.0, 1.0);
+            \\   gl_Position = vec4(changed.x, changed.y * aspect_ratio, 1.0, 1.0);
             \\}
         ;
+
         const a_fragment_shader_source =
             \\uniform vec4 color;
             \\void main() {
@@ -168,7 +175,7 @@ pub const State = struct {
             for (shapes) |s| {
                 const shapes_buffer = g.VertexBuffer(V3).init(s);
                 defer shapes_buffer.deinit();
-                self.geoc.draw(V3, self.shapes_program, shapes_buffer, g.DrawMode.Line_loop);
+                self.geoc.draw(V3, self.shapes_program, shapes_buffer, g.DrawMode.Triangles);
             }
         }
     }

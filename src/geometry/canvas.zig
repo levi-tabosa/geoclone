@@ -258,6 +258,17 @@ pub const Scene = struct {
             self.grid[index + 2] = vec3(&.{ fixed, idx, 0.0 }, 0.0, 0.0, 0.3);
             self.grid[index + 3] = vec3(&.{ -fixed, idx, 0.0 }, 0.0, 0.0, 0.3);
         }
+
+        self.axis = [_]V3{
+            vec3(&.{ fixed, 0.0, 0.0 }, 0.0, 0.0, 0.3),
+            vec3(&.{ -fixed, 0.0, 0.0 }, 0.0, 0.0, 0.3),
+            vec3(&.{ 0.0, fixed, 0.0 }, 0.0, 0.0, 0.3),
+            vec3(&.{ 0.0, -fixed, 0.0 }, 0.0, 0.0, 0.3),
+            vec3(&.{ 0.0, 0.0, fixed }, 0.0, 0.0, 0.3),
+            vec3(&.{ 0.0, 0.0, -fixed }, 0.0, 0.0, 0.3),
+        };
+
+        self.updateLines();
     }
 };
 

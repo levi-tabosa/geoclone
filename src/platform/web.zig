@@ -82,11 +82,6 @@ export fn setResolution(
     set_res_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
     res: usize,
 ) void {
-    log(std.fmt.allocPrint(
-        std.heap.page_allocator,
-        "setResolution \t IN platform/web.zig(platform)\nres: {} \t ptr : {} \t fn_ptr : {}\n",
-        .{ res, ptr, @intFromPtr(set_res_fn_ptr) },
-    ) catch @panic("OOM"));
     set_res_fn_ptr(ptr, res);
 }
 
@@ -254,14 +249,6 @@ pub const State = struct {
     }
 
     pub fn setScene(_: Self, state: canvas.State) void {
-        log(std.fmt.allocPrint(
-            std.heap.page_allocator,
-            "IN platform/web.zig(platform)\nSize of State: \t{}\nAlign of State: \t{}\n",
-            .{
-                @sizeOf(@TypeOf(state)),
-                @alignOf(@TypeOf(state)),
-            },
-        ) catch @panic("OOM"));
         js.setScene(state.ptr);
     }
 

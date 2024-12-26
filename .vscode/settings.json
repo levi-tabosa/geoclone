@@ -5,5 +5,8 @@
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
   "window.title": "${dirty}${activeEditorShort}${separator}${rootName}${separator}${profileName}${separator}${appName}${separator}[Branch: toggle]",
-  "github.copilot.chat.followUps": "always"
+  "github.copilot.chat.followUps": "always",
+  "cSpell.words": [
+    "mediump"
+  ]
 }

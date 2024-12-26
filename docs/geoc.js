@@ -27,23 +27,12 @@
  *    scale_fn_ptr: number,
  *    translate_fn_ptr: number}
  * } Scene
- * 
+ *
  * @typedef {{
  *    x: number,
  *    y: number,
  *    z: number}
  * } Vector
- *
- * @typedef {{
- *    wasm_instance: WebAssembly.Instance,
- *    wasm_memory: WebAssembly.Memory,
- *    scene: Scene,
- *    vectors: Array<{ Vector}>,
- *    shapes: Array<string>,
- *    selected_indexes: Array<number>,
- *    is_rotating: boolean,
- *    rotation_interval: number | null}
- * } SceneHandler
  * */
 
 /** Context and Globals **/
@@ -68,7 +57,25 @@ let next_buffer = 0;
 const interval = 30,
   frames = 25,
   fps = 100;
-let is_pressed = false;
+
+/**
+ * @typedef {Object} State
+ * @property {boolean} is_pressed - Indicates if a press action is active.
+ * @property {number} last_x - The last recorded x-coordinate.
+ * @property {number} last_y - The last recorded y-coordinate.
+ * @property {number} initial_pinch_distance - The initial distance between two touch points for pinch gestures.
+ */
+const state = {
+  is_pressed: false,
+  last_x: 0,
+  last_y: 0,
+  initial_pinch_distance: -1,
+};
+
+const CONFIG = {
+  ZOOM_SENSITIVITY: 5e-4,
+  PINCH_ZOOM_SENSITIVITY: 2000,
+};
 
 /** @type { Scene } */
 const scene = {
@@ -100,45 +107,144 @@ function call(ptr, fnPtr) {
   wasm_instance.exports.draw(ptr, fnPtr);
 }
 // Delegate methods matching Zig Scene/Handler methods
-class SceneHandler {
+class SceneController {
   /**
    * Creates an instance of SceneHandler.
-   * @param {Object} wasm_instance - The WebAssembly instance.
-   * @param {Object} scene - The scene object.
+   * @param { WebAssembly.Instance } wasm_instance - The WebAssembly instance.
+   * @param { Scene } scene - The scene object.
    */
   constructor(wasm_instance, scene) {
+    // Instance properties
     this.wasm_instance = wasm_instance;
-    this.wasm_memory = wasm_memory;
     this.scene = scene;
+    this.wasm_memory = wasm_instance.exports.memory;
     this.vectors = [];
     this.shapes = [];
+    this.shapes_map = {
+      Cube: scene.cube_fn_ptr,
+      Pyramid: scene.pyramid_fn_ptr,
+      Sphere: scene.sphere_fn_ptr,
+      Cone: scene.cone_fn_ptr,
+    };
     this.selected_indexes = [];
     this.is_rotating = false;
     this.rotation_interval = null;
+    // Event listeners
+    this.handleMouseUp = this.handleMouseUp.bind(this);
+    this.handleMouseDown = this.handleMouseDown.bind(this);
+    this.handleMouseMove = this.handleMouseMove.bind(this);
+    this.handleTouch = this.handleTouch.bind(this);
+    this.handleWheel = this.handleWheel.bind(this);
+    this.setupEventListeners();
   }
 
-  setAngles(p_angle, y_angle) {
-    this.wasm_instance.exports.setAngles(
-      this.scene.ptr,
-      this.scene.set_angles_fn_ptr,
-      parseFloat(p_angle) || 0.7,
-      parseFloat(y_angle) || 0.7
+  setupEventListeners() {
+    canvas.addEventListener("mouseup", this.handleMouseUp);
+    canvas.addEventListener("mousedown", this.handleMouseDown);
+    canvas.addEventListener("mousemove", this.handleMouseMove);
+    canvas.addEventListener("mouseleave", this.handleMouseUp);
+    canvas.addEventListener("touchstart", this.handleMouseDown);
+    canvas.addEventListener("touchend", this.handleMouseUp, { passive: true });
+    canvas.addEventListener("touchmove", this.handleTouch, { passive: true });
+    canvas.addEventListener("wheel", this.handleWheel);
+  }
+
+  handleMouseUp(/** @type { MouseEvent} */ _e) {
+    state.is_pressed = false;
+  }
+
+  handleMouseDown(/** @type { MouseEvent} */ _e) {
+    state.is_pressed = true;
+  }
+
+  handleMouseMove(/** @type { MouseEvent} */ e) {
+    if (!state.is_pressed) return;
+
+    const { left, top, width, height } = canvas.getBoundingClientRect();
+    this.setAngles(
+      ((e.clientX - left) * Math.PI * 2) / width,
+      ((e.clientY - top) * Math.PI * 2) / height
     );
   }
 
-  addVector(x, y, z) {
-    const [xf, yf, zf] = [parseFloat(x), parseFloat(y), parseFloat(z)];
-    if (![xf, yf, zf].some(isNaN)) {
-      this.wasm_instance.exports.insertVector(
-        this.scene.ptr,
-        this.scene.insert_fn_ptr,
-        xf,
-        yf,
-        zf
+  handleTouchStart(/** @type { TouchEvent } */ e) {
+    if (e.touches.length === 2) {
+      state.initial_pinch_distance = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
       );
-      this.vectors.push({ x: xf, y: yf, z: zf });
-      this.addVectorToList(xf.toFixed(2), yf.toFixed(2), zf.toFixed(2));
+    } else if (e.touches.length === 1) {
+      state.is_pressed = true;
     }
+  }
+
+  handleTouchEnd(/** @type { TouchEvent } */ e) {
+    state.is_pressed = false;
+    state.initial_pinch_distance = -1;
+    e.preventDefault();
+  }
+
+  handleTouch(/** @type { TouchEvent } */ e) {
+    if (e.touches.length === 2) {
+      const current_distance = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY
+      );
+
+      if (state.initial_pinch_distance < 0) {
+        const pinch_delta =
+          (current_distance - state.initial_pinch_distance) /
+          CONFIG.PINCH_ZOOM_SENSITIVITY;
+        this.updateZoom(-pinch_delta); // Natural zoom direction is inverted
+        state.initial_pinch_distance = current_distance;
+      }
+    } else if (e.touches.length === 1 && state.is_pressed) {
+      const { left, top, width, height } = canvas.getBoundingClientRect();
+
+      this.setAngles(
+        ((e[0].clientX - left) * Math.PI * 2) / width,
+        ((e[0].clientY - top) * Math.PI * 2) / height
+      );
+    }
+    e.preventDefault();
+  }
+
+  handleWheel(/** @type { WheelEvent }*/ e) {
+    const zoom_delta = e.deltaY / CONFIG.ZOOM_SENSITIVITY;
+    console.log("on JS \n zoom_delta : ", zoom_delta);
+    this.setZoom(zoom_delta);
+  }
+
+  setAngles(/** @type { number } */ y_angle, /** @type { number } */ p_angle) {
+    this.wasm_instance.exports.setAngles(
+      this.scene.ptr,
+      this.scene.set_angles_fn_ptr,
+      p_angle,
+      y_angle
+    );
+  }
+
+  setZoom(/** @type { number } */ delta) {
+    this.wasm_instance.exports.setZoom(
+      this.scene.ptr,
+      this.scene.zoom_fn_ptr,
+      delta
+    );
+  }
+
+  insertVector(x, y, z) {
+    const [xf, yf, zf] = [parseFloat(x), parseFloat(y), parseFloat(z)];
+    if ([xf, yf, zf].some(isNaN)) return;
+
+    this.wasm_instance.exports.insertVector(
+      this.scene.ptr,
+      this.scene.insert_fn_ptr,
+      xf,
+      yf,
+      zf
+    );
+    this.vectors.push({ x: xf, y: yf, z: zf });
+    this.addVectorToList(xf.toFixed(2), yf.toFixed(2), zf.toFixed(2));
   }
 
   clear() {
@@ -147,27 +253,20 @@ class SceneHandler {
     this.vectors = [];
   }
 
-  setResolution(res) {
+  setResolution(/** @type { number } */ res) {
     console.log("on JS \n res : ", res, "\t ptr : ", this.scene.set_res_fn_ptr);
     this.wasm_instance.exports.setResolution(
       this.scene.ptr,
       this.scene.set_res_fn_ptr,
-      parseInt(res) || 11
+      res
     );
   }
 
-  insertShape(shape) {
-    const shapeMap = {
-      Cube: this.scene.cube_fn_ptr,
-      Pyramid: this.scene.pyramid_fn_ptr,
-      Sphere: this.scene.sphere_fn_ptr,
-      Cone: this.scene.cone_fn_ptr,
-    };
-
-    if (shapeMap[shape]) {
+  insertShape(/** @type { String } */ shape) {
+    if (this.shapes_map[shape]) {
       this.wasm_instance.exports[`insert${shape}`](
         this.scene.ptr,
-        shapeMap[shape]
+        this.shapes_map[shape]
       );
       this.shapes.push(shape);
     } else {
@@ -193,163 +292,149 @@ class SceneHandler {
 
   rotate(angle_x, angle_y, angle_z) {
     const len = this.selected_indexes.length;
-    if (len > 0) {
-      const r_step = {
-        x: angle_x / frames,
-        y: angle_y / frames,
-        z: angle_z / frames,
-      };
-      let count = 0;
-      const buffer = new Uint32Array(this.wasm_memory.buffer);
-      const offset = buffer.length - len;
+    if (len === 0 || [angle_x, angle_y, angle_z].some(isNaN)) return;
 
-      buffer.set(this.selected_indexes, offset);
+    const r_step = {
+      x: angle_x / frames,
+      y: angle_y / frames,
+      z: angle_z / frames,
+    };
+    let count = 0;
+    const buffer = new Uint32Array(this.wasm_memory.buffer);
+    const offset = buffer.length - len;
 
-      const rotateAxis = (axis, step) => {
-        this.wasm_instance.exports.rotate(
-          this.scene.ptr,
-          this.scene.rotate_fn_ptr,
-          offset * 4,
-          len,
-          axis === "x" ? step : 0,
-          axis === "y" ? step : 0,
-          axis === "z" ? step : 0
-        );
-      };
+    buffer.set(this.selected_indexes, offset);
 
-      const r_interval = setInterval(() => {
-        if (count <= frames) {
-          if (angle_x !== 0) rotateAxis("x", r_step.x);
-          else count += frames;
-        } else if (count <= frames * 2) {
-          if (angle_y !== 0) rotateAxis("y", r_step.y);
-          else count += frames;
-        } else {
-          if (angle_z !== 0) rotateAxis("z", r_step.z);
-          else count += frames;
+    const rotateAxis = (axis, step) => {
+      this.wasm_instance.exports.rotate(
+        this.scene.ptr,
+        this.scene.rotate_fn_ptr,
+        offset * 4,
+        len,
+        axis === "x" ? step : 0,
+        axis === "y" ? step : 0,
+        axis === "z" ? step : 0
+      );
+    };
+
+    const r_interval = setInterval(() => {
+      if (count < frames) {
+        if (!isNaN(parseFloat(angle_x))) rotateAxis("x", r_step.x); // TODO: Make this less verbose
+        else count += frames;
+      } else if (count < frames * 2) {
+        if (!isNaN(parseFloat(angle_y))) rotateAxis("y", r_step.y);
+        else count += frames;
+      } else if (count <= frames * 3) {
+        if (!isNaN(parseFloat(angle_z))) rotateAxis("z", r_step.z);
+        else count += frames;
+      } else clearInterval(r_interval);
+      count++;
+    }, interval);
+
+    this.selected_indexes.forEach((idx) => {
+      let { x, y, z } = this.vectors[idx];
+
+      const rotateVector = (x, y, z, angle, axis) => {
+        switch (axis) {
+          case "x":
+            return {
+              x,
+              y: y * Math.cos(angle) - z * Math.sin(angle),
+              z: y * Math.sin(angle) + z * Math.cos(angle),
+            };
+          case "y":
+            return {
+              x: z * Math.sin(angle) + x * Math.cos(angle),
+              y,
+              z: z * Math.cos(angle) - x * Math.sin(angle),
+            };
+          case "z":
+            return {
+              x: x * Math.cos(angle) - y * Math.sin(angle),
+              y: x * Math.sin(angle) + y * Math.cos(angle),
+              z,
+            };
         }
-        count++;
-      }, interval);
+      };
 
-      setTimeout(() => clearInterval(r_interval), frames * 3 * interval);
+      ({ x, y, z } = rotateVector(x, y, z, angle_z, "z"));
+      ({ x, y, z } = rotateVector(x, y, z, angle_y, "y"));
+      ({ x, y, z } = rotateVector(x, y, z, angle_x, "x"));
 
-      this.selected_indexes.forEach((idx) => {
-        let { x, y, z } = this.vectors[idx];
+      this.vectors[idx] = { x, y, z };
+    });
 
-        const rotateVector = (x, y, z, angle, axis) => {
-          switch (axis) {
-            case "x":
-              return {
-                x,
-                y: y * Math.cos(angle) - z * Math.sin(angle),
-                z: y * Math.sin(angle) + z * Math.cos(angle),
-              };
-            case "y":
-              return {
-                x: z * Math.sin(angle) + x * Math.cos(angle),
-                y,
-                z: z * Math.cos(angle) - x * Math.sin(angle),
-              };
-            case "z":
-              return {
-                x: x * Math.cos(angle) - y * Math.sin(angle),
-                y: x * Math.sin(angle) + y * Math.cos(angle),
-                z,
-              };
-          }
-        };
-
-        ({ x, y, z } = rotateVector(x, y, z, angle_z, "z"));
-        ({ x, y, z } = rotateVector(x, y, z, angle_y, "y"));
-        ({ x, y, z } = rotateVector(x, y, z, angle_x, "x"));
-
-        this.vectors[idx] = { x, y, z };
-      });
-
-      this.updateVectorList();
-    } else {
-      alert("Please select elements for rotation");
-    }
+    this.updateList();
   }
 
   scale(factor) {
     const len = this.selected_indexes.length;
-    if (len > 0) {
-      const s_step = Math.pow(factor, 1 / frames);
+    if (len === 0 || isNaN(parseFloat(factor))) return;
+    const s_step = Math.pow(factor, 1 / frames);
 
-      const buffer = new Uint32Array(wasm_memory.buffer);
-      const offset = buffer.length - len;
+    const buffer = new Uint32Array(wasm_memory.buffer);
+    const offset = buffer.length - len;
 
-      buffer.set(this.selected_indexes, offset);
-      const s_interval = setInterval(() => {
-        this.wasm_instance.exports.scale(
-          this.scene.ptr,
-          this.scene.scale_fn_ptr,
-          offset * 4, // u32 4 bytes pointer alignment
-          len,
-          s_step
-        );
-      }, interval);
-      setTimeout(() => clearInterval(s_interval), frames * interval);
+    buffer.set(this.selected_indexes, offset);
+    const s_interval = setInterval(() => {
+      this.wasm_instance.exports.scale(
+        this.scene.ptr,
+        this.scene.scale_fn_ptr,
+        offset * 4, // u32 4 bytes pointer alignment
+        len,
+        s_step
+      );
+    }, interval);
+    setTimeout(() => clearInterval(s_interval), frames * interval);
 
-      this.selected_indexes.forEach((idx) => {
+    this.selected_indexes.forEach((idx) => {
+      let { x, y, z } = this.vectors[idx];
+      x *= factor;
+      y *= factor;
+      z *= factor;
+      this.vectors[idx] = { x, y, z };
+    });
 
-        let { x, y, z } = this.vectors[idx];
-        x *= factor;
-        y *= factor;
-        z *= factor;
-        this.vectors[idx] = { x, y, z };
-      });
-
-      this.updateVectorList();
-    } else {
-      alert("Please select elements for scaling");
-    }
+    this.updateList();
   }
 
-  translate(
-    /** @type { Number } */ dx,
-    /** @type { Number } */ dy,
-    /** @type { Number } */ dz
-  ) {
+  translate(dx, dy, dz) {
     const len = this.selected_indexes.length;
-    if (len > 0) {
-      const t_step = { x: dx / frames, y: dy / frames, z: dz / frames };
-      const buffer = new Uint32Array(wasm_memory.buffer);
-      const offset = buffer.length - len;
+    if (len === 0 || [dx, dy, dz].some(isNaN)) return;
 
-      buffer.set(this.selected_indexes, offset);
-      const t_interval = setInterval(() => {
-        this.wasm_instance.exports.translate(
-          this.scene.ptr,
-          this.scene.translate_fn_ptr,
-          offset * 4,
-          len,
-          t_step.x,
-          t_step.y,
-          t_step.z
-        );
-      }, interval);
-      setTimeout(() => clearInterval(t_interval), frames * interval);
+    const t_step = { x: dx / frames, y: dy / frames, z: dz / frames };
+    const buffer = new Uint32Array(wasm_memory.buffer);
+    const offset = buffer.length - len;
 
-      this.selected_indexes.forEach((idx) => {
-        let { x, y, z } = this.vectors[idx];
-        x += parseFloat(dx) || 0;
-        y += parseFloat(dy) || 0;
-        z += parseFloat(dz) || 0;
+    buffer.set(this.selected_indexes, offset);
+    const t_interval = setInterval(() => {
+      this.wasm_instance.exports.translate(
+        this.scene.ptr,
+        this.scene.translate_fn_ptr,
+        offset * 4,
+        len,
+        t_step.x,
+        t_step.y,
+        t_step.z
+      );
+    }, interval);
+    setTimeout(() => clearInterval(t_interval), frames * interval);
 
-        this.vectors[idx] = { x, y, z };
-      });
-      this.updateVectorList();
-    } else {
-      alert("Please select elements translation");
-    }
+    this.selected_indexes.forEach((idx) => {
+      let { x, y, z } = this.vectors[idx];
+      x += parseFloat(dx) || 0;
+      y += parseFloat(dy) || 0;
+      z += parseFloat(dz) || 0;
+
+      this.vectors[idx] = { x, y, z };
+    });
+    this.updateList();
   }
 
   addVectorToList(
-    /** @type { Number } */ x,
-    /** @type { Number } */ y,
-    /** @type { Number } */ z
+    /** @type { number } */ x,
+    /** @type { number } */ y,
+    /** @type { number } */ z
   ) {
     const list = document.getElementById("vector-list");
     const item = document.createElement("div");
@@ -360,15 +445,14 @@ class SceneHandler {
       if (event.ctrlKey) {
         item.classList.toggle("selected");
       } else {
-        document.querySelectorAll(".vector-item").forEach((item) => {
-          item.classList.remove("selected");
-        });
+        document
+          .querySelectorAll(".vector-item")
+          .forEach((item) => item.classList.remove("selected"));
         item.classList.add("selected");
       }
 
       this.updateSelectedIndexes();
     });
-
     list.appendChild(item);
   }
 
@@ -378,7 +462,7 @@ class SceneHandler {
     ).map((item) => Array.from(item.parentElement.children).indexOf(item));
   }
 
-  updateVectorList() {
+  updateList() {
     const vectorList = document.getElementById("vector-list");
     vectorList.innerHTML = "";
 
@@ -395,11 +479,9 @@ class SceneHandler {
     if (this.is_rotating) {
       clearInterval(this.rotation_interval);
       this.is_rotating = false;
-      return;
-    }
-
-    const selectedVectors = document.querySelectorAll(".vector-item.selected");
-    if (selectedVectors.length === 0) {
+    } else if (
+      document.querySelectorAll(".vector-item.selected").length === 0
+    ) {
       this.is_rotating = true;
       let angle_z = 0;
 
@@ -427,121 +509,58 @@ class SceneHandler {
   }
 }
 
-const up_listener = () => {
-  is_pressed = false;
-};
-
-const down_listener = () => {
-  is_pressed = true;
-};
-
-const mouse_listener = (e) => {
-  const { left, top, width, height } = canvas.getBoundingClientRect();
-  if (is_pressed) {
-    wasm_instance.exports.setAngles(
-      scene.ptr,
-      scene.set_angles_fn_ptr,
-      ((e.clientY - top) * Math.PI * 2) / height,
-      ((e.clientX - left) * Math.PI * 2) / width
-    );
-  }
-};
-
-const swipe_listener = (e) => {
-  const { left, top, width, height } = canvas.getBoundingClientRect();
-  if (is_pressed) {
-    wasm_instance.exports.setAngles(
-      scene.ptr,
-      scene.set_angles_fn_ptr,
-      ((e.touches[0].clientY - top) * Math.PI * 2) / height,
-      ((e.touches[0].clientX - left) * Math.PI * 2) / width
-    );
-  }
-};
-
-const wheel_listener = (e) => {
-  wasm_instance.exports.setZoom(
-    scene.ptr,
-    scene.zoom_fn_ptr,
-    (e.deltaY >> 6) * 0.1
-  );
-};
-
 const resize_listener = (entries) => {
   const { width, height } = entries[0].contentRect;
   canvas.width = width;
   canvas.height = height;
   webgl.viewport(0, 0, width, height);
-
   _setAspectRatioUniform(width / height);
 };
 
 function _setPerspectiveUniforms(near, far) {
   for (let i = 0; i < next_program; i++) {
     const program = programs.get(i);
-    if (program && program.uniforms.has("near")) {
-      const u_near = webgl.getUniformLocation(program.gl, "near");
-      const u_far = webgl.getUniformLocation(program.gl, "far");
-      webgl.useProgram(program.gl);
-      webgl.uniform1f(u_near, near);
-      webgl.uniform1f(u_far, far);
-    }
+    if (!program || !program.uniforms.has("near")) continue;
+    const u_near = webgl.getUniformLocation(program.gl, "near");
+    const u_far = webgl.getUniformLocation(program.gl, "far");
+    webgl.useProgram(program.gl);
+    webgl.uniform1f(u_near, near);
+    webgl.uniform1f(u_far, far);
   }
 }
 
-function _setAspectRatioUniform(aspect_ratio) {
+function _setAspectRatioUniform(/** @type { number} */ aspect_ratio) {
   for (let i = 0; i < next_program; i++) {
     const program = programs.get(i);
-    if (program && program.uniforms.has("near")) {
-      const u_aspect_ratio = webgl.getUniformLocation(
-        program.gl,
-        "aspect_ratio"
-      );
-      webgl.useProgram(program.gl);
-      webgl.uniform1f(u_aspect_ratio, aspect_ratio);
-    }
+
+    if (!program || !program.uniforms.has("near")) continue;
+    const u_aspect_ratio = webgl.getUniformLocation(program.gl, "aspect_ratio");
+    webgl.useProgram(program.gl);
+    webgl.uniform1f(u_aspect_ratio, aspect_ratio);
   }
 }
 
-function createButtonListeners(scene_handler) {
+function createButtonListeners(/** @type { SceneController } */ scene_handler) {
   return [
     () => {
-      const x = input1.value;
-      const y = input2.value;
-      const z = input3.value;
-      scene_handler.addVector(x, y, z);
+      scene_handler.insertVector(input1.value, input2.value, input3.value);
       input1.value = input2.value = input3.value = "";
     },
     () => scene_handler.clear(),
     () => {
-      const x = input1.value;
-      const y = input2.value;
-      const z = input3.value;
-      if (x || y || z) {
-        scene_handler.rotate(x, y, z);
-      } else {
-        scene_handler.toggleAutoRotation();
-      }
+      scene_handler.rotate(input1.value, input2.value, input3.value);
     },
     () => scene_handler.insertCube(),
     () => console.log("Toggle"),
     () => {
-      const factor = input1.value;
-      if (factor) {
-        scene_handler.scale(factor);
-      } else {
-        alert("Use the left input box to input factor");
-      }
+      scene_handler.scale(input1.value);
+      input1.value = "";
     },
     () => scene_handler.insertPyramid(),
     () => {},
     () => {
-      const x = input1.value;
-      const y = input2.value;
-      const z = input3.value;
-      if (x || y || z) {
-        scene_handler.translate(x, y, z);
-      }
+      scene_handler.translate(input1.value, input2.value, input3.value);
+      input1.value = input2.value = input3.value = "";
     },
     () => scene_handler.insertSphere(),
     () => {},
@@ -639,7 +658,7 @@ function createColorButtonGrid() {
   return grid;
 }
 
-function createPerspectiveInputs(/** @type {SceneHandler} */ scene_handler) {
+function createPerspectiveInputs(/** @type {SceneController} */ scene_handler) {
   const container = document.createElement("div");
   container.id = "perspective-inputs";
 
@@ -653,7 +672,7 @@ function createPerspectiveInputs(/** @type {SceneHandler} */ scene_handler) {
 
   const input3 = document.createElement("input");
   input3.id = "grid-input";
-  input3.placeholder = "11";
+  input3.placeholder = "grid resolution";
 
   const button = document.createElement("button");
   button.id = "perspective-input-button";
@@ -682,19 +701,19 @@ function createPerspectiveInputs(/** @type {SceneHandler} */ scene_handler) {
 
 const env = {
   init: function () {
-    const scene_handler = new SceneHandler(wasm_instance, scene);
+    canvas = document.createElement("canvas");
+    webgl = canvas.getContext("webgl");
+    if (webgl == null) {
+      throw new Error("No WebGL support on browser");
+    }
+
+    const scene_handler = new SceneController(wasm_instance, scene);
 
     btn_listeners.splice(
       0,
       btn_listeners.length,
       ...createButtonListeners(scene_handler)
     );
-
-    canvas = document.createElement("canvas");
-    webgl = canvas.getContext("webgl");
-    if (webgl == null) {
-      throw new Error("No WebGL support on browser");
-    }
 
     const body = document.body;
     const container = document.createElement("div");
@@ -709,14 +728,6 @@ const env = {
 
     container.id = "container";
     text_fields.id = "text-inputs";
-
-    canvas.addEventListener("mousedown", down_listener);
-    canvas.addEventListener("mouseup", up_listener);
-    canvas.addEventListener("mousemove", mouse_listener);
-    canvas.addEventListener("touchstart", down_listener);
-    canvas.addEventListener("touchend", up_listener);
-    canvas.addEventListener("touchmove", swipe_listener);
-    canvas.addEventListener("wheel", wheel_listener);
 
     new ResizeObserver(resize_listener).observe(canvas);
 

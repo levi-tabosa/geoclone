@@ -292,7 +292,10 @@ class SceneController {
 
   rotate(angle_x, angle_y, angle_z) {
     const len = this.selected_indexes.length;
-    if (len === 0 || [angle_x, angle_y, angle_z].some(isNaN)) return;
+    if (len === 0 || [angle_x, angle_y, angle_z].some(isNaN)) {
+      this.toggleAutoRotation();
+      return;
+    }
 
     const r_step = {
       x: angle_x / frames,
@@ -316,16 +319,20 @@ class SceneController {
         axis === "z" ? step : 0
       );
     };
+    const a_x = parseFloat(angle_x);
+    const a_y = parseFloat(angle_y);
+    const a_z = parseFloat(angle_z);
 
     const r_interval = setInterval(() => {
       if (count < frames) {
-        if (!isNaN(parseFloat(angle_x))) rotateAxis("x", r_step.x); // TODO: Make this less verbose
+        // TODO: Make this less verbose
+        if (!isNaN(a_x)) rotateAxis("x", r_step.x);
         else count += frames;
       } else if (count < frames * 2) {
-        if (!isNaN(parseFloat(angle_y))) rotateAxis("y", r_step.y);
+        if (!isNaN(a_y)) rotateAxis("y", r_step.y);
         else count += frames;
       } else if (count <= frames * 3) {
-        if (!isNaN(parseFloat(angle_z))) rotateAxis("z", r_step.z);
+        if (!isNaN(a_z)) rotateAxis("z", r_step.z);
         else count += frames;
       } else clearInterval(r_interval);
       count++;
@@ -827,13 +834,28 @@ const env = {
       if (uniform) uniforms.set(uniform.name, uniform);
     }
 
+    const tan_half_FOV = Math.tan(0.7 / 2.0);
+    const near = 0.1;
+    const far = 100.0;
+    const projection = new Float32Array(16);
+    projection[0] = 1.0 / tan_half_FOV;
+    projection[5] = 1.0 / tan_half_FOV;
+    projection[10] = -(far + near) / (far - near);
+    projection[11] = -1.0;
+    projection[14] = -(2.0 * far * near) / (far - near);
+
     webgl.useProgram(program);
     webgl.uniform1f(
       webgl.getUniformLocation(program, "aspect_ratio"),
       canvas.width / canvas.height
     );
-    webgl.uniform1f(webgl.getUniformLocation(program, "near"), 10);
-    webgl.uniform1f(webgl.getUniformLocation(program, "far"), 45);
+    webgl.uniformMatrix4fv(
+      webgl.getUniformLocation(program, "projection_matrix"),
+      false,
+      projection
+    );
+    // webgl.uniform1f(webgl.getUniformLocation(program, "near"), 10);
+    // webgl.uniform1f(webgl.getUniformLocation(program, "far"), 45);
 
     const handle = next_program++;
     programs.set(handle, { gl: program, attributes, uniforms });

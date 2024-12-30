@@ -21,11 +21,39 @@ fn vec3(coords: *const [3]f32, angle_x: f32, angle_z: f32, zoom: f32) V3 {
     return .{ .coords = coords.*, .changed = rotXZ(coords.*, angle_x, angle_z, zoom) };
 }
 
-fn rotXZ(u: [3]f32, angle_x: f32, angle_z: f32, zoom: f32) [3]f32 {
+fn rXYZ(u: [3]f32, angle_x: f32, angle_y: f32, angle_z: f32, zoom: f32) [3]f32 {
+    var x = u[0];
+    var y = u[1];
+    var z = u[2];
+
+    // Rotação no eixo Z
+    const tmp_x = x * @cos(angle_z) - y * @sin(angle_z);
+    var tmp_y = x * @sin(angle_z) + y * @cos(angle_z);
+    x = tmp_x;
+    y = tmp_y;
+
+    // Rotação no eixo Y
+    const tmp_z = z * @cos(angle_y) - x * @sin(angle_y);
+    x = z * @sin(angle_y) + x * @cos(angle_y);
+    z = tmp_z;
+
+    // Rotação no eixo X
+    tmp_y = y * @cos(angle_x) - z * @sin(angle_x);
+    z = y * @sin(angle_x) + z * @cos(angle_x);
+    y = tmp_y;
+
     return .{
-        zoom * (u[0] * @cos(angle_z) + u[1] * @sin(angle_z)),
-        zoom * ((u[1] * @cos(angle_z) - u[0] * @sin(angle_z)) * @cos(angle_x) + u[2] * @sin(angle_x)),
-        zoom * (u[2] * @cos(angle_x) - (u[1] * @cos(angle_z) - u[0] * @sin(angle_z)) * @sin(angle_x)),
+        zoom * x,
+        zoom * y,
+        zoom * z,
+    };
+}
+
+fn rotXZ(u: [3]f32, angle_x: f32, angle_y: f32, zoom: f32) [3]f32 {
+    return .{
+        zoom * (u[2] * @sin(angle_y) + u[0] * @cos(angle_y)),
+        zoom * (u[1] * @cos(angle_x)) - (u[2] * @sin(angle_y)),
+        zoom * (u[1] * @sin(angle_x)) + (u[2] * @cos(angle_x)) * @cos(angle_y) - (u[2] * @sin(angle_y) + u[0] * @cos(angle_y)) * @sin(angle_x),
     };
 }
 

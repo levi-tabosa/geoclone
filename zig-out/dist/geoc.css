@@ -191,9 +191,3 @@ body {
  #small-text-inputs button:hover {
    background-color: #45a049;
  }
-
- #grid-input {
-   padding: 3px;
-   width: 100px;
-   margin-top: 5px;
- }

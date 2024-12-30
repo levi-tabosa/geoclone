@@ -58,13 +58,6 @@ const interval = 30,
   frames = 25,
   fps = 100;
 
-/**
- * @typedef {Object} State
- * @property {boolean} is_pressed - Indicates if a press action is active.
- * @property {number} last_x - The last recorded x-coordinate.
- * @property {number} last_y - The last recorded y-coordinate.
- * @property {number} initial_pinch_distance - The initial distance between two touch points for pinch gestures.
- */
 const state = {
   is_pressed: false,
   last_x: 0,
@@ -292,7 +285,10 @@ class SceneController {
 
   rotate(angle_x, angle_y, angle_z) {
     const len = this.selected_indexes.length;
-    if (len === 0 || [angle_x, angle_y, angle_z].some(isNaN)) return;
+    if (len === 0 || [angle_x, angle_y, angle_z].some(isNaN)) {
+      this.toggleAutoRotation();
+      return;
+    }
 
     const r_step = {
       x: angle_x / frames,
@@ -316,16 +312,21 @@ class SceneController {
         axis === "z" ? step : 0
       );
     };
+    const a_x = parseFloat(angle_x);
+    const a_y = parseFloat(angle_y);
+    const a_z = parseFloat(angle_z);
+    const flags = 0 | (a_x ? 1 : 0) | (a_y ? 2 : 0) | (a_z ? 4 : 0);
 
     const r_interval = setInterval(() => {
       if (count < frames) {
-        if (!isNaN(parseFloat(angle_x))) rotateAxis("x", r_step.x);
+        // TODO: Make this less verbose
+        if (flags & (1 == 1)) rotateAxis("x", r_step.x);
         else count += frames;
       } else if (count < frames * 2) {
-        if (!isNaN(parseFloat(angle_y))) rotateAxis("y", r_step.y);
+        if (flags & (2 == 2)) rotateAxis("y", r_step.y);
         else count += frames;
-      } else if (count <= frames * 3) {
-        if (!isNaN(parseFloat(angle_z))) rotateAxis("z", r_step.z);
+      } else if (count < frames * 3) {
+        if (flags & (4 == 4)) rotateAxis("z", r_step.z);
         else count += frames;
       } else clearInterval(r_interval);
       count++;
@@ -517,15 +518,25 @@ const resize_listener = (entries) => {
   _setAspectRatioUniform(width / height);
 };
 
-function _setPerspectiveUniforms(near, far) {
+function _setPerspectiveUniforms(fov, near, far) {
   for (let i = 0; i < next_program; i++) {
     const program = programs.get(i);
-    if (!program || !program.uniforms.has("near")) continue;
-    const u_near = webgl.getUniformLocation(program.gl, "near");
-    const u_far = webgl.getUniformLocation(program.gl, "far");
+    if (!program || !program.uniforms.has("projection_matrix")) continue;
+    const tan_half_FOV = Math.tan(fov / 2.0);
+    const projection = new Float32Array(16);
+    projection[0] = ((1.0 / tan_half_FOV) * canvas.width) / canvas.height;
+    projection[5] = 1.0 / tan_half_FOV;
+    projection[10] = -(far + near) / (far - near);
+    projection[11] = -1.0;
+    projection[14] = -(2.0 * far * near) / (far - near);
+    console.log(projection);
+
     webgl.useProgram(program.gl);
-    webgl.uniform1f(u_near, near);
-    webgl.uniform1f(u_far, far);
+    webgl.uniformMatrix4fv(
+      webgl.getUniformLocation(program.gl, "projection_matrix"),
+      false,
+      projection
+    );
   }
 }
 
@@ -538,6 +549,54 @@ function _setAspectRatioUniform(/** @type { number} */ aspect_ratio) {
     webgl.useProgram(program.gl);
     webgl.uniform1f(u_aspect_ratio, aspect_ratio);
   }
+}
+
+function createViewMatrix(cameraPosition, target, up) {
+  const zAxis = normalize(subtract(cameraPosition, target));
+  const xAxis = normalize(cross(up, zAxis));
+  const yAxis = cross(zAxis, xAxis);
+
+  var view = new Float32Array([
+    xAxis[0],
+    yAxis[0],
+    zAxis[0],
+    0.0,
+    xAxis[1],
+    yAxis[1],
+    zAxis[1],
+    0.0,
+    xAxis[2],
+    yAxis[2],
+    zAxis[2],
+    0.0,
+    -dot(xAxis, cameraPosition),
+    -dot(yAxis, cameraPosition),
+    -dot(zAxis, cameraPosition),
+    1.0,
+  ]);
+
+  return view;
+}
+
+function subtract(a, b) {
+  return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+}
+
+function normalize(v) {
+  const length = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+  return [v[0] / length, v[1] / length, v[2] / length];
+}
+
+function cross(a, b) {
+  return [
+    a[1] * b[2] - a[2] * b[1],
+    a[2] * b[0] - a[0] * b[2],
+    a[0] * b[1] - a[1] * b[0],
+  ];
+}
+
+function dot(a, b) {
+  return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
 }
 
 function createButtonListeners(/** @type { SceneController } */ scene_handler) {
@@ -672,29 +731,34 @@ function createPerspectiveInputs(/** @type {SceneController} */ scene_handler) {
 
   const input3 = document.createElement("input");
   input3.id = "grid-input";
-  input3.placeholder = "11";
+  input3.placeholder = "Grid resolution";
+
+  const input4 = document.createElement("input");
+  input4.id = "fov-input";
+  input4.placeholder = "FOV";
 
   const button = document.createElement("button");
   button.id = "perspective-input-button";
   button.textContent = "Set";
+
   button.addEventListener("click", () => {
     const near = parseFloat(input1.value);
     const far = parseFloat(input2.value);
     const resolution = parseFloat(input3.value);
+    const fov = parseFloat(input4.value);
 
-    if (!isNaN(near) && !isNaN(far)) {
-      console.log("on JS \n near : ", near, "\t far : ", far);
-      _setPerspectiveUniforms(near, far);
+    if (!isNaN(near) && !isNaN(far) && !isNaN(fov)) {
+      _setPerspectiveUniforms(fov, near, far);
     }
 
     if (!isNaN(resolution)) {
       scene_handler.setResolution(resolution);
     }
 
-    input1.value = input2.value = input3.value = "";
+    input1.value = input2.value = input3.value = input4.value = "";
   });
 
-  container.append(input1, input2, input3, button);
+  container.append(input1, input2, input3, input4, button);
 
   return container;
 }
@@ -824,16 +888,41 @@ const env = {
     );
     for (let i = 0; i < uniformCount; i++) {
       const uniform = webgl.getActiveUniform(program, i);
+      console.log(uniform ? uniform.name : "No uniform");
       if (uniform) uniforms.set(uniform.name, uniform);
     }
+    const cameraPosition = [2.0, 3.0, 5.0];
+    const target = [0.0, 0.0, 0.0];
+    const up = [0.0, 1.0, 0.0];
 
+    // Crie a matriz de visão
+    const viewMatrix = createViewMatrix(cameraPosition, target, up);
+
+    // Envie para o shader
     webgl.useProgram(program);
-    webgl.uniform1f(
-      webgl.getUniformLocation(program, "aspect_ratio"),
-      canvas.width / canvas.height
+    webgl.uniformMatrix4fv(
+      webgl.getUniformLocation(program, "view_matrix"),
+      false,
+      viewMatrix
     );
-    webgl.uniform1f(webgl.getUniformLocation(program, "near"), 10);
-    webgl.uniform1f(webgl.getUniformLocation(program, "far"), 45);
+
+    const tan_half_FOV = Math.tan(1.4 / 2.0);
+    const near = 0.1;
+    const far = 100.0;
+    var projection = new Float32Array(16);
+    projection[0] = ((1.0 / tan_half_FOV) * canvas.width) / canvas.height;
+    projection[5] = 1.0 / tan_half_FOV;
+    projection[10] = -(far + near) / (far - near);
+    projection[11] = -1.0;
+    projection[14] = -(2.0 * far * near) / (far - near);
+
+    webgl.uniformMatrix4fv(
+      webgl.getUniformLocation(program, "projection_matrix"),
+      false,
+      projection
+    );
+    // webgl.uniform1f(webgl.getUniformLocation(program, "near"), 10);
+    // webgl.uniform1f(webgl.getUniformLocation(program, "far"), 45);
 
     const handle = next_program++;
     programs.set(handle, { gl: program, attributes, uniforms });

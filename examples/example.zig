@@ -22,8 +22,6 @@ pub const State = struct {
 
     axis_buffer: g.VertexBuffer(V3), //TODO look into VAO and VBO
     grid_buffer: g.VertexBuffer(V3),
-    // vectors_buffer: g.VertexBuffer(V3), maybe it is possible to reuse this
-    // shapes_buffer: (...)
     axis_program: g.Program,
     grid_program: g.Program,
     vectors_program: g.Program,
@@ -74,24 +72,15 @@ pub const State = struct {
         // _LOGF(geoc_instance.allocator, "@intFromPtr(s.ptr)\t{}\n", .{@intFromPtr(s.ptr)});
 
         const vertex_shader_source =
-            \\uniform float aspect_ratio;
-            \\uniform float near;
-            \\uniform float far;
+            \\uniform mat4 projection_matrix;
+            \\uniform mat4 view_matrix;
             \\attribute vec3 coords;
             \\attribute vec3 changed;
             \\
             \\void main() {
-            // \\    if(changed.z < -near) {
-            // \\        float factor = near / (changed.z + near);
-            // \\        gl_Position = vec4(changed.xy * vec2(factor, factor * aspect_ratio), 1.0, 0.0);
-            // \\        return;
-            // \\    }
-            // \\    float factor = near / (changed.z + far);
-            // \\    gl_Position = vec4(changed.xy * vec2(factor, factor * aspect_ratio), 1.0, 1.0);
-            \\   gl_Position = vec4(changed.x, changed.y * aspect_ratio, 1.0, 1.0);
+            \\   gl_Position = projection_matrix * view_matrix * vec4(changed, 1.0);
             \\}
         ;
-
         const a_fragment_shader_source =
             \\uniform vec4 color;
             \\void main() {
@@ -175,7 +164,7 @@ pub const State = struct {
             for (shapes) |s| {
                 const shapes_buffer = g.VertexBuffer(V3).init(s);
                 defer shapes_buffer.deinit();
-                self.geoc.draw(V3, self.shapes_program, shapes_buffer, g.DrawMode.Triangles);
+                self.geoc.draw(V3, self.shapes_program, shapes_buffer, g.DrawMode.Line_loop);
             }
         }
     }

@@ -11,14 +11,34 @@ fn _LOGF(allocator: Allocator, comptime txt: []const u8, args: anytype) void { /
     _log(std.fmt.allocPrint(allocator, txt, args) catch @panic("OOM"));
 }
 
-fn rV3(u: *V3, p_angle: f32, y_angle: f32, zoom: f32) void { // rotates a V3 based on yaw, pitch and zoom
-    u.changed[0] = zoom * (u.coords[0] * @cos(y_angle) + u.coords[1] * @sin(y_angle));
-    u.changed[1] = zoom * ((u.coords[1] * @cos(y_angle) - u.coords[0] * @sin(y_angle)) * @cos(p_angle) + u.coords[2] * @sin(p_angle));
-    u.changed[2] = zoom * (u.coords[2] * @cos(p_angle) - (u.coords[1] * @cos(y_angle) - u.coords[0] * @sin(y_angle)) * @sin(p_angle));
+fn rV3(u: *V3, pitch: f32, yaw: f32, zoom: f32) void {
+    // yaw
+    const cos_y = @cos(yaw);
+    const sin_y = @sin(yaw);
+    const x1 = u.coords[0] * cos_y - u.coords[2] * sin_y;
+    const z1 = u.coords[0] * sin_y + u.coords[2] * cos_y;
+
+    // pitch
+    const cos_p = @cos(pitch);
+    const sin_p = @sin(pitch);
+    const y1 = u.coords[1] * cos_p - z1 * sin_p;
+    const z2 = z1 * cos_p + u.coords[1] * sin_p;
+
+    u.changed[0] = zoom * x1;
+    u.changed[1] = zoom * y1;
+    u.changed[2] = zoom * z2;
 }
 
 fn vec3(coords: *const [3]f32, angle_x: f32, angle_z: f32, zoom: f32) V3 {
     return .{ .coords = coords.*, .changed = rotXZ(coords.*, angle_x, angle_z, zoom) };
+}
+
+fn rotXZ(u: [3]f32, angle_x: f32, angle_y: f32, zoom: f32) [3]f32 {
+    return .{
+        zoom * (u[2] * @sin(angle_y) + u[0] * @cos(angle_y)),
+        zoom * (u[1] * @cos(angle_x)) - (u[2] * @sin(angle_y)),
+        zoom * (u[1] * @sin(angle_x)) + (u[2] * @cos(angle_x)) * @cos(angle_y) - (u[2] * @sin(angle_y) + u[0] * @cos(angle_y)) * @sin(angle_x),
+    };
 }
 
 fn rXYZ(u: [3]f32, angle_x: f32, angle_y: f32, angle_z: f32, zoom: f32) [3]f32 {
@@ -46,14 +66,6 @@ fn rXYZ(u: [3]f32, angle_x: f32, angle_y: f32, angle_z: f32, zoom: f32) [3]f32 {
         zoom * x,
         zoom * y,
         zoom * z,
-    };
-}
-
-fn rotXZ(u: [3]f32, angle_x: f32, angle_y: f32, zoom: f32) [3]f32 {
-    return .{
-        zoom * (u[2] * @sin(angle_y) + u[0] * @cos(angle_y)),
-        zoom * (u[1] * @cos(angle_x)) - (u[2] * @sin(angle_y)),
-        zoom * (u[1] * @sin(angle_x)) + (u[2] * @cos(angle_x)) * @cos(angle_y) - (u[2] * @sin(angle_y) + u[0] * @cos(angle_y)) * @sin(angle_x),
     };
 }
 
@@ -198,7 +210,6 @@ pub const Scene = struct {
     pub fn rotate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, x: f32, y: f32, z: f32) void {
         for (0..idxs_len) |i| {
             const idx = idxs_ptr[i] * 2;
-
             rotXYZ(&self.vectors.?[idx], x, y, z);
         }
         self.updateLines();
@@ -257,8 +268,9 @@ pub const Scene = struct {
         self.updateLines();
     }
 
-    pub fn setZoom(self: *Self, zoom: f32) void {
-        self.zoom += zoom;
+    pub fn setZoom(self: *Scene, zoom_delta: f32) void {
+        self.zoom = @max(0.1, self.zoom + zoom_delta);
+        self.updateLines();
     }
 
     pub fn setPitch(self: *Self, angle: f32) void {

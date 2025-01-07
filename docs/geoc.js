@@ -15,6 +15,8 @@
 *    ptr: number,
 *    set_angles_fn_ptr: number,
 *    get_pitch_fn_ptr: number,
+*    get_yaw_fn_ptr: number,
+*    get_view_matrix_fn_ptr: number,
 *    zoom_fn_ptr: number,
 *    insert_fn_ptr: number,
 *    clear_fn_ptr: number,
@@ -73,8 +75,8 @@ let scene_config = {
 };
 
 const CONFIG = {
- ZOOM_SENSITIVITY: 0.1,
- PINCH_ZOOM_SENSITIVITY: 2000,
+ ZOOM_SENSITIVITY: 5e-5,
+ PINCH_ZOOM_SENSITIVITY: 2000, //TODO: test with gh pages
 };
 
 /** @type { Scene } */
@@ -82,17 +84,19 @@ const scene = {
  ptr: 0,
  set_angles_fn_ptr: 1,
  get_pitch_fn_ptr: 2,
- zoom_fn_ptr: 3,
- insert_fn_ptr: 4,
- clear_fn_ptr: 5,
- set_res_fn_ptr: 6,
- cube_fn_ptr: 7,
- pyramid_fn_ptr: 8,
- sphere_fn_ptr: 9,
- cone_fn_ptr: 10,
- rotate_fn_ptr: 11,
- scale_fn_ptr: 12,
- translate_fn_ptr: 13,
+ get_yaw_fn_ptr: 3,
+ get_view_matrix_fn_ptr: 4,
+ zoom_fn_ptr: 5,
+ insert_fn_ptr: 6,
+ clear_fn_ptr: 7,
+ set_res_fn_ptr: 8,
+ cube_fn_ptr: 9,
+ pyramid_fn_ptr: 10,
+ sphere_fn_ptr: 11,
+ cone_fn_ptr: 12,
+ rotate_fn_ptr: 13,
+ scale_fn_ptr: 14,
+ translate_fn_ptr: 15,
 };
 
 function getData(c_ptr, len) {
@@ -115,9 +119,9 @@ class SceneController {
   */
  constructor(wasm_instance, scene) {
    // Instance properties
-   this.wasm_instance = wasm_instance;
+   this.wasm_exports = wasm_instance.exports;
    this.scene = scene;
-   this.wasm_memory = wasm_instance.exports.memory;
+   this.wasm_memory = wasm_memory;
    this.vectors = [];
    this.shapes = [];
    this.shapes_map = {
@@ -142,7 +146,7 @@ class SceneController {
    canvas.addEventListener("mouseup", this.handleMouseUp);
    canvas.addEventListener("mousedown", this.handleMouseDown);
    canvas.addEventListener("mousemove", this.handleMouseMove);
-   canvas.addEventListener("mouseleave", this.handleMouseUp);
+   // canvas.addEventListener("mouseleave", this.handleMouseUp);
    canvas.addEventListener("touchstart", this.handleMouseDown);
    canvas.addEventListener("touchend", this.handleMouseUp, { passive: true });
    canvas.addEventListener("touchmove", this.handleTouch, { passive: true });
@@ -214,11 +218,11 @@ class SceneController {
  }
 
  setAngles(/** @type { number } */ y_angle, /** @type { number } */ p_angle) {
-   this.wasm_instance.exports.setAngles(
+   this.wasm_exports.setAngles(
      this.scene.ptr,
      this.scene.set_angles_fn_ptr,
-     y_angle,
-     p_angle
+     p_angle,
+     y_angle
    );
  }
 
@@ -228,18 +232,14 @@ class SceneController {
  }
 
  setZoom(/** @type { number } */ delta) {
-   this.wasm_instance.exports.setZoom(
-     this.scene.ptr,
-     this.scene.zoom_fn_ptr,
-     delta
-   );
+   this.wasm_exports.setZoom(this.scene.ptr, this.scene.zoom_fn_ptr, delta);
  }
 
  insertVector(x, y, z) {
    const [xf, yf, zf] = [parseFloat(x), parseFloat(y), parseFloat(z)];
    if ([xf, yf, zf].some(isNaN)) return;
 
-   this.wasm_instance.exports.insertVector(
+   this.wasm_exports.insertVector(
      this.scene.ptr,
      this.scene.insert_fn_ptr,
      xf,
@@ -251,13 +251,13 @@ class SceneController {
  }
 
  clear() {
-   this.wasm_instance.exports.clear(this.scene.ptr, this.scene.clear_fn_ptr);
+   this.wasm_exports.clear(this.scene.ptr, this.scene.clear_fn_ptr);
    this.clearVectorList();
    this.vectors = [];
  }
 
  setResolution(/** @type { number } */ res) {
-   this.wasm_instance.exports.setResolution(
+   this.wasm_exports.setResolution(
      this.scene.ptr,
      this.scene.set_res_fn_ptr,
      res
@@ -266,10 +266,7 @@ class SceneController {
 
  insertShape(/** @type { String } */ shape) {
    if (!this.shapes_map[shape]) throw new Error("Shape is not");
-   this.wasm_instance.exports[`insert${shape}`](
-     this.scene.ptr,
-     this.shapes_map[shape]
-   );
+   this.wasm_exports[`insert${shape}`](this.scene.ptr, this.shapes_map[shape]);
    this.shapes.push(shape);
  }
 
@@ -303,7 +300,7 @@ class SceneController {
    buffer.set(this.selected_indexes, offset);
 
    const rotateAxis = (axis, step) => {
-     this.wasm_instance.exports.rotate(
+     this.wasm_exports.rotate(
        this.scene.ptr,
        this.scene.rotate_fn_ptr,
        offset * 4,
@@ -325,7 +322,6 @@ class SceneController {
 
    const r_interval = setInterval(() => {
      if (count < frames) {
-       // TODO: Make this less verbose
        if ((flags & 1) == 1) rotateAxis("x", r_step.x);
        else count += frames;
      } else if (count < frames * 2) {
@@ -384,7 +380,7 @@ class SceneController {
 
    buffer.set(this.selected_indexes, offset);
    const s_interval = setInterval(() => {
-     this.wasm_instance.exports.scale(
+     this.wasm_exports.scale(
        this.scene.ptr,
        this.scene.scale_fn_ptr,
        offset * 4, // u32 4 bytes pointer alignment
@@ -415,7 +411,7 @@ class SceneController {
 
    buffer.set(this.selected_indexes, offset);
    const t_interval = setInterval(() => {
-     this.wasm_instance.exports.translate(
+     this.wasm_exports.translate(
        this.scene.ptr,
        this.scene.translate_fn_ptr,
        offset * 4,
@@ -576,9 +572,10 @@ function createProjectionMatrix(fov, aspect_ratio, near, far) {
 }
 
 function createViewMatrix(cameraPosition, target, up) {
- const zAxis = normalize(subtract(cameraPosition, target));
- const xAxis = normalize(cross(up, zAxis));
- const yAxis = cross(zAxis, xAxis);
+ 
+ const zAxis = v3.normalize(v3.subtract(cameraPosition, target));
+ const xAxis = v3.normalize(v3.cross(up, zAxis));
+ const yAxis = v3.cross(zAxis, xAxis);
 
  return new Float32Array([
    xAxis[0],
@@ -593,37 +590,49 @@ function createViewMatrix(cameraPosition, target, up) {
    yAxis[2],
    zAxis[2],
    0.0,
-   -dot(xAxis, cameraPosition),
-   -dot(yAxis, cameraPosition),
-   -dot(zAxis, cameraPosition),
+   -v3.dot(xAxis, cameraPosition),
+   -v3.dot(yAxis, cameraPosition),
+   -v3.dot(zAxis, cameraPosition),
    1.0,
  ]);
 }
+// THIS PROBABLY SHOULD BE ON ZIG SIDE 
+// CONSIDERING THAT THE SET OF CAMERA STRUCTS (WIP) IS PART OF THE WORLD/SCENE
+// function createCameraViewMatrix(cameraPosition, pitch, yaw) { 
+//   const direction = [
+//     Math.cos(yaw) * Math.cos(pitch),
+//     Math.sin(pitch),
+//     Math.sin(yaw) * Math.cos(pitch),
+//   ];
+//   const target = add(cameraPosition, direction);
 
-function subtract(a, b) {
- return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-}
+//   const up = [0.0, 0.0, 1.0];
 
-function normalize(v) {
- const length = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
- return [v[0] / length, v[1] / length, v[2] / length];
-}
+//   return createViewMatrix(cameraPosition, target, up);
+// }
 
-function cross(a, b) {
- return [
-   a[1] * b[2] - a[2] * b[1],
-   a[2] * b[0] - a[0] * b[2],
-   a[0] * b[1] - a[1] * b[0],
- ];
-}
-
-function dot(a, b) {
- return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-}
-
-function add(a, b) {
- return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-}
+const v3 = {
+ add: function (a, b) {
+   return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
+ },
+ subtract: function (a, b) {
+   return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
+ },
+ normalize: function (v) {
+   const length = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
+   return [v[0] / length, v[1] / length, v[2] / length];
+ },
+ cross: function (a, b) {
+   return [
+     a[1] * b[2] - a[2] * b[1],
+     a[2] * b[0] - a[0] * b[2],
+     a[0] * b[1] - a[1] * b[0],
+   ];
+ },
+ dot: function (a, b) {
+   return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
+ },
+};
 
 function createButtonListeners(/** @type { SceneController } */ scene_handler) {
  return [
@@ -922,6 +931,8 @@ const env = {
      if (uniform) uniforms.set(uniform.name, uniform);
    }
 
+   webgl.useProgram(program);
+
    const fov = 1.4;
    const aspect_ratio = canvas.width / canvas.height;
    const near = 0.1;
@@ -929,13 +940,12 @@ const env = {
 
    const projection = createProjectionMatrix(fov, aspect_ratio, near, far);
 
-   const camera = [2.0, 3.0, 5.0];
+   const camera = [0.0, 5.0, 5.0];
    const target = [0.0, 0.0, 0.0];
-   const up = [0.0, 0.0, 1.0];
+   const up = [0.0, 1.0, 0.0];
 
    const view = createViewMatrix(camera, target, up);
 
-   webgl.useProgram(program);
    webgl.uniformMatrix4fv(
      webgl.getUniformLocation(program, "view_matrix"),
      false,

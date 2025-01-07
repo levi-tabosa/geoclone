@@ -35,7 +35,9 @@ pub const State = struct {
             .ptr = scene,
             .set_angles_fn_ptr = setAnglesFn,
             .get_pitch_fn_ptr = getPitch,
-            .zoom_fn_ptr = zoomFn,
+            .get_yaw_fn_ptr = getYaw,
+            .get_view_matrix_fn_ptr = getViewMatrix,
+            .zoom_fn_ptr = setZoomFn,
             .insert_fn_ptr = insertFn,
             .clear_fn_ptr = clearFn,
             .set_res_fn_ptr = setResolutionFn,
@@ -48,6 +50,29 @@ pub const State = struct {
             .translate_fn_ptr = translateFn,
         };
         geoc_instance.setScene(s);
+
+        // _LOGF(
+        //     geoc_instance.allocator,
+        //     "Size of state: \t{}\nAlign of state: \t{}\n",
+        //     .{
+        //         @sizeOf(@TypeOf(s)),
+        //         @alignOf(@TypeOf(s)),
+        //     },
+        // );
+        // inline for (std.meta.fields(canvas.State)) |field| {
+        //     _LOGF(
+        //         geoc_instance.allocator,
+        //         "Offset of {s}:\t{}\nAlignment :\t{}\nType :\t{any}\nValue in state:\t{}\n",
+        //         .{
+        //             field.name,
+        //             @offsetOf(canvas.State, field.name),
+        //             field.alignment,
+        //             field.type,
+        //             @intFromPtr(@field(s, field.name)),
+        //         },
+        //     );
+        // }
+        // _LOGF(geoc_instance.allocator, "@intFromPtr(s.ptr)\t{}\n", .{@intFromPtr(s.ptr)});
 
         const vertex_shader_source =
             \\uniform mat4 projection_matrix;
@@ -173,20 +198,29 @@ fn setAnglesFn(ptr: *anyopaque, p_angle: f32, y_angle: f32) callconv(.C) void {
     scene.setPitch(p_angle);
     scene.setYaw(y_angle);
     scene.updateLines();
+    // CALLED INSTEAD OF updateLines if not on orbit mode??
+    // scene.updateViewMatrix();
 }
 
 fn getPitch(ptr: *anyopaque) callconv(.C) f32 {
     return @as(*Scene, @ptrCast(@alignCast(ptr))).pitch;
 }
 
-fn zoomFn(ptr: *anyopaque, zoom: f32) callconv(.C) void {
+fn getYaw(ptr: *anyopaque) callconv(.C) f32 {
+    return @as(*Scene, @ptrCast(@alignCast(ptr))).yaw;
+}
+
+fn getViewMatrix(ptr: *anyopaque) callconv(.C) [*]f32 {
+    return @as(*Scene, @ptrCast(@alignCast(ptr))).view_matrix.ptr;
+}
+
+fn setZoomFn(ptr: *anyopaque, zoom: f32) callconv(.C) void {
     const scene: *Scene = @ptrCast(@alignCast(ptr));
     scene.setZoom(zoom);
-    scene.updateLines();
 }
 
 fn insertFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
-    Scene.addVector(@ptrCast(@alignCast(ptr)), x, y, z);
+    Scene.insertVector(@ptrCast(@alignCast(ptr)), x, y, z);
 }
 
 fn clearFn(ptr: *anyopaque) callconv(.C) void {

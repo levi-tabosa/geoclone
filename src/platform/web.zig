@@ -52,6 +52,20 @@ export fn getPitch(
     return get_pitch_fn_ptr(ptr);
 }
 
+export fn getYaw(
+    ptr: *anyopaque,
+    get_yaw_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
+) f32 {
+    return get_yaw_fn_ptr(ptr);
+}
+
+export fn getViewMatrix(
+    ptr: *anyopaque,
+    get_view_matrix_fn_ptr: *const fn (*anyopaque) callconv(.C) [*]f32,
+) callconv(.C) [*]f32 {
+    return get_view_matrix_fn_ptr(ptr);
+}
+
 export fn setZoom(
     ptr: *anyopaque,
     zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,

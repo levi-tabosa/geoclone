@@ -16,7 +16,6 @@
  *    set_angles_fn_ptr: number,
  *    get_pitch_fn_ptr: number,
  *    get_yaw_fn_ptr: number,
- *    get_view_matrix_fn_ptr: number,
  *    zoom_fn_ptr: number,
  *    insert_fn_ptr: number,
  *    clear_fn_ptr: number,
@@ -75,7 +74,7 @@ let scene_config = {
 };
 
 const CONFIG = {
-  ZOOM_SENSITIVITY: 5e-5,
+  ZOOM_SENSITIVITY: 0.1,
   PINCH_ZOOM_SENSITIVITY: 2000, //TODO: test with gh pages
 };
 
@@ -85,18 +84,17 @@ const scene = {
   set_angles_fn_ptr: 1,
   get_pitch_fn_ptr: 2,
   get_yaw_fn_ptr: 3,
-  get_view_matrix_fn_ptr: 4,
-  zoom_fn_ptr: 5,
-  insert_fn_ptr: 6,
-  clear_fn_ptr: 7,
-  set_res_fn_ptr: 8,
-  cube_fn_ptr: 9,
-  pyramid_fn_ptr: 10,
-  sphere_fn_ptr: 11,
-  cone_fn_ptr: 12,
-  rotate_fn_ptr: 13,
-  scale_fn_ptr: 14,
-  translate_fn_ptr: 15,
+  zoom_fn_ptr: 4,
+  insert_fn_ptr: 5,
+  clear_fn_ptr: 6,
+  set_res_fn_ptr: 7,
+  cube_fn_ptr: 8,
+  pyramid_fn_ptr: 9,
+  sphere_fn_ptr: 10,
+  cone_fn_ptr: 11,
+  rotate_fn_ptr: 12,
+  scale_fn_ptr: 13,
+  translate_fn_ptr: 14,
 };
 
 function getData(c_ptr, len) {
@@ -143,14 +141,20 @@ class SceneController {
   }
 
   setupEventListeners() {
-    canvas.addEventListener("mouseup", this.handleMouseUp);
-    canvas.addEventListener("mousedown", this.handleMouseDown);
-    canvas.addEventListener("mousemove", this.handleMouseMove);
+    canvas.addEventListener("mouseup", this.handleMouseUp, { passive: true });
+    canvas.addEventListener("mousedown", this.handleMouseDown, {
+      passive: true,
+    });
+    canvas.addEventListener("mousemove", this.handleMouseMove, {
+      passive: true,
+    });
     // canvas.addEventListener("mouseleave", this.handleMouseUp);
-    canvas.addEventListener("touchstart", this.handleMouseDown);
+    canvas.addEventListener("touchstart", this.handleMouseDown, {
+      passive: true,
+    });
     canvas.addEventListener("touchend", this.handleMouseUp, { passive: true });
-    canvas.addEventListener("touchmove", this.handleTouch, { passive: true });
-    canvas.addEventListener("wheel", this.handleWheel);
+    canvas.addEventListener("touchmove", this.handleTouch);
+    canvas.addEventListener("wheel", this.handleWheel, { passive: true });
   }
 
   handleMouseUp(/** @type { MouseEvent} */ _e) {
@@ -164,12 +168,10 @@ class SceneController {
   handleMouseMove(/** @type { MouseEvent} */ e) {
     if (!state.is_pressed) return;
 
-    // TODO: add pitch limit depending on camera mode
-
     const { left, top, width, height } = canvas.getBoundingClientRect();
     this.setAngles(
-      ((e.clientX - left) * Math.PI * 2) / width,
-      ((e.clientY - top) * Math.PI * 2) / height
+      ((e.clientY - top) * Math.PI * 2) / height,
+      ((e.clientX - left) * Math.PI * 2) / width
     );
   }
 
@@ -193,37 +195,43 @@ class SceneController {
   handleTouch(/** @type { TouchEvent } */ e) {
     if (e.touches.length === 2) {
       const current_distance = Math.hypot(
-        e.touches[0].clientX - e.touches[1].clientX,
-        e.touches[0].clientY - e.touches[1].clientY
+        e.touches.item(0).clientX - e.touches.item(1).clientX,
+        e.touches.item(0).clientY - e.touches.item(1).clientY
       );
 
       if (state.initial_pinch_distance < 0) {
         const pinch_delta =
           (current_distance - state.initial_pinch_distance) /
           CONFIG.PINCH_ZOOM_SENSITIVITY;
-        this.updateZoom(-pinch_delta); // Natural zoom direction is inverted
+        this.updateZoom(-pinch_delta);
         state.initial_pinch_distance = current_distance;
       }
     } else if (e.touches.length === 1 && state.is_pressed) {
-      // TODO: add pitch limit depending on camera mode
-
       const { left, top, width, height } = canvas.getBoundingClientRect();
-
       this.setAngles(
-        ((e[0].clientX - left) * Math.PI * 2) / width,
-        ((e[0].clientY - top) * Math.PI * 2) / height
+        ((e.touches.item(0).clientY - top) * Math.PI * 2) / height,
+        ((e.touches.item(0).clientX - left) * Math.PI * 2) / width
       );
     }
     e.preventDefault();
   }
 
-  setAngles(/** @type { number } */ y_angle, /** @type { number } */ p_angle) {
+  setAngles(/** @type { number } */ p_angle, /** @type { number } */ y_angle) {
     this.wasm_exports.setAngles(
       this.scene.ptr,
       this.scene.set_angles_fn_ptr,
       p_angle,
       y_angle
     );
+    // const direction = [
+    //   Math.cos(y_angle) * Math.cos(p_angle),
+    //   Math.sin(p_angle),
+    //   Math.sin(y_angle) * Math.cos(p_angle),
+    // ];
+    // const camera = [0.0, 5.0, 5.0];
+    // const target = v3.add(camera, direction);
+    // const up = [0.0, 1.0, 0.0];
+    // const view = createViewMatrix(camera, target, up);
   }
 
   handleWheel(/** @type { WheelEvent }*/ e) {
@@ -493,14 +501,8 @@ class SceneController {
           scene.ptr,
           scene.get_pitch_fn_ptr
         );
-        y_angle += 0.03;
-        y_angle %= Math.PI * 2;
-        wasm_instance.exports.setAngles(
-          scene.ptr,
-          scene.set_angles_fn_ptr,
-          p_angle,
-          y_angle
-        );
+        y_angle = (y_angle + 0.03) % (Math.PI * 2);
+        this.setAngles(p_angle, y_angle);
       }, interval);
     }
   }
@@ -526,7 +528,6 @@ function _setAspectRatioUniform(/** @type { number} */ aspect_ratio) {
   for (let i = 0; i < next_program; i++) {
     const program = programs.get(i);
 
-    if (!program || !program.uniforms.has("projection_matrix")) continue;
     webgl.useProgram(program.gl);
     webgl.uniformMatrix4fv(
       webgl.getUniformLocation(program.gl, "projection_matrix"),
@@ -548,8 +549,6 @@ function _setPerspectiveUniforms(
 ) {
   for (let i = 0; i < next_program; i++) {
     const program = programs.get(i);
-    if (!program || !program.uniforms.has("projection_matrix")) continue;
-    console.log(fov, near, far);
     webgl.useProgram(program.gl);
     webgl.uniformMatrix4fv(
       webgl.getUniformLocation(program.gl, "projection_matrix"),
@@ -571,65 +570,25 @@ function createProjectionMatrix(fov, aspect_ratio, near, far) {
   return projection;
 }
 
-function createViewMatrix(cameraPosition, target, up) {
-  
-  const zAxis = v3.normalize(v3.subtract(cameraPosition, target));
-  const xAxis = v3.normalize(v3.cross(up, zAxis));
-  const yAxis = v3.cross(zAxis, xAxis);
-
-  return new Float32Array([
-    xAxis[0],
-    yAxis[0],
-    zAxis[0],
-    0.0,
-    xAxis[1],
-    yAxis[1],
-    zAxis[1],
-    0.0,
-    xAxis[2],
-    yAxis[2],
-    zAxis[2],
-    0.0,
-    -v3.dot(xAxis, cameraPosition),
-    -v3.dot(yAxis, cameraPosition),
-    -v3.dot(zAxis, cameraPosition),
-    1.0,
-  ]);
-}
-// THIS PROBABLY SHOULD BE ON ZIG SIDE 
-// CONSIDERING THAT THE SET OF CAMERA STRUCTS (WIP) IS PART OF THE WORLD/SCENE
-// function createCameraViewMatrix(cameraPosition, pitch, yaw) { 
-//   const direction = [
-//     Math.cos(yaw) * Math.cos(pitch),
-//     Math.sin(pitch),
-//     Math.sin(yaw) * Math.cos(pitch),
-//   ];
-//   const target = add(cameraPosition, direction);
-
-//   const up = [0.0, 0.0, 1.0];
-
-//   return createViewMatrix(cameraPosition, target, up);
-// }
-
 const v3 = {
-  add: function (a, b) {
+  add(a, b) {
     return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
   },
-  subtract: function (a, b) {
+  subtract(a, b) {
     return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
   },
-  normalize: function (v) {
+  normalize(v) {
     const length = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
     return [v[0] / length, v[1] / length, v[2] / length];
   },
-  cross: function (a, b) {
+  cross(a, b) {
     return [
       a[1] * b[2] - a[2] * b[1],
       a[2] * b[0] - a[0] * b[2],
       a[0] * b[1] - a[1] * b[0],
     ];
   },
-  dot: function (a, b) {
+  dot(a, b) {
     return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   },
 };
@@ -638,12 +597,12 @@ function createButtonListeners(/** @type { SceneController } */ scene_handler) {
   return [
     () => {
       scene_handler.insertVector(input1.value, input2.value, input3.value);
-      //input1.value = input2.value = input3.value = "";
+      input1.value = input2.value = input3.value = "";
     },
     () => scene_handler.clear(),
     () => {
       scene_handler.rotate(input1.value, input2.value, input3.value);
-      //input1.value = input2.value = input3.value = "";
+      input1.value = input2.value = input3.value = "";
     },
     () => scene_handler.insertCube(),
     () => console.log("Toggle"),
@@ -780,7 +739,7 @@ function createPerspectiveInputs(/** @type {SceneController} */ scene_handler) {
   button.addEventListener("click", () => {
     const near = parseFloat(input1.value) || scene_config.near;
     const far = parseFloat(input2.value) || scene_config.far;
-    const fov = parseFloat(input4.value) || scene_config.fov;
+    const fov = (parseFloat(input4.value) * Math.PI) / 180 || scene_config.fov;
     const resolution = parseFloat(input3.value);
 
     _setPerspectiveUniforms(fov, near, far);
@@ -938,24 +897,10 @@ const env = {
     const near = 0.1;
     const far = 100.0;
 
-    const projection = createProjectionMatrix(fov, aspect_ratio, near, far);
-
-    const camera = [0.0, 5.0, 5.0];
-    const target = [0.0, 0.0, 0.0];
-    const up = [0.0, 1.0, 0.0];
-
-    const view = createViewMatrix(camera, target, up);
-
-    webgl.uniformMatrix4fv(
-      webgl.getUniformLocation(program, "view_matrix"),
-      false,
-      view
-    );
-
     webgl.uniformMatrix4fv(
       webgl.getUniformLocation(program, "projection_matrix"),
       false,
-      projection
+      createProjectionMatrix(fov, aspect_ratio, near, far)
     );
 
     const handle = next_program++;
@@ -1041,6 +986,21 @@ const env = {
     if (gl_mode === undefined) throw new Error("Unsupported draw mode");
 
     webgl.drawArrays(gl_mode, first, count);
+  },
+  uniformMatrix4fv(location_ptr, location_len, transpose, value_ptr) {
+    const location = new TextDecoder().decode(
+      getData(location_ptr, location_len)
+    );
+    const value = new Float32Array(wasm_memory.buffer, value_ptr, 16);
+    for (let i = 0; i < next_program; i++) {
+      const program = programs.get(i);
+      webgl.useProgram(program.gl);
+      webgl.uniformMatrix4fv(
+        webgl.getUniformLocation(program.gl, location),
+        transpose,
+        value
+      );
+    }
   },
 };
 

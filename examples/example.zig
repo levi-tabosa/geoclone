@@ -27,16 +27,16 @@ pub const State = struct {
     grid_program: g.Program,
     vectors_program: g.Program,
     shapes_program: g.Program,
+    cameras_program: g.Program,
     geoc: g.Geoc,
     scene: *Scene,
 
-    pub fn init(geoc_instance: g.Geoc, scene: *Scene) Self {
+    pub fn init(geoc_instance: g.Geoc, scene_ptr: *Scene) Self {
         const s: canvas.State = .{
-            .ptr = scene,
+            .ptr = scene_ptr,
             .set_angles_fn_ptr = setAnglesFn,
             .get_pitch_fn_ptr = getPitch,
             .get_yaw_fn_ptr = getYaw,
-            .get_view_matrix_fn_ptr = getViewMatrix,
             .zoom_fn_ptr = setZoomFn,
             .insert_fn_ptr = insertFn,
             .clear_fn_ptr = clearFn,
@@ -78,10 +78,9 @@ pub const State = struct {
             \\uniform mat4 projection_matrix;
             \\uniform mat4 view_matrix;
             \\attribute vec3 coords;
-            \\attribute vec3 changed;
             \\
             \\void main() {
-            \\   gl_Position = projection_matrix * view_matrix * vec4(changed, 1.0);
+            \\   gl_Position = projection_matrix * view_matrix * vec4(coords, 1.0);
             \\}
         ;
         const a_fragment_shader_source =
@@ -108,6 +107,12 @@ pub const State = struct {
             \\    gl_FragColor = vec4(1.0, 1.0, 0.0, 1.0);
             \\}
         ;
+        const c_fragment_shader_source =
+            \\uniform vec4 color;
+            \\void main() {
+            \\    gl_FragColor = vec4(0.8, 0.0, 1.0, 1.0);
+            \\}
+        ;
         const vertex_shader = g.Shader.init(geoc_instance, g.ShaderType.Vertex, vertex_shader_source);
         defer vertex_shader.deinit();
 
@@ -119,16 +124,21 @@ pub const State = struct {
         defer v_fragment_shader.deinit();
         const s_fragment_shader = g.Shader.init(geoc_instance, g.ShaderType.Fragment, s_fragment_shader_source);
         defer s_fragment_shader.deinit();
+        const c_fragment_shader = g.Shader.init(geoc_instance, g.ShaderType.Fragment, c_fragment_shader_source);
+        defer c_fragment_shader.deinit();
+
+        defer geoc_instance.uniformMatrix4fv("view_matrix", false, &scene_ptr.view_matrix);
 
         return .{
-            .axis_buffer = g.VertexBuffer(V3).init(&scene.axis),
-            .grid_buffer = g.VertexBuffer(V3).init(scene.grid),
+            .axis_buffer = g.VertexBuffer(V3).init(&scene_ptr.axis),
+            .grid_buffer = g.VertexBuffer(V3).init(scene_ptr.grid),
             .axis_program = g.Program.init(geoc_instance, &.{ vertex_shader, a_fragment_shader }),
             .grid_program = g.Program.init(geoc_instance, &.{ vertex_shader, g_fragment_shader }),
             .vectors_program = g.Program.init(geoc_instance, &.{ vertex_shader, v_fragment_shader }),
             .shapes_program = g.Program.init(geoc_instance, &.{ vertex_shader, s_fragment_shader }),
+            .cameras_program = g.Program.init(geoc_instance, &.{ vertex_shader, c_fragment_shader }),
             .geoc = geoc_instance,
-            .scene = scene,
+            .scene = scene_ptr,
         };
     }
 
@@ -137,6 +147,7 @@ pub const State = struct {
         self.grid_program.deinit();
         self.vectors_program.deinit();
         self.shapes_program.deinit();
+        self.cameras_program.deinit();
         self.axis_buffer.deinit();
         self.grid_buffer.deinit();
     }
@@ -150,8 +161,12 @@ pub const State = struct {
         self.geoc.draw(V3, self.grid_program, grid_buffer, g.DrawMode.Lines);
         self.geoc.draw(V3, self.axis_program, axis_buffer, g.DrawMode.Lines);
 
+        // self.geoc.draw(V3, self.grid_program, self.grid_buffer, g.DrawMode.Lines); TODO: make this work??
+        // self.geoc.draw(V3, self.axis_program, self.axis_buffer, g.DrawMode.Lines);
+
         self.drawVectors();
         self.drawShapes();
+        // self.drawCameras();
     }
 
     fn drawVectors(self: Self) void {
@@ -172,6 +187,16 @@ pub const State = struct {
         }
     }
 
+    fn drawCameras(self: Self) void {
+        if (self.scene.cameras) |cameras| {
+            for (cameras) |camera| {
+                const cameras_buffer = g.VertexBuffer(V3).init(camera); //TODO: fix
+                defer cameras_buffer.deinit();
+                self.geoc.draw(V3, self.cameras_program, cameras_buffer, g.DrawMode.Line_loop);
+            }
+        }
+    }
+
     pub fn run(self: Self, state: g.State) void {
         self.geoc.run(state);
     }
@@ -183,23 +208,35 @@ pub const State = struct {
         };
     }
 };
-//TODO: move these ugly fns
+
 fn drawFn(ptr: *anyopaque) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
     state.draw();
 }
 
 fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
-    Scene.setResolution(@ptrCast(@alignCast(ptr)), res);
+    const scene: *Scene = @ptrCast(@alignCast(ptr));
+    scene.setResolution(res);
+    // const state: *State = @fieldParentPtr("scene", @constCast(&scene));
+    // state.axis_buffer.deinit();
+    // state.grid_buffer.deinit();
+    // state.axis_buffer = g.VertexBuffer(V3).init(&scene.axis);
+    // state.grid_buffer = g.VertexBuffer(V3).init(scene.grid);
 }
 
 fn setAnglesFn(ptr: *anyopaque, p_angle: f32, y_angle: f32) callconv(.C) void {
     const scene: *Scene = @ptrCast(@alignCast(ptr));
     scene.setPitch(p_angle);
     scene.setYaw(y_angle);
-    scene.updateLines();
-    // CALLED INSTEAD OF updateLines if not on orbit mode??
-    // scene.updateViewMatrix();
+    scene.updateViewMatrix();
+
+    const state: *State = @fieldParentPtr("scene", @constCast(&scene));
+    state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
+    // g.platform.js.uniformMatrix4fv(sliceFromStringLiteral("view_matrix").ptr, 11, false, &scene.view_matrix);
+}
+
+fn sliceFromStringLiteral(str: []const u8) []const u8 { // :)
+    return str;
 }
 
 fn getPitch(ptr: *anyopaque) callconv(.C) f32 {
@@ -208,10 +245,6 @@ fn getPitch(ptr: *anyopaque) callconv(.C) f32 {
 
 fn getYaw(ptr: *anyopaque) callconv(.C) f32 {
     return @as(*Scene, @ptrCast(@alignCast(ptr))).yaw;
-}
-
-fn getViewMatrix(ptr: *anyopaque) callconv(.C) [*]f32 {
-    return @as(*Scene, @ptrCast(@alignCast(ptr))).view_matrix.ptr;
 }
 
 fn setZoomFn(ptr: *anyopaque, zoom: f32) callconv(.C) void {
@@ -260,6 +293,7 @@ pub fn main() void {
     defer engine.deinit();
 
     var scene = Scene.init(engine.allocator);
+    defer scene.deinit();
 
     var state = State.init(engine, &scene);
     defer state.deinit();

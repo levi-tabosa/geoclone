@@ -25,8 +25,14 @@ const js = struct { //TODO remove all unused fn
         stride: usize,
         offset: usize,
     ) void;
-    extern fn setScene(ptr: *anyopaque) callconv(.C) void;
+    extern fn setScene(ptr: *anyopaque) void;
     extern fn drawArrays(mode: geoclone.DrawMode, first: usize, count: usize) void;
+    extern fn uniformMatrix4fv(
+        location_ptr: [*]const u8,
+        location_len: usize,
+        transpose: bool,
+        value_ptr: [*]const f32,
+    ) void;
 };
 
 export fn draw(
@@ -57,13 +63,6 @@ export fn getYaw(
     get_yaw_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
 ) f32 {
     return get_yaw_fn_ptr(ptr);
-}
-
-export fn getViewMatrix(
-    ptr: *anyopaque,
-    get_view_matrix_fn_ptr: *const fn (*anyopaque) callconv(.C) [*]f32,
-) callconv(.C) [*]f32 {
-    return get_view_matrix_fn_ptr(ptr);
 }
 
 export fn setZoom(
@@ -301,5 +300,15 @@ pub const State = struct {
 
     pub fn drawArrays(_: Self, mode: geoclone.DrawMode, first: usize, count: usize) void {
         js.drawArrays(mode, first, count);
+    }
+
+    pub fn uniformMatrix4fv(
+        _: Self,
+        location_ptr: [*]const u8,
+        location_len: usize,
+        transpose: bool,
+        value_ptr: [*]const f32,
+    ) void {
+        js.uniformMatrix4fv(location_ptr, location_len, transpose, value_ptr);
     }
 };

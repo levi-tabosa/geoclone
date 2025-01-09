@@ -11,16 +11,6 @@ fn _LOGF(allocator: Allocator, comptime txt: []const u8, args: anytype) void { /
     _log(std.fmt.allocPrint(allocator, txt, args) catch @panic("OOM"));
 }
 
-fn rV3(u: *V3, p_angle: f32, y_angle: f32, zoom: f32) void { // rotates a V3 based on yaw, pitch and zoom
-    u.changed[0] = zoom * (u.coords[0] * @cos(y_angle) + u.coords[1] * @sin(y_angle));
-    u.changed[1] = zoom * ((u.coords[1] * @cos(y_angle) - u.coords[0] * @sin(y_angle)) * @cos(p_angle) + u.coords[2] * @sin(p_angle));
-    u.changed[2] = zoom * (u.coords[2] * @cos(p_angle) - (u.coords[1] * @cos(y_angle) - u.coords[0] * @sin(y_angle)) * @sin(p_angle));
-}
-
-fn vec3(coords: *const [3]f32, angle_x: f32, angle_z: f32, zoom: f32) V3 {
-    return .{ .coords = coords.*, .changed = rotXZ(coords.*, angle_x, angle_z, zoom) };
-}
-
 fn rotXZ(u: [3]f32, angle_x: f32, angle_y: f32, zoom: f32) [3]f32 {
     return .{
         zoom * (u[2] * @sin(angle_y) + u[0] * @cos(angle_y)),
@@ -34,18 +24,18 @@ fn rXYZ(u: [3]f32, angle_x: f32, angle_y: f32, angle_z: f32, zoom: f32) [3]f32 {
     var y = u[1];
     var z = u[2];
 
-    // Rotação no eixo Z
+    // Z
     const tmp_x = x * @cos(angle_z) - y * @sin(angle_z);
     var tmp_y = x * @sin(angle_z) + y * @cos(angle_z);
     x = tmp_x;
     y = tmp_y;
 
-    // Rotação no eixo Y
+    // Y
     const tmp_z = z * @cos(angle_y) - x * @sin(angle_y);
     x = z * @sin(angle_y) + x * @cos(angle_y);
     z = tmp_z;
 
-    // Rotação no eixo X
+    // X
     tmp_y = y * @cos(angle_x) - z * @sin(angle_x);
     z = y * @sin(angle_x) + z * @cos(angle_x);
     y = tmp_y;
@@ -90,12 +80,95 @@ fn rotXYZ(
 
 pub const V3 = struct {
     coords: [3]f32,
-    changed: [3]f32 = .{ 0, 0, 0 },
+
+    pub fn new(x: f32, y: f32, z: f32) V3 {
+        return .{ .coords = .{ x, y, z } };
+    }
+
+    pub fn add(a: V3, b: V3) V3 {
+        return .{ .coords = .{
+            a.coords[0] + b.coords[0],
+            a.coords[1] + b.coords[1],
+            a.coords[2] + b.coords[2],
+        } };
+    }
+
+    pub fn subtract(a: V3, b: V3) V3 {
+        return .{ .coords = .{
+            a.coords[0] - b.coords[0],
+            a.coords[1] - b.coords[1],
+            a.coords[2] - b.coords[2],
+        } };
+    }
+
+    pub fn dot(a: V3, b: V3) f32 {
+        return a.coords[0] * b.coords[0] + a.coords[1] * b.coords[1] + a.coords[2] * b.coords[2];
+    }
+
+    pub fn cross(a: V3, b: V3) V3 {
+        return .{ .coords = .{
+            a.coords[1] * b.coords[2] - a.coords[2] * b.coords[1],
+            a.coords[2] * b.coords[0] - a.coords[0] * b.coords[2],
+            a.coords[0] * b.coords[1] - a.coords[1] * b.coords[0],
+        } };
+    }
+
+    pub fn normalize(v: V3) V3 {
+        const length = std.math.sqrt(
+            v.coords[0] * v.coords[0] + v.coords[1] * v.coords[1] + v.coords[2] * v.coords[2],
+        );
+        return .{ .coords = .{
+            v.coords[0] / length,
+            v.coords[1] / length,
+            v.coords[2] / length,
+        } };
+    }
+};
+
+pub const Camera = struct {
+    const Self = @This();
+
+    position: V3,
+    target: V3 = V3{ .coords = .{ 0.0, 0.0, 0.0 } },
+    up: V3 = V3{ .coords = .{ 0.0, 1.0, 0.0 } },
+    radius: ?f32 = null,
+
+    pub fn init(position: V3, radius: ?f32) Self {
+        return .{
+            .position = position,
+            .radius = radius,
+        };
+    }
+
+    pub fn createViewMatrix(self: Self) [16]f32 {
+        const z_axis = V3.normalize(V3.subtract(self.position, self.target));
+        const x_axis = V3.normalize(V3.cross(self.up, z_axis));
+        const y_axis = V3.cross(z_axis, x_axis);
+
+        return .{
+            x_axis.coords[0],
+            y_axis.coords[0],
+            z_axis.coords[0],
+            0.0,
+            x_axis.coords[1],
+            y_axis.coords[1],
+            z_axis.coords[1],
+            0.0,
+            x_axis.coords[2],
+            y_axis.coords[2],
+            z_axis.coords[2],
+            0.0,
+            -V3.dot(x_axis, self.position),
+            -V3.dot(y_axis, self.position),
+            -V3.dot(z_axis, self.position),
+            1.0,
+        };
+    }
 };
 
 pub const Scene = struct {
     const Self = @This();
-    const res = 10;
+    const resolution = 10;
 
     allocator: Allocator,
     zoom: f32,
@@ -105,112 +178,118 @@ pub const Scene = struct {
     grid: []V3,
     vectors: ?[]V3 = null,
     shapes: ?[][]V3 = null,
-    // view_matrix: []f32,
+    camera: Camera,
+    cameras: ?[]Camera = null,
+    view_matrix: [16]f32,
 
     pub fn init(allocator: Allocator) Self {
-        const j = res / 2;
-        const upperLimit = if (res & 1 == 1) j + 1 else j;
+        const pitch = 0.7;
+        const yaw = 0.7;
+        const j = resolution / 2;
+        const upperLimit = if (resolution & 1 == 1) j + 1 else j;
         var i: i32 = -j;
-        var grid = allocator.alloc(V3, res * 4) catch @panic("OOM");
+        var grid = allocator.alloc(V3, resolution * 4) catch @panic("OOM");
         const fixed: f32 = j;
 
         while (i < upperLimit) : (i += 1) {
             const idx: f32 = @as(f32, @floatFromInt(i));
             const index = @as(usize, @intCast((i + j) * 4));
-            grid[index] = vec3(&.{ idx, fixed, 0.0 }, 0.0, 0.0, 1.0);
-            grid[index + 1] = vec3(&.{ idx, -fixed, 0.0 }, 0.0, 0.0, 1.0);
-            grid[index + 2] = vec3(&.{ fixed, idx, 0.0 }, 0.0, 0.0, 1.0);
-            grid[index + 3] = vec3(&.{ -fixed, idx, 0.0 }, 0.0, 0.0, 1.0);
+            grid[index] = V3.new(idx, 0.0, fixed);
+            grid[index + 1] = V3.new(idx, 0.0, -fixed);
+            grid[index + 2] = V3.new(fixed, 0.0, idx);
+            grid[index + 3] = V3.new(-fixed, 0.0, idx);
         }
 
         const axis = [_]V3{
-            vec3(&.{ fixed, 0.0, 0.0 }, 0.0, 0.0, 1.0),
-            vec3(&.{ -fixed, 0.0, 0.0 }, 0.0, 0.0, 1.0),
-            vec3(&.{ 0.0, fixed, 0.0 }, 0.0, 0.0, 1.0),
-            vec3(&.{ 0.0, -fixed, 0.0 }, 0.0, 0.0, 1.0),
-            vec3(&.{ 0.0, 0.0, fixed }, 0.0, 0.0, 1.0),
-            vec3(&.{ 0.0, 0.0, -fixed }, 0.0, 0.0, 1.0),
+            V3.new(fixed, 0.0, 0.0),
+            V3.new(-fixed, 0.0, 0.0),
+            V3.new(0.0, fixed, 0.0),
+            V3.new(0.0, -fixed, 0.0),
+            V3.new(0.0, 0.0, fixed),
+            V3.new(0.0, 0.0, -fixed),
         };
+        const radius = 10.0;
+        const camera = Camera.init(
+            .{ .coords = .{
+                radius * @cos(yaw) * @cos(pitch),
+                radius * @sin(pitch),
+                radius * @sin(yaw) * @cos(pitch),
+            } },
+            radius,
+        );
 
-        // var view_matrix_buffer = allocator.alloc(f32, 16) catch @panic("OOM");
-
-        // const view_matrix = [_]f32{
-        //     1.0, 0.0, 0.0, 0.0,
-        //     0.0, 1.0, 0.0, 0.0,
-        //     0.0, 0.0, 1.0, 0.0,
-        //     0.0, 0.0, 0.0, 1.0,
-        // };
-
-        // for (view_matrix, 0..) |val, idx| {
-        //     view_matrix_buffer[idx] = val;
-        // }
+        // const camera = Camera.init(.{ .coords = .{ 0, 1, 0 } }, null);
 
         return .{
             .allocator = allocator,
-            .zoom = 1,
-            .pitch = 0.0,
-            .yaw = 0.0,
+            .zoom = 1.0, //TODO: fix zoom
+            .pitch = pitch,
+            .yaw = yaw,
             .axis = axis,
             .grid = grid,
-            // .view_matrix = view_matrix_buffer,
+            .camera = camera,
+            .view_matrix = camera.createViewMatrix(),
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.allocator.free(self.grid);
-        // self.allocator.free(self.view_matrix);
-    }
 
-    // pub fn updateViewMatrix(self: *Self) void {
-    //     const cos_y = @cos(self.yaw);
-    //     const sin_y = @sin(self.yaw);
-    //     const cos_p = @cos(self.pitch);
-    //     const sin_p = @sin(self.pitch);
-
-    //     const view_matrix = [_]f32{
-    //         cos_y,         0,      -sin_y,        0,
-    //         sin_y * sin_p, cos_p,  cos_y * sin_p, 0,
-    //         sin_y * cos_p, -sin_p, cos_y * cos_p, 0,
-    //         0,             0,      0,             1,
-    //     };
-    //     const view_matrix = [_]f32{
-    //         cos_y * self.zoom,         0,                  -sin_y * self.zoom,        0,
-    //         sin_y * sin_p * self.zoom, cos_p * self.zoom,  cos_y * sin_p * self.zoom, 0,
-    //         sin_y * cos_p * self.zoom, -sin_p * self.zoom, cos_y * cos_p * self.zoom, 0,
-    //         0,                         0,                  0,                         1,
-    //     };
-
-    //     for (view_matrix, 0..) |val, i| {
-    //         self.view_matrix[i] = val;
-    //     }
-    //     // _LOGF(self.allocator, "on zig:\n{any}", .{self.view_matrix});
-    // }
-
-    // THIS FN ROTATES THE WORLD
-    // SHOULD BE CALLED ONLY IN ORBIT MODE??
-    pub fn updateLines(self: *Self) void {
-        for (self.grid) |*vec| {
-            rV3(vec, self.pitch, self.yaw, self.zoom);
-        }
-
-        for (&self.axis) |*vec| {
-            rV3(vec, self.pitch, self.yaw, self.zoom);
-        }
-
-        if (self.vectors) |vectors| {
-            for (vectors) |*vec| {
-                rV3(vec, self.pitch, self.yaw, self.zoom);
-            }
+        if (self.cameras) |cameras| {
+            self.allocator.free(cameras);
         }
 
         if (self.shapes) |shapes| {
             for (shapes) |shape| {
-                for (shape) |*vec| {
-                    rV3(vec, self.pitch, self.yaw, self.zoom);
-                }
+                self.allocator.free(shape);
             }
+            self.allocator.free(shapes);
         }
     }
+
+    pub fn updateViewMatrix(self: *Self) void {
+        if (self.camera.radius) |r| {
+            self.camera.position = .{
+                .coords = .{
+                    r * @cos(self.yaw) * @cos(self.pitch) * self.zoom,
+                    r * @sin(self.pitch) * self.zoom,
+                    r * @sin(self.yaw) * @cos(self.pitch) * self.zoom,
+                },
+            };
+        } else {
+            self.camera.target = V3.add(self.camera.position, V3{ .coords = .{
+                @cos(self.yaw) * @cos(self.pitch),
+                @sin(self.pitch),
+                @sin(self.yaw) * @cos(self.pitch),
+            } });
+        }
+
+        self.view_matrix = self.camera.createViewMatrix();
+    }
+
+    // pub fn updateLines(self: *Self) void {
+    //     for (self.grid) |*vec| {
+    //         rV3(vec, self.pitch, self.yaw, self.zoom);
+    //     }
+
+    //     for (&self.axis) |*vec| {
+    //         rV3(vec, self.pitch, self.yaw, self.zoom);
+    //     }
+
+    //     if (self.vectors) |vectors| {
+    //         for (vectors) |*vec| {
+    //             rV3(vec, self.pitch, self.yaw, self.zoom);
+    //         }
+    //     }
+
+    //     if (self.shapes) |shapes| {
+    //         for (shapes) |shape| {
+    //             for (shape) |*vec| {
+    //                 rV3(vec, self.pitch, self.yaw, self.zoom);
+    //             }
+    //         }
+    //     }
+    // }
 
     pub fn insertVector(self: *Self, x: f32, y: f32, z: f32) void {
         const len = if (self.vectors) |vectors| vectors.len else 0;
@@ -220,15 +299,14 @@ pub const Scene = struct {
         for (0..len) |i| {
             new_vector_array[i] = self.vectors.?[i];
         }
-        new_vector_array[len] = vec3(&.{ x, y, z }, self.pitch, self.yaw, self.zoom);
-        new_vector_array[len + 1] = .{ .coords = .{ 0.0, 0.0, 0.0 }, .changed = .{ 0.0, 0.0, 0.0 } };
+        new_vector_array[len] = V3.new(x, y, z);
+        new_vector_array[len + 1] = V3.new(0.0, 0.0, 0.0);
 
         if (self.vectors) |vec| {
             self.allocator.free(vec);
         }
 
         self.vectors = new_vector_array;
-        self.updateLines();
     }
 
     pub fn clear(self: *Self) void {
@@ -247,7 +325,6 @@ pub const Scene = struct {
             const idx = idxs_ptr[i] * 2;
             rotXYZ(&self.vectors.?[idx], x, y, z);
         }
-        self.updateLines();
     }
 
     pub fn scale(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, factor: f32) void {
@@ -258,7 +335,6 @@ pub const Scene = struct {
                 value.* *= factor;
             }
         }
-        self.updateLines();
     }
 
     pub fn translate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, dx: f32, dy: f32, dz: f32) void {
@@ -269,7 +345,6 @@ pub const Scene = struct {
             self.vectors.?[idx].coords[1] += dy;
             self.vectors.?[idx].coords[2] += dz;
         }
-        self.updateLines();
     }
 
     pub fn insertCube(self: *Self) void {
@@ -301,12 +376,11 @@ pub const Scene = struct {
         new_shapes[len] = @constCast(shape.getVectors(null)); //TODO: REMOVE THIS CAST
 
         self.shapes = new_shapes;
-        self.updateLines();
     }
 
     pub fn setZoom(self: *Scene, zoom_delta: f32) void {
-        self.zoom = zoom_delta; //TODO: MAYBE INCREMENT INSTEAD ??
-        self.updateLines();
+        self.zoom += zoom_delta; //TODO: MAYBE INCREMENT INSTEAD ??
+        self.updateViewMatrix();
     }
 
     pub fn setPitch(self: *Self, angle: f32) void {
@@ -317,34 +391,32 @@ pub const Scene = struct {
         self.yaw = angle;
     }
 
-    pub fn setResolution(self: *Self, resolution: usize) void {
-        const j: i32 = @intCast(resolution / 2);
-        var i: i32 = -j;
-        const fixed: f32 = @floatFromInt(j);
-
+    pub fn setResolution(self: *Self, res: usize) void {
         self.allocator.free(self.grid);
-        self.grid = self.allocator.alloc(V3, resolution * 4) catch @panic("OOM");
-        const upperLimit = if (resolution & 1 == 1) j + 1 else j;
+
+        const j: i32 = @intCast(res / 2);
+        const upperLimit = if (res & 1 == 1) j + 1 else j;
+        var i: i32 = -j;
+        self.grid = self.allocator.alloc(V3, res * 4) catch @panic("OOM");
+        const fixed: f32 = @floatFromInt(j);
 
         while (i < upperLimit) : (i += 1) {
             const idx: f32 = @as(f32, @floatFromInt(i));
             const index = @as(usize, @intCast((i + j) * 4));
-            self.grid[index] = vec3(&.{ idx, fixed, 0.0 }, 0.0, 0.0, self.zoom);
-            self.grid[index + 1] = vec3(&.{ idx, -fixed, 0.0 }, 0.0, 0.0, self.zoom);
-            self.grid[index + 2] = vec3(&.{ fixed, idx, 0.0 }, 0.0, 0.0, self.zoom);
-            self.grid[index + 3] = vec3(&.{ -fixed, idx, 0.0 }, 0.0, 0.0, self.zoom);
+            self.grid[index] = V3.new(idx, 0.0, fixed);
+            self.grid[index + 1] = V3.new(idx, 0.0, -fixed);
+            self.grid[index + 2] = V3.new(fixed, 0.0, idx);
+            self.grid[index + 3] = V3.new(-fixed, 0.0, idx);
         }
 
         self.axis = [_]V3{
-            vec3(&.{ fixed, 0.0, 0.0 }, 0.0, 0.0, self.zoom),
-            vec3(&.{ -fixed, 0.0, 0.0 }, 0.0, 0.0, self.zoom),
-            vec3(&.{ 0.0, fixed, 0.0 }, 0.0, 0.0, self.zoom),
-            vec3(&.{ 0.0, -fixed, 0.0 }, 0.0, 0.0, self.zoom),
-            vec3(&.{ 0.0, 0.0, fixed }, 0.0, 0.0, self.zoom),
-            vec3(&.{ 0.0, 0.0, -fixed }, 0.0, 0.0, self.zoom),
+            V3.new(fixed, 0.0, 0.0),
+            V3.new(-fixed, 0.0, 0.0),
+            V3.new(0.0, fixed, 0.0),
+            V3.new(0.0, -fixed, 0.0),
+            V3.new(0.0, 0.0, fixed),
+            V3.new(0.0, 0.0, -fixed),
         };
-
-        self.updateLines();
     }
 };
 
@@ -421,12 +493,16 @@ pub const Cone = struct {
     }
 };
 
+// pub const CameraMode = enum(u32) {
+//     Orbit = 0,
+//     Free = 1,
+// };
+
 pub const State = struct {
     ptr: *anyopaque,
     set_angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
     get_pitch_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
     get_yaw_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
-    get_view_matrix_fn_ptr: *const fn (*anyopaque) callconv(.C) [*]f32,
     zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
     insert_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
     clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,

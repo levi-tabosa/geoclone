@@ -162,17 +162,13 @@ pub const Geoc = struct {
     pub fn setScene(self: Self, state: canvas.State) void {
         platform.log(std.fmt.allocPrint(
             self.allocator,
-            "IN root.zig(geoc_instance)\nSize of State: \t{}\nAlign of State: \t{}\n",
+            "canvas.State In SET SCENE root.zig ( geoc )\nSize of State: \t{}\nAlign of State: \t{}\n",
             .{
                 @sizeOf(@TypeOf(state)),
                 @alignOf(@TypeOf(state)),
             },
         ) catch @panic("OOM"));
         self.platform.setScene(state);
-    }
-
-    pub fn setSceneCallBack(self: Self, state: canvas.State) void {
-        self.platform.setSceneCallBack(state);
     }
 
     pub fn currentTime(self: Self) f32 {
@@ -191,5 +187,14 @@ pub const Geoc = struct {
             self.platform.vertexAttributePointer(program.platform, vertex, field, false);
         }
         self.platform.drawArrays(mode, 0, buffer.count);
+    }
+
+    pub fn uniformMatrix4fv(
+        self: Self,
+        location: []const u8,
+        transpose: bool,
+        value_ptr: [*]const f32,
+    ) void {
+        self.platform.uniformMatrix4fv(location.ptr, location.len, transpose, value_ptr);
     }
 };

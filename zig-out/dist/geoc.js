@@ -122,6 +122,7 @@ class SceneController {
     this.wasm_memory = wasm_memory;
     this.vectors = [];
     this.shapes = [];
+    this.cameras = [];
     this.shapes_map = {
       Cube: scene.cube_fn_ptr,
       Pyramid: scene.pyramid_fn_ptr,
@@ -223,15 +224,6 @@ class SceneController {
       p_angle,
       y_angle
     );
-    // const direction = [
-    //   Math.cos(y_angle) * Math.cos(p_angle),
-    //   Math.sin(p_angle),
-    //   Math.sin(y_angle) * Math.cos(p_angle),
-    // ];
-    // const camera = [0.0, 5.0, 5.0];
-    // const target = v3.add(camera, direction);
-    // const up = [0.0, 1.0, 0.0];
-    // const view = createViewMatrix(camera, target, up);
   }
 
   handleWheel(/** @type { WheelEvent }*/ e) {
@@ -255,13 +247,16 @@ class SceneController {
       zf
     );
     this.vectors.push({ x: xf, y: yf, z: zf });
-    this.addVectorToList(xf.toFixed(2), yf.toFixed(2), zf.toFixed(2));
+    this.updateTable();
   }
 
   clear() {
     this.wasm_exports.clear(this.scene.ptr, this.scene.clear_fn_ptr);
-    this.clearVectorList();
+    this.clearTable();
+    this.selected_indexes = [];
     this.vectors = [];
+    this.shapes = [];
+    this.cameras = [];
   }
 
   setResolution(/** @type { number } */ res) {
@@ -276,6 +271,7 @@ class SceneController {
     if (!this.shapes_map[shape]) throw new Error("Shape is not");
     this.wasm_exports[`insert${shape}`](this.scene.ptr, this.shapes_map[shape]);
     this.shapes.push(shape);
+    this.updateTable();
   }
 
   insertCube() {
@@ -292,6 +288,12 @@ class SceneController {
 
   insertCone() {
     this.insertShape("Cone");
+  }
+
+  insertCamera() {
+    const camera = `Camera@${this.cameras.length}`; //TODO: add pos coords
+    this.cameras.push(camera);
+    this.updateTable();
   }
 
   rotate(angle_x, angle_y, angle_z) {
@@ -375,7 +377,7 @@ class SceneController {
       this.vectors[idx] = { x, y, z };
     });
 
-    this.updateList();
+    this.updateTable();
   }
 
   scale(factor) {
@@ -406,7 +408,7 @@ class SceneController {
       this.vectors[idx] = { x, y, z };
     });
 
-    this.updateList();
+    this.updateTable();
   }
 
   translate(dx, dy, dz) {
@@ -439,32 +441,30 @@ class SceneController {
 
       this.vectors[idx] = { x, y, z };
     });
-    this.updateList();
+    this.updateTable();
   }
 
-  addVectorToList(
-    /** @type { number } */ x,
-    /** @type { number } */ y,
-    /** @type { number } */ z
+  addColumnItem(
+    /** @type {HTMLElement} */ column,
+    /** @type {String} */ item_class_name,
+    /** @type {String} */ text
   ) {
-    const list = document.getElementById("vector-list");
     const item = document.createElement("div");
-    item.textContent = `${x}, ${y}, ${z}`;
-    item.className = "vector-item";
+    item.textContent = text;
+    item.className = item_class_name;
 
-    item.addEventListener("click", (event) => {
-      if (event.ctrlKey) {
+    item.addEventListener("click", (e) => {
+      if (e.ctrlKey) {
         item.classList.toggle("selected");
       } else {
-        document
-          .querySelectorAll(".vector-item")
+        column
+          .querySelectorAll(item_class_name)
           .forEach((item) => item.classList.remove("selected"));
         item.classList.add("selected");
       }
-
       this.updateSelectedIndexes();
     });
-    list.appendChild(item);
+    column.appendChild(item);
   }
 
   updateSelectedIndexes() {
@@ -473,16 +473,31 @@ class SceneController {
     ).map((item) => Array.from(item.parentElement.children).indexOf(item));
   }
 
-  updateList() {
-    const vectorList = document.getElementById("vector-list");
-    vectorList.innerHTML = "";
+  updateTable() {
+    const vectors_column = document.getElementById("vectors-column");
+    const shapes_column = document.getElementById("shapes-column");
+    const cameras_column = document.getElementById("cameras-column");
+
+    vectors_column.innerHTML = ""; //TODO: maybe change later
+    shapes_column.innerHTML = "";
+    cameras_column.innerHTML = "";
 
     this.vectors.forEach((vector) => {
-      this.addVectorToList(
-        vector.x.toFixed(2),
-        vector.y.toFixed(2),
-        vector.z.toFixed(2)
+      this.addColumnItem(
+        vectors_column,
+        "vector-item",
+        `${vector.x.toFixed(2)},
+        ${vector.y.toFixed(2)},
+        ${vector.z.toFixed(2)}`
       );
+    });
+
+    this.shapes.forEach((shape) => {
+      this.addColumnItem(shapes_column, "shape-item", shape);
+    });
+
+    this.cameras.forEach((camera) => {
+      this.addColumnItem(cameras_column, "camera-item", camera);
     });
   }
 
@@ -507,10 +522,14 @@ class SceneController {
     }
   }
 
-  clearVectorList() {
-    const list = document.getElementById("vector-list");
-    list.innerHTML = "";
-    this.updateSelectedIndexes();
+  clearTable() {
+    const vectors_column = document.getElementById("vectors-column");
+    const shapes_column = document.getElementById("shapes-column");
+    const cameras_column = document.getElementById("cameras-column");
+
+    vectors_column.innerHTML = "";
+    shapes_column.innerHTML = "";
+    cameras_column.innerHTML = "";
   }
 }
 
@@ -570,29 +589,6 @@ function createProjectionMatrix(fov, aspect_ratio, near, far) {
   return projection;
 }
 
-const v3 = {
-  add(a, b) {
-    return [a[0] + b[0], a[1] + b[1], a[2] + b[2]];
-  },
-  subtract(a, b) {
-    return [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
-  },
-  normalize(v) {
-    const length = Math.sqrt(v[0] * v[0] + v[1] * v[1] + v[2] * v[2]);
-    return [v[0] / length, v[1] / length, v[2] / length];
-  },
-  cross(a, b) {
-    return [
-      a[1] * b[2] - a[2] * b[1],
-      a[2] * b[0] - a[0] * b[2],
-      a[0] * b[1] - a[1] * b[0],
-    ];
-  },
-  dot(a, b) {
-    return a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
-  },
-};
-
 function createButtonListeners(/** @type { SceneController } */ scene_handler) {
   return [
     () => {
@@ -622,7 +618,7 @@ function createButtonListeners(/** @type { SceneController } */ scene_handler) {
     () => scene_handler.insertCone(),
     () => scene_handler.project(),
     () => {},
-    () => {},
+    () => scene_handler.insertCamera(),
     () => scene_handler.reflect(),
     () => {},
   ];
@@ -650,7 +646,7 @@ function createButtonGrid() {
     "Cone",
     "Projection",
     "Text",
-    "Text",
+    "Camera",
     "Reflection",
     "Text",
   ];
@@ -668,48 +664,129 @@ function createButtonGrid() {
   return grid;
 }
 
-function createToggleGridButton() {
+function createToggleButtonGrid() {
   return createButton("toggle-grid-btn", "Btns", () => {
     document.getElementById("button-grid").classList.toggle("hidden");
   });
 }
 
-function createVectorList() {
-  const vectorList = document.createElement("div");
-  vectorList.id = "vector-list";
-  vectorList.className = "floating-list";
-  return vectorList;
-}
+function createFloatingTable() {
+  const table = document.createElement("div");
+  table.id = "floating-table";
 
-function createToggleVectorListButton() {
-  return createButton("toggle-vector-list-btn", "VECTORS", () => {
-    document.getElementById("vector-list").classList.toggle("hidden");
+  const header = document.createElement("div");
+  header.className = "table-header";
+
+  ["Vectors", "Shapes", "Cameras"].forEach((title) => {
+    const column = document.createElement("div");
+    column.className = "header-column";
+    column.textContent = title;
+    header.appendChild(column);
   });
+
+  const content = document.createElement("div");
+  content.className = "table-content";
+
+  const vectorsColumn = document.createElement("div");
+  vectorsColumn.id = "vectors-column";
+  vectorsColumn.className = "table-column";
+
+  const shapesColumn = document.createElement("div");
+  shapesColumn.id = "shapes-column";
+  shapesColumn.className = "table-column";
+
+  const camerasColumn = document.createElement("div");
+  camerasColumn.id = "cameras-column";
+  camerasColumn.className = "table-column";
+
+  content.appendChild(vectorsColumn);
+  content.appendChild(shapesColumn);
+  content.appendChild(camerasColumn);
+
+  table.appendChild(header);
+  table.appendChild(content);
+  return table;
 }
 
-function createButton(id, text, onClick) {
+function createToggleTableButton() {
+  const btn = document.createElement("button");
+  btn.id = "toggle-table-btn";
+  btn.textContent = "▼";
+  btn.addEventListener("click", () => {
+    btn.classList.toggle("expanded");
+    document.getElementById("floating-table").classList.toggle("hidden");
+  });
+  return btn;
+}
+
+function createButton(id, text, on_click) {
   const btn = document.createElement("button");
   btn.id = id;
   btn.textContent = text;
-  btn.addEventListener("click", onClick);
+  btn.addEventListener("click", on_click);
   return btn;
 }
 
 function createColorButtonGrid() {
+  const container = document.createElement("div");
+  container.id = "color-button-container";
+
   const grid = document.createElement("div");
   grid.id = "color-button-grid";
+  container.appendChild(grid);
 
-  const colors = ["black", "gray", "green"];
+  const toggle = document.createElement("button");
+  toggle.id = "toggle-color-grid-btn";
+  toggle.textContent = "▼";
+  container.appendChild(toggle);
 
-  colors.forEach((color) => {
-    const btn = createButton(`color-btn-${color}`, "", () => {
-      document.getElementById("canvas").style.backgroundColor = color;
-    });
-    btn.className = `color-button ${color}`;
+  const colors = [
+    "#d6d6d6",
+    "#1e1e1e",
+    "#b0c4de",
+    "#0a1128",
+    "#2b2b2b",
+    "#143d2e",
+    "#2c1f3c",
+    "linear-gradient(to right, #1e3a8a, #6b21a8)",
+    "linear-gradient(to right, #000000, #434343)",
+    "linear-gradient(to right, #00c6ff, #0072ff)",
+  ];
+
+  colors.forEach((color, index) => {
+    const btn = document.createElement("button");
+    btn.className = "color-button";
+    btn.style.background = color;
+    btn.onclick = () => {
+      canvas.style.background = color;
+    };
+
+    if (index > 1) {
+      btn.style.display = "none";
+    }
+
     grid.appendChild(btn);
   });
 
-  return grid;
+  toggle.addEventListener("click", () => {
+    const is_expanded = grid.style.maxHeight !== "30px";
+
+    if (is_expanded) {
+      grid.style.maxHeight = "30px";
+      Array.from(grid.children).forEach((btn, index) => {
+        if (index > 1) btn.style.display = "none";
+      });
+      toggle.classList.remove("expanded");
+    } else {
+      grid.style.maxHeight = "300px";
+      Array.from(grid.children).forEach((btn) => {
+        btn.style.display = "block";
+      });
+      toggle.classList.add("expanded");
+    }
+  });
+
+  return container;
 }
 
 function createPerspectiveInputs(/** @type {SceneController} */ scene_handler) {
@@ -797,9 +874,9 @@ const env = {
       canvas,
       text_fields,
       createButtonGrid(),
-      createToggleGridButton(),
-      createVectorList(),
-      createToggleVectorListButton(),
+      createToggleButtonGrid(),
+      createFloatingTable(),
+      createToggleTableButton(),
       createColorButtonGrid(),
       createPerspectiveInputs(scene_handler)
     );
@@ -817,9 +894,7 @@ const env = {
     throw new Error("Not an error");
   },
   setScene: function (ptr) {
-    Object.assign(scene, {
-      ptr: ptr,
-    });
+    scene.ptr = ptr;
   },
   _log(ptr, len) {
     console.log(getStr(ptr, len));
@@ -1005,8 +1080,8 @@ const env = {
 };
 
 export async function init(wasm_path) {
-  const response = await fetch(wasm_path);
-  const result = await WebAssembly.instantiateStreaming(response, { env });
+  const promise = fetch(wasm_path);
+  const result = await WebAssembly.instantiateStreaming(promise, { env });
   wasm_instance = result.instance;
   wasm_memory = wasm_instance.exports.memory;
   wasm_instance.exports._start();

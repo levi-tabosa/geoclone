@@ -8,7 +8,7 @@ fn _log(txt: []const u8) void { //TODO: erase
 }
 
 fn _LOGF(allocator: std.mem.Allocator, comptime txt: []const u8, args: anytype) void { //TODO: erase
-    _log(std.fmt.allocPrint(allocator, txt, args) catch @panic("OOM"));
+    _log(std.fmt.allocPrint(allocator, txt, args) catch unreachable);
 }
 
 pub const std_options = .{
@@ -92,7 +92,7 @@ pub const State = struct {
         const g_fragment_shader_source =
             \\uniform vec4 color;
             \\void main() {
-            \\    gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+            \\    gl_FragColor = vec4(0.8, 0.0, 0.3, 1.0);
             \\}
         ;
         const v_fragment_shader_source =
@@ -104,9 +104,10 @@ pub const State = struct {
         const s_fragment_shader_source =
             \\uniform vec4 color;
             \\void main() {
-            \\    gl_FragColor = vec4(1.0, 1.0, 0.0, 1.0);
+            \\    gl_FragColor = vec4(0.627, 0.125, 0.941, 1.0);
             \\}
         ;
+
         const c_fragment_shader_source =
             \\uniform vec4 color;
             \\void main() {

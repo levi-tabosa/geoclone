@@ -8,7 +8,7 @@ fn _log(txt: []const u8) void { //TODO: erase
 }
 
 fn _LOGF(allocator: Allocator, comptime txt: []const u8, args: anytype) void { //TODO: erase
-    _log(std.fmt.allocPrint(allocator, txt, args) catch @panic("OOM"));
+    _log(std.fmt.allocPrint(allocator, txt, args) catch unreachable);
 }
 
 fn rotXZ(u: [3]f32, angle_x: f32, angle_y: f32, zoom: f32) [3]f32 {
@@ -128,40 +128,28 @@ pub const V3 = struct {
 pub const Camera = struct {
     const Self = @This();
 
-    position: V3,
+    pos: V3,
     target: V3 = V3{ .coords = .{ 0.0, 0.0, 0.0 } },
-    up: V3 = V3{ .coords = .{ 0.0, 1.0, 0.0 } },
+    up: V3 = V3{ .coords = .{ 0.0, 0.0, 1.0 } },
     radius: ?f32 = null,
 
     pub fn init(position: V3, radius: ?f32) Self {
         return .{
-            .position = position,
+            .pos = position,
             .radius = radius,
         };
     }
 
     pub fn createViewMatrix(self: Self) [16]f32 {
-        const z_axis = V3.normalize(V3.subtract(self.position, self.target));
+        const z_axis = V3.normalize(V3.subtract(self.pos, self.target));
         const x_axis = V3.normalize(V3.cross(self.up, z_axis));
         const y_axis = V3.cross(z_axis, x_axis);
 
         return .{
-            x_axis.coords[0],
-            y_axis.coords[0],
-            z_axis.coords[0],
-            0.0,
-            x_axis.coords[1],
-            y_axis.coords[1],
-            z_axis.coords[1],
-            0.0,
-            x_axis.coords[2],
-            y_axis.coords[2],
-            z_axis.coords[2],
-            0.0,
-            -V3.dot(x_axis, self.position),
-            -V3.dot(y_axis, self.position),
-            -V3.dot(z_axis, self.position),
-            1.0,
+            x_axis.coords[0],          y_axis.coords[0],          z_axis.coords[0],          0.0,
+            x_axis.coords[1],          y_axis.coords[1],          z_axis.coords[1],          0.0,
+            x_axis.coords[2],          y_axis.coords[2],          z_axis.coords[2],          0.0,
+            -V3.dot(x_axis, self.pos), -V3.dot(y_axis, self.pos), -V3.dot(z_axis, self.pos), 1.0,
         };
     }
 };
@@ -186,18 +174,19 @@ pub const Scene = struct {
         const pitch = 0.7;
         const yaw = 0.7;
         const j = resolution / 2;
-        const upperLimit = if (resolution & 1 == 1) j + 1 else j;
+        const upperLimit = j;
+        // const upperLimit = if (resolution & 1 == 1) j + 1 else j;
         var i: i32 = -j;
-        var grid = allocator.alloc(V3, resolution * 4) catch @panic("OOM");
+        var grid = allocator.alloc(V3, resolution * 4) catch unreachable;
         const fixed: f32 = j;
 
         while (i < upperLimit) : (i += 1) {
             const idx: f32 = @as(f32, @floatFromInt(i));
             const index = @as(usize, @intCast((i + j) * 4));
-            grid[index] = V3.new(idx, 0.0, fixed);
-            grid[index + 1] = V3.new(idx, 0.0, -fixed);
-            grid[index + 2] = V3.new(fixed, 0.0, idx);
-            grid[index + 3] = V3.new(-fixed, 0.0, idx);
+            grid[index] = V3.new(idx, fixed, 0.0);
+            grid[index + 1] = V3.new(idx, -fixed, 0.0);
+            grid[index + 2] = V3.new(fixed, idx, 0.0);
+            grid[index + 3] = V3.new(-fixed, idx, 0.0);
         }
 
         const axis = [_]V3{
@@ -209,16 +198,19 @@ pub const Scene = struct {
             V3.new(0.0, 0.0, -fixed),
         };
         const radius = 10.0;
+
         const camera = Camera.init(
-            .{ .coords = .{
-                radius * @cos(yaw) * @cos(pitch),
-                radius * @sin(pitch),
-                radius * @sin(yaw) * @cos(pitch),
-            } },
+            .{
+                .coords = .{
+                    radius * @cos(yaw) * @cos(pitch),
+                    radius * @sin(yaw) * @cos(pitch),
+                    radius * @sin(pitch),
+                },
+            },
             radius,
         );
 
-        // const camera = Camera.init(.{ .coords = .{ 0, 1, 0 } }, null);
+        // const camera = Camera.init(.{ .coords = .{ 0, 0, 1 } }, null);
 
         return .{
             .allocator = allocator,
@@ -249,15 +241,15 @@ pub const Scene = struct {
 
     pub fn updateViewMatrix(self: *Self) void {
         if (self.camera.radius) |r| {
-            self.camera.position = .{
+            self.camera.pos = .{
                 .coords = .{
-                    r * @cos(self.yaw) * @cos(self.pitch) * self.zoom,
-                    r * @sin(self.pitch) * self.zoom,
-                    r * @sin(self.yaw) * @cos(self.pitch) * self.zoom,
+                    r * @cos(self.yaw) * @cos(self.pitch),
+                    r * @sin(self.yaw) * @cos(self.pitch),
+                    r * @sin(self.pitch),
                 },
             };
         } else {
-            self.camera.target = V3.add(self.camera.position, V3{ .coords = .{
+            self.camera.target = V3.add(self.camera.pos, V3{ .coords = .{
                 @cos(self.yaw) * @cos(self.pitch),
                 @sin(self.pitch),
                 @sin(self.yaw) * @cos(self.pitch),
@@ -267,34 +259,10 @@ pub const Scene = struct {
         self.view_matrix = self.camera.createViewMatrix();
     }
 
-    // pub fn updateLines(self: *Self) void {
-    //     for (self.grid) |*vec| {
-    //         rV3(vec, self.pitch, self.yaw, self.zoom);
-    //     }
-
-    //     for (&self.axis) |*vec| {
-    //         rV3(vec, self.pitch, self.yaw, self.zoom);
-    //     }
-
-    //     if (self.vectors) |vectors| {
-    //         for (vectors) |*vec| {
-    //             rV3(vec, self.pitch, self.yaw, self.zoom);
-    //         }
-    //     }
-
-    //     if (self.shapes) |shapes| {
-    //         for (shapes) |shape| {
-    //             for (shape) |*vec| {
-    //                 rV3(vec, self.pitch, self.yaw, self.zoom);
-    //             }
-    //         }
-    //     }
-    // }
-
     pub fn insertVector(self: *Self, x: f32, y: f32, z: f32) void {
         const len = if (self.vectors) |vectors| vectors.len else 0;
 
-        var new_vector_array = self.allocator.alloc(V3, len + 2) catch @panic("OOM");
+        var new_vector_array = self.allocator.alloc(V3, len + 2) catch unreachable;
 
         for (0..len) |i| {
             new_vector_array[i] = self.vectors.?[i];
@@ -302,11 +270,42 @@ pub const Scene = struct {
         new_vector_array[len] = V3.new(x, y, z);
         new_vector_array[len + 1] = V3.new(0.0, 0.0, 0.0);
 
-        if (self.vectors) |vec| {
-            self.allocator.free(vec);
+        if (self.vectors) |vectors| {
+            self.allocator.free(vectors);
         }
 
         self.vectors = new_vector_array;
+    }
+
+    fn insertShape(self: *Self, shape: Shape) void {
+        const len = if (self.shapes) |shapes| shapes.len else 0;
+
+        var new_shapes = self.allocator.alloc([]V3, len + 1) catch unreachable;
+
+        for (0..len) |i| {
+            new_shapes[i] = self.shapes.?[i];
+        }
+        new_shapes[len] = @constCast(shape.getVectors(null)); //TODO: REMOVE THIS CAST
+
+        if (len > 0) self.allocator.free(self.shapes.?);
+
+        self.shapes = new_shapes;
+    }
+
+    pub fn insertCube(self: *Self) void {
+        self.insertShape(Shape.CUBE);
+    }
+
+    pub fn insertPyramid(self: *Self) void {
+        self.insertShape(Shape.PYRAMID);
+    }
+
+    pub fn insertSphere(self: *Self) void {
+        self.insertShape(Shape.SPHERE);
+    }
+
+    pub fn insertCone(self: *Self) void {
+        self.insertShape(Shape.CONE);
     }
 
     pub fn clear(self: *Self) void {
@@ -347,37 +346,6 @@ pub const Scene = struct {
         }
     }
 
-    pub fn insertCube(self: *Self) void {
-        self.insertShape(Shape.CUBE);
-    }
-
-    pub fn insertPyramid(self: *Self) void {
-        self.insertShape(Shape.PYRAMID);
-    }
-
-    pub fn insertSphere(self: *Self) void {
-        self.insertShape(Shape.SPHERE);
-    }
-
-    pub fn insertCone(self: *Self) void {
-        self.insertShape(Shape.CONE);
-    }
-
-    fn insertShape(self: *Self, shape: Shape) void {
-        const len = if (self.shapes) |shapes| shapes.len else 0;
-
-        if (len > 0) self.allocator.free(self.shapes.?);
-        var new_shapes = self.allocator.alloc([]V3, len + 1) catch @panic("OOM");
-
-        for (0..len) |i| {
-            new_shapes[i] = self.shapes.?[i];
-        }
-
-        new_shapes[len] = @constCast(shape.getVectors(null)); //TODO: REMOVE THIS CAST
-
-        self.shapes = new_shapes;
-    }
-
     pub fn setZoom(self: *Scene, zoom_delta: f32) void {
         self.zoom += zoom_delta; //TODO: MAYBE INCREMENT INSTEAD ??
         self.updateViewMatrix();
@@ -395,18 +363,18 @@ pub const Scene = struct {
         self.allocator.free(self.grid);
 
         const j: i32 = @intCast(res / 2);
-        const upperLimit = if (res & 1 == 1) j + 1 else j;
+        const upperLimit = j;
         var i: i32 = -j;
-        self.grid = self.allocator.alloc(V3, res * 4) catch @panic("OOM");
+        self.grid = self.allocator.alloc(V3, res * 4) catch unreachable;
         const fixed: f32 = @floatFromInt(j);
 
         while (i < upperLimit) : (i += 1) {
             const idx: f32 = @as(f32, @floatFromInt(i));
             const index = @as(usize, @intCast((i + j) * 4));
-            self.grid[index] = V3.new(idx, 0.0, fixed);
-            self.grid[index + 1] = V3.new(idx, 0.0, -fixed);
-            self.grid[index + 2] = V3.new(fixed, 0.0, idx);
-            self.grid[index + 3] = V3.new(-fixed, 0.0, idx);
+            self.grid[index] = V3.new(idx, fixed, 0.0);
+            self.grid[index + 1] = V3.new(idx, -fixed, 0.0);
+            self.grid[index + 2] = V3.new(fixed, idx, 0.0);
+            self.grid[index + 3] = V3.new(-fixed, idx, 0.0);
         }
 
         self.axis = [_]V3{
@@ -452,7 +420,7 @@ pub const Sphere = struct {
         const slices = res;
         const radius: f32 = 1.0;
         // TODO: use state allocator
-        const vertexes = std.heap.page_allocator.alloc(V3, res * res) catch @panic("OOM");
+        const vertexes = std.heap.page_allocator.alloc(V3, res * res) catch unreachable;
 
         for (0..stacks) |i| {
             const theta = @as(f32, @floatFromInt(i)) * std.math.pi / @as(f32, @floatFromInt(stacks - 1));
@@ -478,7 +446,7 @@ pub const Cone = struct {
         const slices = res;
         const radius: f32 = 1.0;
         const height: f32 = 2.0;
-        const vertexes = std.heap.page_allocator.alloc(V3, slices + 1) catch @panic("OOM");
+        const vertexes = std.heap.page_allocator.alloc(V3, slices + 1) catch unreachable;
 
         vertexes[0] = .{ .coords = .{ 0, 0, height } };
 

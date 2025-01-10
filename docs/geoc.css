@@ -37,7 +37,7 @@ body {
 #text-inputs {
    position: absolute;
    padding: 15px;
-   bottom: 80px;
+   bottom: 40px;
    left: 0;
    right: 0;
    display: flex;
@@ -58,10 +58,8 @@ body {
    display: grid;
    grid-template-columns: repeat(3, 1fr);
    grid-gap: 1px;
-   background-color: rgba(255, 255, 255, 0.8);
-   padding: 15px;
-   border-radius: 10px;
-   transition: opacity 0.3s ease;
+   background-color: transparent;
+   padding: 9px;
 }
 
 #button-grid.hidden {
@@ -83,56 +81,103 @@ body {
    text-orientation: mixed;
 }
 
-#vector-list {
+#floating-table {
    position: absolute;
    top: 10px;
    left: 10px;
-   width: 160px;
+   width: 330px;
    height: 300px;
    background-color: rgba(255, 255, 255, 0.1);
    border: 1px solid #322d2d;
    overflow-y: auto;
    padding: 10px;
+   font-size: 12px;
 }
 
-#vector-list.hidden {
+#floating-table.hidden {
    display: none;
 }
 
-.vector-item {
-   padding: 10px;
+.table-header {
+   display: flex;
+   justify-content: space-between;
+   padding: 1px 0;
+   border-bottom: 1px solid #322d2d;
+   font-weight: bold;
+}
+
+.header-column {
+   flex: 1;
+   text-align: center;
+}
+
+.table-content {
+   display: flex;
+   justify-content: space-between;
+   height: calc(100% - 30px);
+}
+
+.table-column {
+   flex: 1;
+   padding: 5px;
+   overflow-y: auto;
+   border-right: 1px solid #322d2d;
+}
+
+.table-column:last-child {
+   border-right: none;
+}
+
+.vector-item,
+.shape-item,
+.camera-item {
+   padding: 5px;
    margin: 5px 0;
    background-color: #e0e0e0;
    border: 1px solid #b0b0b0;
    cursor: pointer;
+   font-size: 11px;
 }
 
-.vector-item.selected {
+.vector-item.selected,
+.shape-item.selected,
+.camera-item.selected {
    background-color: #c0c0c0;
 }
 
-#toggle-vector-list-btn {
+#toggle-table-btn {
    position: absolute;
-   top: 10px;
-   left: 200px;
+   top: 340px;
+   left: 10px;
+   transform: rotate(180deg);
    background-color: #2196F3;
    color: white;
    border: none;
-   padding: 10px;
+   padding: 5px;
    cursor: pointer;
 }
 
-#color-button-grid {
+#toggle-table-btn.expanded {
+   transform: rotate(0deg);
+}
+
+#color-button-container {
    position: absolute;
    bottom: 10px;
    left: 10px;
-   display: flex;
-   flex-direction: column;
-   gap: 10px;
-   background-color: rgba(255, 255, 255, 0.8);
+   background-color: gray;
    padding: 10px;
    border-radius: 10px;
    z-index: 1000;
+}
+
+#color-button-grid {
+   display: flex;
+   flex-wrap: wrap;
+   gap: 10px;
+   max-height: 30;
+   overflow: hidden;
+   transition: max-height 0.3s ease-out;
 }
 
 .color-button {
@@ -143,21 +188,23 @@ body {
    transition: opacity 0.3s;
 }
 
-.color-button.black {
-   background-color: black;
-
-}
-
-.color-button.gray {
-   background-color: gray;
-}
-
-.color-button.green {
-   background-color: green;
-}
-
 .color-button:hover {
    opacity: 0.8;
+}
+
+#toggle-color-grid-btn {
+   width: 30px;
+   height: 30px;
+   border: none;
+   background-color: #444;
+   color: white;
+   border-radius: 50%;
+   cursor: pointer;
+   transition: transform 0.3s;
+}
+
+#toggle-color-grid-btn.expanded {
+   transform: rotate(180deg);
 }
 
 #perspective-inputs {
@@ -172,22 +219,22 @@ body {
    padding: 10px;
    border-radius: 10px;
    z-index: 1000;
- }
- 
- #small-text-inputs input {
+}
+
+#small-text-inputs input {
    padding: 3px;
    width: 100px;
- }
- 
- #small-text-inputs button {
+}
+
+#small-text-inputs button {
    padding: 5px;
    background-color: #4CAF50;
    color: white;
    border: none;
    cursor: pointer;
    transition: background-color 0.3s;
- }
- 
- #small-text-inputs button:hover {
+}
+
+#small-text-inputs button:hover {
    background-color: #45a049;
- }
+}

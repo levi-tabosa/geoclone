@@ -64,7 +64,7 @@ pub const Program = struct {
     platform: platform.Program,
 
     pub fn init(geoc_instance: Geoc, shaders: []const Shader) Self {
-        const platform_shaders = geoc_instance.allocator.alloc(platform.Shader, shaders.len) catch @panic("OOM");
+        const platform_shaders = geoc_instance.allocator.alloc(platform.Shader, shaders.len) catch unreachable;
         for (0..shaders.len) |i| {
             platform_shaders[i] = shaders[i].platform;
         }
@@ -167,7 +167,7 @@ pub const Geoc = struct {
                 @sizeOf(@TypeOf(state)),
                 @alignOf(@TypeOf(state)),
             },
-        ) catch @panic("OOM"));
+        ) catch unreachable);
         self.platform.setScene(state);
     }
 

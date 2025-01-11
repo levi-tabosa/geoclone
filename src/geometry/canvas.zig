@@ -81,7 +81,7 @@ fn rotXYZ(
 pub const V3 = struct {
     coords: [3]f32,
 
-    pub fn new(x: f32, y: f32, z: f32) V3 {
+    pub fn init(x: f32, y: f32, z: f32) V3 {
         return .{ .coords = .{ x, y, z } };
     }
 
@@ -132,8 +132,10 @@ pub const Camera = struct {
     target: V3 = V3{ .coords = .{ 0.0, 0.0, 0.0 } },
     up: V3 = V3{ .coords = .{ 0.0, 0.0, 1.0 } },
     radius: ?f32 = null,
+    // shape: []V3,
 
-    pub fn init(position: V3, radius: ?f32) Self {
+    pub fn init(allocator: Allocator, position: V3, radius: ?f32) Self {
+        _ = allocator; //use to alloc shape
         return .{
             .pos = position,
             .radius = radius,
@@ -175,7 +177,6 @@ pub const Scene = struct {
         const yaw = 0.7;
         const j = resolution / 2;
         const upperLimit = j;
-        // const upperLimit = if (resolution & 1 == 1) j + 1 else j;
         var i: i32 = -j;
         var grid = allocator.alloc(V3, resolution * 4) catch unreachable;
         const fixed: f32 = j;
@@ -183,23 +184,24 @@ pub const Scene = struct {
         while (i < upperLimit) : (i += 1) {
             const idx: f32 = @as(f32, @floatFromInt(i));
             const index = @as(usize, @intCast((i + j) * 4));
-            grid[index] = V3.new(idx, fixed, 0.0);
-            grid[index + 1] = V3.new(idx, -fixed, 0.0);
-            grid[index + 2] = V3.new(fixed, idx, 0.0);
-            grid[index + 3] = V3.new(-fixed, idx, 0.0);
+            grid[index] = V3.init(idx, fixed, 0.0);
+            grid[index + 1] = V3.init(idx, -fixed, 0.0);
+            grid[index + 2] = V3.init(fixed, idx, 0.0);
+            grid[index + 3] = V3.init(-fixed, idx, 0.0);
         }
 
         const axis = [_]V3{
-            V3.new(fixed, 0.0, 0.0),
-            V3.new(-fixed, 0.0, 0.0),
-            V3.new(0.0, fixed, 0.0),
-            V3.new(0.0, -fixed, 0.0),
-            V3.new(0.0, 0.0, fixed),
-            V3.new(0.0, 0.0, -fixed),
+            V3.init(fixed, 0.0, 0.0),
+            V3.init(-fixed, 0.0, 0.0),
+            V3.init(0.0, fixed, 0.0),
+            V3.init(0.0, -fixed, 0.0),
+            V3.init(0.0, 0.0, fixed),
+            V3.init(0.0, 0.0, -fixed),
         };
         const radius = 10.0;
 
         const camera = Camera.init(
+            allocator,
             .{
                 .coords = .{
                     radius * @cos(yaw) * @cos(pitch),
@@ -209,8 +211,6 @@ pub const Scene = struct {
             },
             radius,
         );
-
-        // const camera = Camera.init(.{ .coords = .{ 0, 0, 1 } }, null);
 
         return .{
             .allocator = allocator,
@@ -227,8 +227,8 @@ pub const Scene = struct {
     pub fn deinit(self: *Self) void {
         self.allocator.free(self.grid);
 
-        if (self.cameras) |cameras| {
-            self.allocator.free(cameras);
+        if (self.vectors) |vectors| {
+            self.allocator.free(vectors);
         }
 
         if (self.shapes) |shapes| {
@@ -236,6 +236,10 @@ pub const Scene = struct {
                 self.allocator.free(shape);
             }
             self.allocator.free(shapes);
+        }
+
+        if (self.cameras) |cameras| {
+            self.allocator.free(cameras);
         }
     }
 
@@ -250,13 +254,26 @@ pub const Scene = struct {
             };
         } else {
             self.camera.target = V3.add(self.camera.pos, V3{ .coords = .{
-                @cos(self.yaw) * @cos(self.pitch),
+                @cos(-self.yaw) * @cos(self.pitch),
+                @sin(-self.yaw) * @cos(self.pitch),
                 @sin(self.pitch),
-                @sin(self.yaw) * @cos(self.pitch),
             } });
         }
 
         self.view_matrix = self.camera.createViewMatrix();
+    }
+
+    pub fn setPitch(self: *Self, angle: f32) void {
+        self.pitch = angle;
+    }
+
+    pub fn setYaw(self: *Self, angle: f32) void {
+        self.yaw = angle;
+    }
+
+    pub fn setZoom(self: *Scene, zoom_delta: f32) void {
+        self.zoom += zoom_delta; //TODO: MAYBE INCREMENT INSTEAD ??
+        self.updateViewMatrix();
     }
 
     pub fn insertVector(self: *Self, x: f32, y: f32, z: f32) void {
@@ -267,14 +284,31 @@ pub const Scene = struct {
         for (0..len) |i| {
             new_vector_array[i] = self.vectors.?[i];
         }
-        new_vector_array[len] = V3.new(x, y, z);
-        new_vector_array[len + 1] = V3.new(0.0, 0.0, 0.0);
+        new_vector_array[len] = V3.init(x, y, z);
+        new_vector_array[len + 1] = V3.init(0.0, 0.0, 0.0);
 
-        if (self.vectors) |vectors| {
-            self.allocator.free(vectors);
+        if (len > 0) {
+            self.allocator.free(self.vectors.?);
         }
 
         self.vectors = new_vector_array;
+    }
+
+    pub fn insertCamera(self: *Self, pos_x: f32, pos_y: f32, pos_z: f32) void {
+        const len = if (self.cameras) |cameras| cameras.len else 0;
+
+        var new_cameras_array = self.allocator.alloc(Camera, len + 1) catch unreachable;
+
+        for (0..len) |i| {
+            new_cameras_array[i] = self.cameras.?[i];
+        }
+        new_cameras_array[len] = Camera.init(self.allocator, V3.init(pos_x, pos_y, pos_z), null);
+
+        if (len > 0) {
+            self.allocator.free(self.cameras.?);
+        }
+
+        self.cameras = new_cameras_array;
     }
 
     fn insertShape(self: *Self, shape: Shape) void {
@@ -285,7 +319,7 @@ pub const Scene = struct {
         for (0..len) |i| {
             new_shapes[i] = self.shapes.?[i];
         }
-        new_shapes[len] = @constCast(shape.getVectors(null)); //TODO: REMOVE THIS CAST
+        new_shapes[len] = shape.getVectors(self.allocator, null);
 
         if (len > 0) self.allocator.free(self.shapes.?);
 
@@ -317,22 +351,81 @@ pub const Scene = struct {
             self.allocator.free(shapes);
             self.shapes = null;
         }
+        if (self.cameras) |cameras| {
+            self.allocator.free(cameras);
+            self.shapes = null;
+        }
+    }
+
+    pub fn setResolution(self: *Self, res: usize) void {
+        self.allocator.free(self.grid);
+
+        const j: i32 = @intCast(res / 2);
+        const fixed: f32 = @floatFromInt(j);
+        const upperLimit = j;
+        var i: i32 = -j;
+        self.grid = self.allocator.alloc(V3, res * 4) catch unreachable;
+
+        while (i < upperLimit) : (i += 1) {
+            const idx: f32 = @as(f32, @floatFromInt(i));
+            const index = @as(usize, @intCast((i + j) * 4));
+            self.grid[index] = V3.init(idx, fixed, 0.0);
+            self.grid[index + 1] = V3.init(idx, -fixed, 0.0);
+            self.grid[index + 2] = V3.init(fixed, idx, 0.0);
+            self.grid[index + 3] = V3.init(-fixed, idx, 0.0);
+        }
+
+        self.axis = [_]V3{
+            V3.init(fixed, 0.0, 0.0),
+            V3.init(-fixed, 0.0, 0.0),
+            V3.init(0.0, fixed, 0.0),
+            V3.init(0.0, -fixed, 0.0),
+            V3.init(0.0, 0.0, fixed),
+            V3.init(0.0, 0.0, -fixed),
+        };
+    }
+
+    pub fn setCamera(self: *Self, index: usize) void {
+        _LOGF(self.allocator, "{} {}", .{ index, self.cameras.?[index] });
+        self.camera = self.cameras.?[index];
+        self.updateViewMatrix();
+    }
+
+    pub fn scale(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, sizes: u32, factor: f32) void {
+        const l = sizes >> 16;
+        const r = sizes & 65535;
+
+        for (0..l) |i| {
+            const idx = idxs_ptr[i] * 2;
+
+            for (&self.vectors.?[idx].coords) |*value| {
+                value.* *= factor;
+            }
+        }
+
+        for (l..l + r) |i| {
+            const idx = idxs_ptr[i];
+
+            for (self.shapes.?[idx]) |*vertex| {
+                for (&vertex.coords) |*value| {
+                    value.* *= factor;
+                }
+            }
+        }
+
+        for (l + r..idxs_len) |i| {
+            const idx = idxs_ptr[i];
+
+            for (&self.cameras.?[idx].pos.coords) |*value| {
+                value.* *= factor;
+            }
+        }
     }
 
     pub fn rotate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, x: f32, y: f32, z: f32) void {
         for (0..idxs_len) |i| {
             const idx = idxs_ptr[i] * 2;
             rotXYZ(&self.vectors.?[idx], x, y, z);
-        }
-    }
-
-    pub fn scale(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, factor: f32) void {
-        for (0..idxs_len) |i| {
-            const idx = idxs_ptr[i] * 2;
-
-            for (&self.vectors.?[idx].coords) |*value| {
-                value.* *= factor;
-            }
         }
     }
 
@@ -345,47 +438,6 @@ pub const Scene = struct {
             self.vectors.?[idx].coords[2] += dz;
         }
     }
-
-    pub fn setZoom(self: *Scene, zoom_delta: f32) void {
-        self.zoom += zoom_delta; //TODO: MAYBE INCREMENT INSTEAD ??
-        self.updateViewMatrix();
-    }
-
-    pub fn setPitch(self: *Self, angle: f32) void {
-        self.pitch = angle;
-    }
-
-    pub fn setYaw(self: *Self, angle: f32) void {
-        self.yaw = angle;
-    }
-
-    pub fn setResolution(self: *Self, res: usize) void {
-        self.allocator.free(self.grid);
-
-        const j: i32 = @intCast(res / 2);
-        const upperLimit = j;
-        var i: i32 = -j;
-        self.grid = self.allocator.alloc(V3, res * 4) catch unreachable;
-        const fixed: f32 = @floatFromInt(j);
-
-        while (i < upperLimit) : (i += 1) {
-            const idx: f32 = @as(f32, @floatFromInt(i));
-            const index = @as(usize, @intCast((i + j) * 4));
-            self.grid[index] = V3.new(idx, fixed, 0.0);
-            self.grid[index + 1] = V3.new(idx, -fixed, 0.0);
-            self.grid[index + 2] = V3.new(fixed, idx, 0.0);
-            self.grid[index + 3] = V3.new(-fixed, idx, 0.0);
-        }
-
-        self.axis = [_]V3{
-            V3.new(fixed, 0.0, 0.0),
-            V3.new(-fixed, 0.0, 0.0),
-            V3.new(0.0, fixed, 0.0),
-            V3.new(0.0, -fixed, 0.0),
-            V3.new(0.0, 0.0, fixed),
-            V3.new(0.0, 0.0, -fixed),
-        };
-    }
 };
 
 pub const Shape = enum {
@@ -393,46 +445,59 @@ pub const Shape = enum {
     PYRAMID,
     SPHERE,
     CONE,
+    // CAMERA, //TODO: maybe change
 
-    pub fn getVectors(self: Shape, res: ?usize) []const V3 {
-        const resolution = res orelse 32;
+    pub fn getVectors(self: Shape, allocator: Allocator, res: ?usize) []V3 {
+        const resolution = res orelse 16;
         return switch (self) {
-            .CUBE => &[_]V3{
-                .{ .coords = .{ -1, 1, 1 } },   .{ .coords = .{ -1, 1, -1 } },
-                .{ .coords = .{ 1, 1, -1 } },   .{ .coords = .{ 1, 1, 1 } },
-                .{ .coords = .{ 1, -1, 1 } },   .{ .coords = .{ 1, -1, -1 } },
-                .{ .coords = .{ -1, -1, -1 } }, .{ .coords = .{ -1, -1, 1 } },
+            .CUBE => {
+                const vectors = allocator.alloc(V3, 8) catch unreachable;
+                vectors[0] = .{ .coords = .{ -1, -1, -1 } };
+                vectors[1] = .{ .coords = .{ -1, -1, 1 } };
+                vectors[2] = .{ .coords = .{ 1, -1, 1 } };
+                vectors[3] = .{ .coords = .{ 1, -1, -1 } };
+                vectors[4] = .{ .coords = .{ -1, 1, -1 } };
+                vectors[5] = .{ .coords = .{ -1, 1, 1 } };
+                vectors[6] = .{ .coords = .{ 1, 1, 1 } };
+                vectors[7] = .{ .coords = .{ 1, 1, -1 } };
+                return vectors;
             },
-            .PYRAMID => &[_]V3{
-                .{ .coords = .{ 0, 0, 1 } },    .{ .coords = .{ -1, 1, -1 } },
-                .{ .coords = .{ 1, 1, -1 } },   .{ .coords = .{ 1, -1, -1 } },
-                .{ .coords = .{ -1, -1, -1 } },
+            .PYRAMID => {
+                const vectors = allocator.alloc(V3, 5) catch unreachable;
+                vectors[0] = .{ .coords = .{ 0, 0, 1 } };
+                vectors[1] = .{ .coords = .{ -1, -1, -1 } };
+                vectors[2] = .{ .coords = .{ 1, -1, -1 } };
+                vectors[3] = .{ .coords = .{ 1, 1, -1 } };
+                vectors[4] = .{ .coords = .{ -1, 1, -1 } };
+                return vectors;
             },
-            .SPHERE => Sphere.generate(resolution),
-            .CONE => Cone.generate(resolution),
+            .SPHERE => Sphere.generate(allocator, resolution),
+            .CONE => Cone.generate(allocator, resolution),
         };
     }
 };
 
 pub const Sphere = struct {
-    pub fn generate(res: usize) []const V3 {
+    pub fn generate(allocator: Allocator, res: usize) []V3 {
         const stacks = res;
         const slices = res;
         const radius: f32 = 1.0;
-        // TODO: use state allocator
-        const vertexes = std.heap.page_allocator.alloc(V3, res * res) catch unreachable;
 
+        const vertexes = allocator.alloc(V3, (stacks + 1) * slices) catch unreachable;
+
+        var index: usize = 0;
         for (0..stacks) |i| {
-            const theta = @as(f32, @floatFromInt(i)) * std.math.pi / @as(f32, @floatFromInt(stacks - 1));
-            const y = @cos(theta) * radius;
+            const theta = @as(f32, @floatFromInt(i)) * std.math.pi / @as(f32, @floatFromInt(stacks));
+            const z = @cos(theta) * radius;
             const ring_radius = @sin(theta) * radius;
 
             for (0..slices) |j| {
                 const phi = @as(f32, @floatFromInt(j)) * 2.0 * std.math.pi / @as(f32, @floatFromInt(slices));
                 const x = ring_radius * @cos(phi);
-                const z = ring_radius * @sin(phi);
+                const y = ring_radius * @sin(phi);
 
-                vertexes[i * j + j] = .{ .coords = .{ x, y, z } };
+                vertexes[index] = .{ .coords = .{ x, y, z } };
+                index += 1;
             }
         }
         return vertexes;
@@ -440,46 +505,47 @@ pub const Sphere = struct {
 };
 
 pub const Cone = struct {
-    pub fn generate(res: usize) []const V3 {
-        const pi = std.math.pi;
-
+    pub fn generate(allocator: Allocator, res: usize) []V3 {
         const slices = res;
         const radius: f32 = 1.0;
         const height: f32 = 2.0;
-        const vertexes = std.heap.page_allocator.alloc(V3, slices + 1) catch unreachable;
 
-        vertexes[0] = .{ .coords = .{ 0, 0, height } };
+        const vertexes = allocator.alloc(V3, slices + 2) catch unreachable;
 
-        for (1..slices) |i| {
-            const theta = @as(f32, @floatFromInt(i)) * 2.0 * pi / @as(f32, @floatFromInt(slices)); // Ângulo do segmento
+        var index: usize = 0;
+        vertexes[index] = .{ .coords = .{ 0, 0, height } };
+        index += 1;
+
+        for (0..slices) |i| {
+            const theta = @as(f32, @floatFromInt(i)) * 2.0 * std.math.pi / @as(f32, @floatFromInt(slices));
             const x = @cos(theta) * radius;
-            const z = @sin(theta) * radius;
+            const y = @sin(theta) * radius;
 
-            vertexes[i] = .{ .coords = .{ x, z, 0 } };
+            vertexes[index] = .{ .coords = .{ x, y, 0 } };
+            index += 1;
         }
+
+        vertexes[index] = .{ .coords = .{ 0, 0, 0 } };
         return vertexes;
     }
 };
-
-// pub const CameraMode = enum(u32) {
-//     Orbit = 0,
-//     Free = 1,
-// };
 
 pub const State = struct {
     ptr: *anyopaque,
     set_angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
     get_pitch_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
     get_yaw_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
-    zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
-    insert_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
-    clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
-    set_res_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
+    set_zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
+    insert_vector_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
+    insert_camera_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
     cube_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
     pyramid_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
     sphere_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
     cone_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    set_res_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
+    set_camera_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
+    scale_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32) callconv(.C) void,
     rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
-    scale_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32) callconv(.C) void,
     translate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
 };

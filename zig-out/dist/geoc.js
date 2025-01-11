@@ -17,15 +17,17 @@
  *    get_pitch_fn_ptr: number,
  *    get_yaw_fn_ptr: number,
  *    zoom_fn_ptr: number,
- *    insert_fn_ptr: number,
- *    clear_fn_ptr: number,
- *    set_res_fn_ptr: number,
+ *    insert_vector_fn_ptr: number,
+ *    insert_camera_fn_ptr: number,
  *    cube_fn_ptr: number,
  *    pyramid_fn_ptr: number,
  *    sphere_fn_ptr: number,
  *    cone_fn_ptr: number,
- *    rotate_fn_ptr: number,
+ *    clear_fn_ptr: number,
+ *    set_res_fn_ptr: number,
+ *    set_camera_fn_ptr: number,
  *    scale_fn_ptr: number,
+ *    rotate_fn_ptr: number,
  *    translate_fn_ptr: number}
  * } Scene
  *
@@ -33,7 +35,7 @@
  *    x: number,
  *    y: number,
  *    z: number}
- * } Vector
+ * } V3
  * */
 
 /** Context and Globals **/
@@ -85,16 +87,18 @@ const scene = {
   get_pitch_fn_ptr: 2,
   get_yaw_fn_ptr: 3,
   zoom_fn_ptr: 4,
-  insert_fn_ptr: 5,
-  clear_fn_ptr: 6,
-  set_res_fn_ptr: 7,
-  cube_fn_ptr: 8,
-  pyramid_fn_ptr: 9,
-  sphere_fn_ptr: 10,
-  cone_fn_ptr: 11,
-  rotate_fn_ptr: 12,
-  scale_fn_ptr: 13,
-  translate_fn_ptr: 14,
+  insert_vector_fn_ptr: 5,
+  insert_camera_fn_ptr: 6,
+  cube_fn_ptr: 7,
+  pyramid_fn_ptr: 8,
+  sphere_fn_ptr: 9,
+  cone_fn_ptr: 10,
+  clear_fn_ptr: 11,
+  set_res_fn_ptr: 12,
+  set_camera_fn_ptr: 13,
+  scale_fn_ptr: 14,
+  rotate_fn_ptr: 15,
+  translate_fn_ptr: 16,
 };
 
 function getData(c_ptr, len) {
@@ -228,11 +232,11 @@ class SceneController {
 
   handleWheel(/** @type { WheelEvent }*/ e) {
     const zoom_delta = -e.deltaY / CONFIG.ZOOM_SENSITIVITY;
-    this.setZoom(zoom_delta);
-  }
-
-  setZoom(/** @type { number } */ delta) {
-    this.wasm_exports.setZoom(this.scene.ptr, this.scene.zoom_fn_ptr, delta);
+    this.wasm_exports.setZoom(
+      this.scene.ptr,
+      this.scene.zoom_fn_ptr,
+      zoom_delta
+    );
   }
 
   insertVector(x, y, z) {
@@ -241,7 +245,7 @@ class SceneController {
 
     this.wasm_exports.insertVector(
       this.scene.ptr,
-      this.scene.insert_fn_ptr,
+      this.scene.insert_vector_fn_ptr,
       xf,
       yf,
       zf
@@ -250,21 +254,17 @@ class SceneController {
     this.updateTable();
   }
 
-  clear() {
-    this.wasm_exports.clear(this.scene.ptr, this.scene.clear_fn_ptr);
-    this.clearTable();
-    this.selected_indexes = [];
-    this.vectors = [];
-    this.shapes = [];
-    this.cameras = [];
-  }
-
-  setResolution(/** @type { number } */ res) {
-    this.wasm_exports.setResolution(
+  insertCamera(x, y, z) {
+    this.wasm_exports.insertCamera(
       this.scene.ptr,
-      this.scene.set_res_fn_ptr,
-      res
+      this.scene.insert_camera_fn_ptr,
+      parseFloat(x) || 0,
+      parseFloat(y) || 0,
+      parseFloat(z) || 0
     );
+    // this.cameras.push({ x: xf, y: yf, z: zf });
+    this.cameras.push(`Camera@${this.cameras.length}`);
+    this.updateTable();
   }
 
   insertShape(/** @type { String } */ shape) {
@@ -290,10 +290,21 @@ class SceneController {
     this.insertShape("Cone");
   }
 
-  insertCamera() {
-    const camera = `Camera@${this.cameras.length}`; //TODO: add pos coords
-    this.cameras.push(camera);
-    this.updateTable();
+  clear() {
+    this.clearTable();
+    this.wasm_exports.clear(this.scene.ptr, this.scene.clear_fn_ptr);
+    this.selected_indexes = [];
+    this.vectors = [];
+    this.shapes = [];
+    this.cameras = [];
+  }
+
+  setResolution(/** @type { number } */ resolution) {
+    this.wasm_exports.setResolution(
+      this.scene.ptr,
+      this.scene.set_res_fn_ptr,
+      resolution
+    );
   }
 
   rotate(angle_x, angle_y, angle_z) {
@@ -381,26 +392,37 @@ class SceneController {
   }
 
   scale(factor) {
-    const len = this.selected_indexes.length;
-    if (len === 0 || isNaN(parseFloat(factor))) return;
+    if (isNaN(parseFloat(factor))) return;
+
+    const combined = this.selected_vectors.concat(
+      this.selected_shapes,
+      this.selected_cameras
+    );
+
+    const vectors_len = this.selected_vectors.length; // this will crash if these overflow 16 bits
+    const shapes_len = this.selected_shapes.length;
+
+    if (combined.length === 0) return;
+
     const s_step = Math.pow(factor, 1 / frames);
 
     const buffer = new Uint32Array(wasm_memory.buffer);
-    const offset = buffer.length - len;
+    const offset = buffer.length - combined.length;
+    buffer.set(combined, offset);
 
-    buffer.set(this.selected_indexes, offset);
     const s_interval = setInterval(() => {
       this.wasm_exports.scale(
         this.scene.ptr,
         this.scene.scale_fn_ptr,
         offset * 4, // u32 4 bytes pointer alignment
-        len,
+        combined.length,
+        (vectors_len << 16) + shapes_len,
         s_step
       );
     }, interval);
     setTimeout(() => clearInterval(s_interval), frames * interval);
 
-    this.selected_indexes.forEach((idx) => {
+    this.selected_vectors.forEach((idx) => {
       let { x, y, z } = this.vectors[idx];
       x *= factor;
       y *= factor;
@@ -444,35 +466,6 @@ class SceneController {
     this.updateTable();
   }
 
-  addColumnItem(
-    /** @type {HTMLElement} */ column,
-    /** @type {String} */ item_class_name,
-    /** @type {String} */ text
-  ) {
-    const item = document.createElement("div");
-    item.textContent = text;
-    item.className = item_class_name;
-
-    item.addEventListener("click", (e) => {
-      if (e.ctrlKey) {
-        item.classList.toggle("selected");
-      } else {
-        column
-          .querySelectorAll(item_class_name)
-          .forEach((item) => item.classList.remove("selected"));
-        item.classList.add("selected");
-      }
-      this.updateSelectedIndexes();
-    });
-    column.appendChild(item);
-  }
-
-  updateSelectedIndexes() {
-    this.selected_indexes = Array.from(
-      document.querySelectorAll(".vector-item.selected")
-    ).map((item) => Array.from(item.parentElement.children).indexOf(item));
-  }
-
   updateTable() {
     const vectors_column = document.getElementById("vectors-column");
     const shapes_column = document.getElementById("shapes-column");
@@ -499,6 +492,55 @@ class SceneController {
     this.cameras.forEach((camera) => {
       this.addColumnItem(cameras_column, "camera-item", camera);
     });
+  }
+
+  addColumnItem(
+    /** @type {HTMLElement} */ column,
+    /** @type {String} */ item_class_name,
+    /** @type {String} */ text,
+    listener
+  ) {
+    const item = document.createElement("div");
+    item.textContent = text;
+    item.className = item_class_name;
+
+    item.addEventListener("click", (e) => {
+      if (e.ctrlKey) {
+        item.classList.toggle("selected");
+      } else {
+        column
+          .querySelectorAll(item_class_name)
+          .forEach((item) => item.classList.remove("selected"));
+        item.classList.add("selected");
+      }
+      this.updateSelectedIndexes();
+    });
+    column.appendChild(item);
+  }
+
+  updateSelectedIndexes() {
+    const vector_items = document.querySelectorAll(".vector-item.selected");
+    const shape_items = document.querySelectorAll(".shape-item.selected");
+    const camera_items = document.querySelectorAll(".camera-item.selected");
+
+    this.selected_vectors = Array.from(vector_items).map((vector) =>
+      Array.from(vector.parentElement.children).indexOf(vector)
+    );
+    this.selected_shapes = Array.from(shape_items).map((shape) =>
+      Array.from(shape.parentElement.children).indexOf(shape)
+    );
+    this.selected_cameras = Array.from(camera_items).map((camera) =>
+      Array.from(camera.parentElement.children).indexOf(camera)
+    );
+    const len = this.selected_cameras.length;
+    console.log(len);
+    if (len > 0) {
+      this.wasm_exports.setCamera(
+        this.scene.ptr,
+        this.scene.set_camera_fn_ptr,
+        len - 1
+      );
+    }
   }
 
   toggleAutoRotation() {
@@ -539,11 +581,11 @@ const resize_listener = (entries) => {
   canvas.height = height;
 
   webgl.viewport(0, 0, width, height);
-  _setAspectRatioUniform(width / height);
+  setAspectRatioUniform(width / height);
   scene_config.aspect_ratio = width / height;
 };
 
-function _setAspectRatioUniform(/** @type { number} */ aspect_ratio) {
+function setAspectRatioUniform(/** @type { number} */ aspect_ratio) {
   for (let i = 0; i < next_program; i++) {
     const program = programs.get(i);
 
@@ -561,7 +603,7 @@ function _setAspectRatioUniform(/** @type { number} */ aspect_ratio) {
   }
 }
 
-function _setPerspectiveUniforms(
+function setPerspectiveUniforms(
   /** @type { number} */ fov,
   /** @type { number} */ near,
   /** @type { number} */ far
@@ -618,7 +660,10 @@ function createButtonListeners(/** @type { SceneController } */ scene_handler) {
     () => scene_handler.insertCone(),
     () => scene_handler.project(),
     () => {},
-    () => scene_handler.insertCamera(),
+    () => {
+      scene_handler.insertCamera(input1.value, input2.value, input3.value);
+      input1.value = input2.value = input3.value = "";
+    },
     () => scene_handler.reflect(),
     () => {},
   ];
@@ -819,7 +864,7 @@ function createPerspectiveInputs(/** @type {SceneController} */ scene_handler) {
     const fov = (parseFloat(input4.value) * Math.PI) / 180 || scene_config.fov;
     const resolution = parseFloat(input3.value);
 
-    _setPerspectiveUniforms(fov, near, far);
+    setPerspectiveUniforms(fov, near, far);
 
     if (!isNaN(resolution)) {
       scene_handler.setResolution(resolution);

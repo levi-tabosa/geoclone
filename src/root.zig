@@ -8,8 +8,9 @@ pub const platform = switch (builtin.target.isWasm()) {
 
 pub const canvas = @import("geometry/canvas.zig");
 
-var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true }){};
+var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true, .verbose_log = true }){};
 
+// used in example.zig, prevents build error if gpa is used
 pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral), comptime format: []const u8, args: anytype) void {
     const scope_prefix = "(" ++ switch (scope) {
         .geoclone, .geoc, std.log.default_log_scope => @tagName(scope),
@@ -23,7 +24,7 @@ pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral
 
     const formatStr = prefix ++ format ++ "\n";
     if (builtin.target.isWasm()) {
-        platform.log(std.fmt.allocPrint(gpa.allocator(), formatStr, args) catch return);
+        platform.log(std.fmt.allocPrint(gpa.allocator(), formatStr, args) catch "papoco");
     } else {
         const stderr = std.io.getStdErr().writer();
         nosuspend stderr.print(formatStr, args) catch return;
@@ -35,11 +36,11 @@ pub const ShaderType = enum(u32) { Vertex = 0, Fragment = 1 };
 pub const DrawMode = enum(u32) {
     Points = 0,
     Lines = 1,
-    Line_loop = 2,
-    Line_strip = 3,
+    LineLoop = 2,
+    LineStrip = 3,
     Triangles = 4,
-    Triangle_string = 5,
-    Triangle_fan = 6,
+    TriangleString = 5,
+    TriangleFan = 6,
 };
 
 pub const Shader = struct {
@@ -160,14 +161,6 @@ pub const Geoc = struct {
     }
 
     pub fn setScene(self: Self, state: canvas.State) void {
-        platform.log(std.fmt.allocPrint(
-            self.allocator,
-            "canvas.State In SET SCENE root.zig ( geoc )\nSize of State: \t{}\nAlign of State: \t{}\n",
-            .{
-                @sizeOf(@TypeOf(state)),
-                @alignOf(@TypeOf(state)),
-            },
-        ) catch unreachable);
         self.platform.setScene(state);
     }
 

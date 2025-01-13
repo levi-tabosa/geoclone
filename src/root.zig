@@ -8,8 +8,9 @@ pub const platform = switch (builtin.target.isWasm()) {
 
 pub const canvas = @import("geometry/canvas.zig");
 
-var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true }){};
+var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true, .verbose_log = true }){};
 
+// used in example.zig, prevents build error if gpa is used
 pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral), comptime format: []const u8, args: anytype) void {
     const scope_prefix = "(" ++ switch (scope) {
         .geoclone, .geoc, std.log.default_log_scope => @tagName(scope),
@@ -23,7 +24,7 @@ pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral
 
     const formatStr = prefix ++ format ++ "\n";
     if (builtin.target.isWasm()) {
-        platform.log(std.fmt.allocPrint(gpa.allocator(), formatStr, args) catch return);
+        platform.log(std.fmt.allocPrint(gpa.allocator(), formatStr, args) catch "allocPrint FAILED in logFn (root.zig)");
     } else {
         const stderr = std.io.getStdErr().writer();
         nosuspend stderr.print(formatStr, args) catch return;
@@ -35,11 +36,11 @@ pub const ShaderType = enum(u32) { Vertex = 0, Fragment = 1 };
 pub const DrawMode = enum(u32) {
     Points = 0,
     Lines = 1,
-    Line_loop = 2,
-    Line_strip = 3,
+    LineLoop = 2,
+    LineStrip = 3,
     Triangles = 4,
-    Triangle_string = 5,
-    Triangle_fan = 6,
+    TriangleString = 5,
+    TriangleFan = 6,
 };
 
 pub const Shader = struct {
@@ -64,7 +65,7 @@ pub const Program = struct {
     platform: platform.Program,
 
     pub fn init(geoc_instance: Geoc, shaders: []const Shader) Self {
-        const platform_shaders = geoc_instance.allocator.alloc(platform.Shader, shaders.len) catch @panic("OOM");
+        const platform_shaders = geoc_instance.allocator.alloc(platform.Shader, shaders.len) catch unreachable;
         for (0..shaders.len) |i| {
             platform_shaders[i] = shaders[i].platform;
         }
@@ -160,19 +161,7 @@ pub const Geoc = struct {
     }
 
     pub fn setScene(self: Self, state: canvas.State) void {
-        platform.log(std.fmt.allocPrint(
-            self.allocator,
-            "IN root.zig(geoc_instance)\nSize of State: \t{}\nAlign of State: \t{}\n",
-            .{
-                @sizeOf(@TypeOf(state)),
-                @alignOf(@TypeOf(state)),
-            },
-        ) catch @panic("OOM"));
         self.platform.setScene(state);
-    }
-
-    pub fn setSceneCallBack(self: Self, state: canvas.State) void {
-        self.platform.setSceneCallBack(state);
     }
 
     pub fn currentTime(self: Self) f32 {
@@ -191,5 +180,14 @@ pub const Geoc = struct {
             self.platform.vertexAttributePointer(program.platform, vertex, field, false);
         }
         self.platform.drawArrays(mode, 0, buffer.count);
+    }
+
+    pub fn uniformMatrix4fv(
+        self: Self,
+        location: []const u8,
+        transpose: bool,
+        value_ptr: [*]const f32,
+    ) void {
+        self.platform.uniformMatrix4fv(location.ptr, location.len, transpose, value_ptr);
     }
 };

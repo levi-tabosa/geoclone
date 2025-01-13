@@ -4,9 +4,8 @@
    "[javascript]": {
     "editor.defaultFormatter": "esbenp.prettier-vscode"
   },
-  "window.title": "${dirty}${activeEditorShort}${separator}${rootName}${separator}${profileName}${separator}${appName}${separator}[Branch: toggle]",
-  "github.copilot.chat.followUps": "always",
+  "window.title": "${dirty}${activeEditorShort}${separator}${rootName}${separator}${profileName}${separator}${appName}${separator}[Branch: matrix]",
   "cSpell.words": [
-    "mediump"
-  ]
+    "mediump", "deinit"
+  ],
 }

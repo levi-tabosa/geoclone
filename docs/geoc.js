@@ -133,8 +133,6 @@ class SceneController {
    this.is_rotating = false;
    this.rotation_interval = null;
    // Event listeners
-   this.handleMouseUp = this.handleMouseUp.bind(this);
-   this.handleMouseDown = this.handleMouseDown.bind(this);
    this.handleMouseMove = this.handleMouseMove.bind(this);
    this.handleTouch = this.handleTouch.bind(this);
    this.handleWheel = this.handleWheel.bind(this);

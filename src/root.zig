@@ -24,7 +24,7 @@ pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral
 
     const formatStr = prefix ++ format ++ "\n";
     if (builtin.target.isWasm()) {
-        platform.log(std.fmt.allocPrint(gpa.allocator(), formatStr, args) catch "papoco");
+        platform.log(std.fmt.allocPrint(gpa.allocator(), formatStr, args) catch "allocPrint FAILED in logFn (root.zig)");
     } else {
         const stderr = std.io.getStdErr().writer();
         nosuspend stderr.print(formatStr, args) catch return;

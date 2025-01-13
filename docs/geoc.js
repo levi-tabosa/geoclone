@@ -57,9 +57,9 @@ let next_program = 0;
 const buffers = new Map();
 let next_buffer = 0;
 
-const interval = 30,
- frames = 25,
- fps = 100;
+const INTERVAL = 30,
+ FRAMES = 25,
+ FPS = 100;
 
 let state = {
  is_pressed: false,
@@ -121,19 +121,15 @@ class SceneController {
   */
  constructor(wasm_instance, scene) {
    // Instance properties
-   this.wasm_exports = wasm_instance.exports;
+   this.wasm_interface = new WasmInterface(wasm_instance, scene);
    this.scene = scene;
    this.wasm_memory = wasm_memory;
    this.vectors = [];
    this.shapes = [];
    this.cameras = [];
-   this.shapes_map = {
-     Cube: scene.cube_fn_ptr,
-     Pyramid: scene.pyramid_fn_ptr,
-     Sphere: scene.sphere_fn_ptr,
-     Cone: scene.cone_fn_ptr,
-   };
-   this.selected_indexes = [];
+   this.selected_vectors = [];
+   this.selected_shapes = [];
+   this.selected_cameras = [];
    this.is_rotating = false;
    this.rotation_interval = null;
    // Event listeners
@@ -174,7 +170,7 @@ class SceneController {
    if (!state.is_pressed) return;
 
    const { left, top, width, height } = canvas.getBoundingClientRect();
-   this.setAngles(
+   this.wasm_interface.setAngles(
      ((e.clientY - top) * Math.PI * 2) / height,
      ((e.clientX - left) * Math.PI * 2) / width
    );
@@ -213,7 +209,7 @@ class SceneController {
      }
    } else if (e.touches.length === 1 && state.is_pressed) {
      const { left, top, width, height } = canvas.getBoundingClientRect();
-     this.setAngles(
+     this.wasm_interface.setAngles(
        ((e.touches.item(0).clientY - top) * Math.PI * 2) / height,
        ((e.touches.item(0).clientX - left) * Math.PI * 2) / width
      );
@@ -221,111 +217,107 @@ class SceneController {
    e.preventDefault();
  }
 
- setAngles(/** @type { number } */ p_angle, /** @type { number } */ y_angle) {
-   this.wasm_exports.setAngles(
-     this.scene.ptr,
-     this.scene.set_angles_fn_ptr,
-     p_angle,
-     y_angle
-   );
- }
-
  handleWheel(/** @type { WheelEvent }*/ e) {
    const zoom_delta = -e.deltaY / CONFIG.ZOOM_SENSITIVITY;
-   this.wasm_exports.setZoom(
-     this.scene.ptr,
-     this.scene.zoom_fn_ptr,
-     zoom_delta
-   );
+   this.wasm_interface.setZoom(zoom_delta);
  }
 
  insertVector(x, y, z) {
    const [xf, yf, zf] = [parseFloat(x), parseFloat(y), parseFloat(z)];
    if ([xf, yf, zf].some(isNaN)) return;
 
-   this.wasm_exports.insertVector(
-     this.scene.ptr,
-     this.scene.insert_vector_fn_ptr,
-     xf,
-     yf,
-     zf
-   );
+   this.wasm_interface.insertVector(xf, yf, zf);
    this.vectors.push({ x: xf, y: yf, z: zf });
    this.updateTable();
  }
 
  insertCamera(x, y, z) {
-   this.wasm_exports.insertCamera(
-     this.scene.ptr,
-     this.scene.insert_camera_fn_ptr,
+   this.wasm_interface.insertCamera(
      parseFloat(x) || 0,
      parseFloat(y) || 0,
      parseFloat(z) || 0
    );
-   // this.cameras.push({ x: xf, y: yf, z: zf });
    this.cameras.push(`Camera@${this.cameras.length}`);
    this.updateTable();
  }
 
  insertShape(/** @type { String } */ shape) {
-   if (!this.shapes_map[shape]) throw new Error("Shape is not");
-   this.wasm_exports[`insert${shape}`](this.scene.ptr, this.shapes_map[shape]);
+   this.wasm_interface.insertShape(shape);
    this.shapes.push(shape);
    this.updateTable();
  }
 
- insertCube() {
-   this.insertShape("Cube");
- }
-
- insertPyramid() {
-   this.insertShape("Pyramid");
- }
-
- insertSphere() {
-   this.insertShape("Sphere");
- }
-
- insertCone() {
-   this.insertShape("Cone");
- }
-
  clear() {
    this.clearTable();
-   this.wasm_exports.clear(this.scene.ptr, this.scene.clear_fn_ptr);
-   this.selected_indexes = [];
+   this.wasm_interface.clear();
    this.vectors = [];
    this.shapes = [];
    this.cameras = [];
+   this.updateSelectedIndexes();
  }
 
  setResolution(/** @type { number } */ resolution) {
-   this.wasm_exports.setResolution(
-     this.scene.ptr,
-     this.scene.set_res_fn_ptr,
-     resolution
-   );
+   this.wasm_interface.setResolution(resolution);
+ }
+
+ scale(factor) {
+   if (isNaN(parseFloat(factor))) return;
+   const combined = this.concatAndGetSelected();
+   const len = combined.length;
+
+   const shorts =
+     (this.selected_vectors.length << 16) + this.selected_shapes.length;
+
+   if (len === 0) return;
+
+   const s_step = Math.pow(factor, 1 / FRAMES);
+
+   const buffer = new Uint32Array(wasm_memory.buffer);
+   const offset = buffer.length - len;
+   buffer.set(combined, offset);
+
+   const s_interval = setInterval(() => {
+     this.wasm_interface.scale(
+       offset * 4, // u32 4 bytes pointer alignment
+       len,
+       shorts,
+       s_step
+     );
+   }, INTERVAL);
+   setTimeout(() => clearInterval(s_interval), FRAMES * INTERVAL);
+
+   this.selected_vectors.forEach((idx) => {
+     let { x, y, z } = this.vectors[idx];
+     x *= factor;
+     y *= factor;
+     z *= factor;
+     this.vectors[idx] = { x, y, z };
+   });
+
+   this.updateTable();
  }
 
  rotate(angle_x, angle_y, angle_z) {
-   const len = this.selected_indexes.length;
+   const combined = this.concatAndGetSelected();
+
+   const len = combined.length;
    if (len === 0 || [angle_x, angle_y, angle_z].some(isNaN)) {
      this.toggleAutoRotation();
      return;
    }
 
-   let count = 0;
+   const shorts =
+     (this.selected_vectors.length << 16) + this.selected_shapes.length;
+
    const buffer = new Uint32Array(this.wasm_memory.buffer);
    const offset = buffer.length - len;
-
-   buffer.set(this.selected_indexes, offset);
+   buffer.set(combined, offset);
 
    const rotateAxis = (axis, step) => {
-     this.wasm_exports.rotate(
-       this.scene.ptr,
-       this.scene.rotate_fn_ptr,
+     this.wasm_interface.rotate(
        offset * 4,
        len,
+       shorts,
        axis === "x" ? step : 0,
        axis === "y" ? step : 0,
        axis === "z" ? step : 0
@@ -333,29 +325,30 @@ class SceneController {
    };
 
    const r_step = {
-     x: angle_x / frames,
-     y: angle_y / frames,
-     z: angle_z / frames,
+     x: angle_x / FRAMES,
+     y: angle_y / FRAMES,
+     z: angle_z / FRAMES,
    };
 
    const flags =
      0 | (r_step.x ? 1 : 0) | (r_step.y ? 2 : 0) | (r_step.z ? 4 : 0);
 
+   let count = 0;
    const r_interval = setInterval(() => {
-     if (count < frames) {
+     if (count < FRAMES) {
        if ((flags & 1) == 1) rotateAxis("x", r_step.x);
-       else count += frames;
-     } else if (count < frames * 2) {
+       else count += FRAMES;
+     } else if (count < FRAMES * 2) {
        if ((flags & 2) == 2) rotateAxis("y", r_step.y);
-       else count += frames;
-     } else if (count < frames * 3) {
+       else count += FRAMES;
+     } else if (count < FRAMES * 3) {
        if ((flags & 4) == 4) rotateAxis("z", r_step.z);
-       else count += frames;
+       else count += FRAMES;
      } else clearInterval(r_interval);
      count++;
-   }, interval);
+   }, INTERVAL);
 
-   this.selected_indexes.forEach((idx) => {
+   this.selected_vectors.forEach((idx) => {
      let { x, y, z } = this.vectors[idx];
 
      const rotateVector = (x, y, z, angle, axis) => {
@@ -391,71 +384,32 @@ class SceneController {
    this.updateTable();
  }
 
- scale(factor) {
-   if (isNaN(parseFloat(factor))) return;
-
-   const combined = this.selected_vectors.concat(
-     this.selected_shapes,
-     this.selected_cameras
-   );
-
-   const vectors_len = this.selected_vectors.length; // this will crash if these overflow 16 bits
-   const shapes_len = this.selected_shapes.length;
-
-   if (combined.length === 0) return;
-
-   const s_step = Math.pow(factor, 1 / frames);
-
-   const buffer = new Uint32Array(wasm_memory.buffer);
-   const offset = buffer.length - combined.length;
-   buffer.set(combined, offset);
-
-   const s_interval = setInterval(() => {
-     this.wasm_exports.scale(
-       this.scene.ptr,
-       this.scene.scale_fn_ptr,
-       offset * 4, // u32 4 bytes pointer alignment
-       combined.length,
-       (vectors_len << 16) + shapes_len,
-       s_step
-     );
-   }, interval);
-   setTimeout(() => clearInterval(s_interval), frames * interval);
-
-   this.selected_vectors.forEach((idx) => {
-     let { x, y, z } = this.vectors[idx];
-     x *= factor;
-     y *= factor;
-     z *= factor;
-     this.vectors[idx] = { x, y, z };
-   });
-
-   this.updateTable();
- }
-
  translate(dx, dy, dz) {
-   const len = this.selected_indexes.length;
+   const combined = this.concatAndGetSelected();
+   const len = combined.length;
    if (len === 0 || [dx, dy, dz].some(isNaN)) return;
 
-   const t_step = { x: dx / frames, y: dy / frames, z: dz / frames };
-   const buffer = new Uint32Array(wasm_memory.buffer);
-   const offset = buffer.length - len;
+   const shorts =
+     (this.selected_vectors.length << 16) + this.selected_shapes.length;
 
-   buffer.set(this.selected_indexes, offset);
+   const buffer = new Uint32Array(this.wasm_memory.buffer);
+   const offset = buffer.length - len;
+   buffer.set(combined, offset);
+   
+   const t_step = { x: dx / FRAMES, y: dy / FRAMES, z: dz / FRAMES };
    const t_interval = setInterval(() => {
-     this.wasm_exports.translate(
-       this.scene.ptr,
-       this.scene.translate_fn_ptr,
+     this.wasm_interface.translate(
        offset * 4,
        len,
+       shorts,
        t_step.x,
        t_step.y,
        t_step.z
      );
-   }, interval);
-   setTimeout(() => clearInterval(t_interval), frames * interval);
+   }, INTERVAL);
+   setTimeout(() => clearInterval(t_interval), FRAMES * INTERVAL);
 
-   this.selected_indexes.forEach((idx) => {
+   this.selected_vectors.forEach((idx) => {
      let { x, y, z } = this.vectors[idx];
      x += parseFloat(dx) || 0;
      y += parseFloat(dy) || 0;
@@ -529,18 +483,18 @@ class SceneController {
    this.selected_shapes = Array.from(shape_items).map((shape) =>
      Array.from(shape.parentElement.children).indexOf(shape)
    );
-   this.selected_cameras = Array.from(camera_items).map((camera) =>
+   const new_selected_cameras = Array.from(camera_items).map((camera) =>
      Array.from(camera.parentElement.children).indexOf(camera)
    );
-   const len = this.selected_cameras.length;
-   console.log(len);
-   if (len > 0) {
-     this.wasm_exports.setCamera(
-       this.scene.ptr,
-       this.scene.set_camera_fn_ptr,
-       len - 1
-     );
-   }
+   new_selected_cameras.forEach((index) => {
+     if (!this.selected_cameras.includes(index)) {
+       this.wasm_interface.setCamera(index);
+     }
+   });
+
+   if(new_selected_cameras.length === 0) this.wasm_interface.setCamera(-1);
+
+   this.selected_cameras = new_selected_cameras;
  }
 
  toggleAutoRotation() {
@@ -554,13 +508,10 @@ class SceneController {
      let y_angle = 0;
 
      this.rotation_interval = setInterval(() => {
-       const p_angle = wasm_instance.exports.getPitch(
-         scene.ptr,
-         scene.get_pitch_fn_ptr
-       );
+       const p_angle = this.wasm_interface.getPitch();
        y_angle = (y_angle + 0.03) % (Math.PI * 2);
-       this.setAngles(p_angle, y_angle);
-     }, interval);
+       this.wasm_interface.setAngles(p_angle, y_angle);
+     }, INTERVAL);
    }
  }
 
@@ -572,6 +523,126 @@ class SceneController {
    vectors_column.innerHTML = "";
    shapes_column.innerHTML = "";
    cameras_column.innerHTML = "";
+ }
+
+ concatAndGetSelected() {
+   return this.selected_vectors.concat(
+     this.selected_shapes,
+     this.selected_cameras
+   );
+ }
+}
+
+class WasmInterface {
+ constructor(wasm_instance, scene) {
+   this.wasm_exports = wasm_instance.exports;
+   this.scene = scene;
+ }
+
+ setAngles(p_angle, y_angle) {
+   this.wasm_exports.setAngles(
+     this.scene.ptr,
+     this.scene.set_angles_fn_ptr,
+     p_angle,
+     y_angle
+   );
+ }
+
+ setZoom(zoom_delta) {
+   this.wasm_exports.setZoom(
+     this.scene.ptr,
+     this.scene.zoom_fn_ptr,
+     zoom_delta
+   );
+ }
+
+ getPitch() {
+   return wasm_instance.exports.getPitch(
+     scene.ptr,
+     scene.get_pitch_fn_ptr
+   );
+ }
+
+ insertVector(x, y, z) {
+   this.wasm_exports.insertVector(
+     this.scene.ptr,
+     this.scene.insert_vector_fn_ptr,
+     x,
+     y,
+     z
+   );
+ }
+
+ insertCamera(x, y, z) {
+   this.wasm_exports.insertCamera(
+     this.scene.ptr,
+     this.scene.insert_camera_fn_ptr,
+     x,
+     y,
+     z
+   );
+ }
+
+ insertShape(shape) {
+   const shapeFnPtr = this.scene[`${shape.toLowerCase()}_fn_ptr`];
+   this.wasm_exports[`insert${shape}`](this.scene.ptr, shapeFnPtr);
+ }
+
+ clear() {
+   this.wasm_exports.clear(this.scene.ptr, this.scene.clear_fn_ptr);
+ }
+
+ setResolution(resolution) {
+   this.wasm_exports.setResolution(
+     this.scene.ptr,
+     this.scene.set_res_fn_ptr,
+     resolution
+   );
+ }
+
+ setCamera(index) {
+   this.wasm_exports.setCamera(
+     this.scene.ptr,
+     this.scene.set_camera_fn_ptr,
+     index
+   );
+ }
+
+ rotate(indexes_ptr, indexes_len, shorts, x, y, z) {
+   this.wasm_exports.rotate(
+     this.scene.ptr,
+     this.scene.rotate_fn_ptr,
+     indexes_ptr,
+     indexes_len,
+     shorts,
+     x,
+     y,
+     z
+   );
+ }
+
+ scale(indexes_ptr, indexes_len, shorts, factor) {
+   this.wasm_exports.scale(
+     this.scene.ptr,
+     this.scene.scale_fn_ptr,
+     indexes_ptr,
+     indexes_len,
+     shorts,
+     factor
+   );
+ }
+
+ translate(indexes_ptr, indexes_len, shorts, dx, dy, dz) {
+   this.wasm_exports.translate(
+     this.scene.ptr,
+     this.scene.translate_fn_ptr,
+     indexes_ptr,
+     indexes_len,
+     shorts,
+     dx,
+     dy,
+     dz
+   );
  }
 }
 
@@ -642,22 +713,22 @@ function createButtonListeners(/** @type { SceneController } */ scene_handler) {
      scene_handler.rotate(input1.value, input2.value, input3.value);
      input1.value = input2.value = input3.value = "";
    },
-   () => scene_handler.insertCube(),
+   () => scene_handler.insertShape("Cube"),
    () => console.log("Toggle"),
    () => {
      scene_handler.scale(input1.value);
      input1.value = "";
    },
-   () => scene_handler.insertPyramid(),
+   () => scene_handler.insertShape("Pyramid"),
    () => {},
    () => {
      scene_handler.translate(input1.value, input2.value, input3.value);
      input1.value = input2.value = input3.value = "";
    },
-   () => scene_handler.insertSphere(),
+   () => scene_handler.insertShape("Sphere"),
    () => {},
    () => {},
-   () => scene_handler.insertCone(),
+   () => scene_handler.insertShape("Cone"),
    () => scene_handler.project(),
    () => {},
    () => {
@@ -933,7 +1004,7 @@ const env = {
  run: function (ptr, fnPtr) {
    function frame() {
      call(ptr, fnPtr);
-     setTimeout(() => requestAnimationFrame(frame), 1000 / fps);
+     setTimeout(() => requestAnimationFrame(frame), 1000 / FPS);
    }
    requestAnimationFrame(frame);
    throw new Error("Not an error");

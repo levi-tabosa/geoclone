@@ -184,7 +184,7 @@ pub const State = struct {
             for (shapes) |s| {
                 const shapes_buffer = g.VertexBuffer(V3).init(s);
                 defer shapes_buffer.deinit();
-                self.geoc.draw(V3, self.shapes_program, shapes_buffer, g.DrawMode.LineLoop);
+                self.geoc.draw(V3, self.shapes_program, shapes_buffer, g.DrawMode.TriangleFan);
             }
         }
     }
@@ -192,7 +192,7 @@ pub const State = struct {
     fn drawCameras(self: Self) void {
         if (self.scene.cameras) |cameras| {
             for (cameras) |camera| {
-                const cameras_buffer = g.VertexBuffer(V3).init(camera); //TODO: fix
+                const cameras_buffer = g.VertexBuffer(V3).init(camera.shape); //TODO: fix
                 defer cameras_buffer.deinit();
                 self.geoc.draw(V3, self.cameras_program, cameras_buffer, g.DrawMode.Line_loop);
             }
@@ -222,8 +222,15 @@ fn setAnglesFn(ptr: *anyopaque, p_angle: f32, y_angle: f32) callconv(.C) void {
     scene.setYaw(y_angle);
     scene.updateViewMatrix();
 
-    const state: *State = @fieldParentPtr("scene", @constCast(&scene));
-    state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
+    @as(
+        *State,
+        @fieldParentPtr("scene", @constCast(&scene)),
+    ).geoc.uniformMatrix4fv(
+        "view_matrix",
+        false,
+        &scene.view_matrix,
+    );
+    // state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
 
 // fn sliceFromStringLiteral(str: []const u8) []const u8 { // :)
@@ -283,6 +290,14 @@ fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
 fn setCameraFn(ptr: *anyopaque, index: usize) callconv(.C) void {
     const scene: *Scene = @ptrCast(@alignCast(ptr));
     scene.setCamera(index);
+    @as(
+        *State,
+        @fieldParentPtr("scene", @constCast(&scene)),
+    ).geoc.uniformMatrix4fv(
+        "view_matrix",
+        false,
+        &scene.view_matrix,
+    );
     // const state: *State = @fieldParentPtr("scene", @constCast(&scene));
     // state.axis_buffer.deinit();
     // state.grid_buffer.deinit();
@@ -290,16 +305,27 @@ fn setCameraFn(ptr: *anyopaque, index: usize) callconv(.C) void {
     // state.grid_buffer = g.VertexBuffer(V3).init(scene.grid);
 }
 
-fn scaleFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, sizes: u32, factor: f32) callconv(.C) void {
-    Scene.scale(@ptrCast(@alignCast(ptr)), idxs_ptr, idxs_len, sizes, factor);
+fn scaleFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, factor: f32) callconv(.C) void {
+    Scene.scale(@ptrCast(@alignCast(ptr)), idxs_ptr, idxs_len, shorts, factor);
 }
 
-fn rotateFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, x: f32, y: f32, z: f32) callconv(.C) void {
-    Scene.rotate(@ptrCast(@alignCast(ptr)), idxs_ptr, idxs_len, x, y, z);
+fn rotateFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, x: f32, y: f32, z: f32) callconv(.C) void {
+    Scene.rotate(@ptrCast(@alignCast(ptr)), idxs_ptr, idxs_len, shorts, x, y, z);
 }
 
-fn translateFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, dx: f32, dy: f32, dz: f32) callconv(.C) void {
-    Scene.translate(@ptrCast(@alignCast(ptr)), idxs_ptr, idxs_len, dx, dy, dz);
+fn translateFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, dx: f32, dy: f32, dz: f32) callconv(.C) void { //TODO: make this animate
+    // Scene.translate(@ptrCast(@alignCast(ptr)), idxs_ptr, idxs_len, shorts, dx, dy, dz);
+    const scene: *Scene = @ptrCast(@alignCast(ptr));
+    scene.translate(idxs_ptr, idxs_len, shorts, dx, dy, dz);
+
+    @as(
+        *State,
+        @fieldParentPtr("scene", @constCast(&scene)),
+    ).geoc.uniformMatrix4fv(
+        "view_matrix",
+        false,
+        &scene.camera.createViewMatrix(),
+    );
 }
 
 pub fn main() void {

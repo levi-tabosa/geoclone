@@ -155,28 +155,30 @@ export fn scale(
     scale_fn_ptr(ptr, indexes_ptr, indexes_len, shorts, factor);
 }
 
-export fn translate(
-    ptr: *anyopaque,
-    translate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
-    indexes_ptr: [*]const u32,
-    indexes_len: usize,
-    dx: f32,
-    dy: f32,
-    dz: f32,
-) void {
-    translate_fn_ptr(ptr, indexes_ptr, indexes_len, dx, dy, dz);
-}
-
 export fn rotate(
     ptr: *anyopaque,
-    rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
+    rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
     indexes_ptr: [*]const u32,
     indexes_len: usize,
+    shorts: u32,
     x: f32,
     y: f32,
     z: f32,
 ) void {
-    rotate_fn_ptr(ptr, indexes_ptr, indexes_len, x, y, z);
+    rotate_fn_ptr(ptr, indexes_ptr, indexes_len, shorts, x, y, z);
+}
+
+export fn translate(
+    ptr: *anyopaque,
+    translate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
+    indexes_ptr: [*]const u32,
+    indexes_len: usize,
+    shorts: u32,
+    dx: f32,
+    dy: f32,
+    dz: f32,
+) void {
+    translate_fn_ptr(ptr, indexes_ptr, indexes_len, shorts, dx, dy, dz);
 }
 
 pub fn log(message: []const u8) void {

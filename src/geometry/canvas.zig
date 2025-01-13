@@ -132,10 +132,10 @@ pub const Camera = struct {
     target: V3 = V3{ .coords = .{ 0.0, 0.0, 0.0 } },
     up: V3 = V3{ .coords = .{ 0.0, 0.0, 1.0 } },
     radius: ?f32 = null,
-    // shape: []V3,
+    // shape: []V3, TODO: implement
 
     pub fn init(allocator: Allocator, position: V3, radius: ?f32) Self {
-        _ = allocator; //use to alloc shape
+        _ = allocator;
         return .{
             .pos = position,
             .radius = radius,
@@ -353,7 +353,7 @@ pub const Scene = struct {
         }
         if (self.cameras) |cameras| {
             self.allocator.free(cameras);
-            self.shapes = null;
+            self.cameras = null;
         }
     }
 
@@ -385,27 +385,30 @@ pub const Scene = struct {
         };
     }
 
-    pub fn setCamera(self: *Self, index: usize) void {
-        _LOGF(self.allocator, "{} {}", .{ index, self.cameras.?[index] });
-        self.camera = self.cameras.?[index];
+    pub fn setCamera(self: *Self, index: usize) void { // TODO: rework this part, maybe even move view_matrix to other example
+        if (self.cameras) |cameras| {
+            _LOGF(self.allocator, "index : {}", .{index});
+            if (index < cameras.len) { // stink
+                self.camera = cameras[index];
+            } else {
+                self.camera.radius = 10;
+                self.camera.target = .{ .coords = .{ 0, 0, 0 } };
+            }
+        }
         self.updateViewMatrix();
     }
 
-    pub fn scale(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, sizes: u32, factor: f32) void {
-        const l = sizes >> 16;
-        const r = sizes & 65535;
+    pub fn scale(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, factor: f32) void { // maybe assert
+        const l = shorts >> 16;
+        const r = shorts & 65535;
 
-        for (0..l) |i| {
-            const idx = idxs_ptr[i] * 2;
-
-            for (&self.vectors.?[idx].coords) |*value| {
+        for (idxs_ptr[0..l]) |idx| {
+            for (&self.vectors.?[idx * 2].coords) |*value| {
                 value.* *= factor;
             }
         }
 
-        for (l..l + r) |i| {
-            const idx = idxs_ptr[i];
-
+        for (idxs_ptr[l .. l + r]) |idx| {
             for (self.shapes.?[idx]) |*vertex| {
                 for (&vertex.coords) |*value| {
                     value.* *= factor;
@@ -413,29 +416,54 @@ pub const Scene = struct {
             }
         }
 
-        for (l + r..idxs_len) |i| {
-            const idx = idxs_ptr[i];
-
+        for (idxs_ptr[l + r .. idxs_len]) |idx| {
             for (&self.cameras.?[idx].pos.coords) |*value| {
                 value.* *= factor;
             }
         }
     }
 
-    pub fn rotate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, x: f32, y: f32, z: f32) void {
-        for (0..idxs_len) |i| {
-            const idx = idxs_ptr[i] * 2;
-            rotXYZ(&self.vectors.?[idx], x, y, z);
+    pub fn rotate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, x: f32, y: f32, z: f32) void {
+        const l = shorts >> 16;
+        const r = shorts & 65535;
+
+        for (idxs_ptr[0..l]) |idx| {
+            rotXYZ(&self.vectors.?[idx * 2], x, y, z);
+        }
+
+        for (idxs_ptr[l .. l + r]) |idx| {
+            for (self.shapes.?[idx]) |*vertex| {
+                rotXYZ(vertex, x, y, z);
+            }
+        }
+
+        for (idxs_ptr[l + r .. idxs_len]) |idx| {
+            rotXYZ(&self.cameras.?[idx].pos, x, y, z);
         }
     }
 
-    pub fn translate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, dx: f32, dy: f32, dz: f32) void {
-        for (0..idxs_len) |i| {
-            const idx = idxs_ptr[i] * 2;
+    pub fn translate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, dx: f32, dy: f32, dz: f32) void {
+        const l = shorts >> 16;
+        const r = shorts & 65535;
 
-            self.vectors.?[idx].coords[0] += dx;
-            self.vectors.?[idx].coords[1] += dy;
-            self.vectors.?[idx].coords[2] += dz;
+        for (idxs_ptr[0..l]) |idx| {
+            self.vectors.?[idx * 2].coords[0] += dx;
+            self.vectors.?[idx * 2].coords[1] += dy;
+            self.vectors.?[idx * 2].coords[2] += dz;
+        }
+
+        for (idxs_ptr[l .. l + r]) |idx| {
+            for (self.shapes.?[idx]) |*vertex| {
+                vertex.coords[0] += dx;
+                vertex.coords[1] += dy;
+                vertex.coords[2] += dz;
+            }
+        }
+
+        for (idxs_ptr[l + r .. idxs_len]) |idx| {
+            self.cameras.?[idx].pos.coords[0] += dx;
+            self.cameras.?[idx].pos.coords[1] += dy;
+            self.cameras.?[idx].pos.coords[2] += dz;
         }
     }
 };
@@ -546,6 +574,6 @@ pub const State = struct {
     set_res_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
     set_camera_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
     scale_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32) callconv(.C) void,
-    rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
-    translate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, f32, f32, f32) callconv(.C) void,
+    rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
+    translate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
 };

@@ -83,26 +83,6 @@ pub const Program = struct {
     }
 };
 
-pub const VAO = struct {
-    const Self = @This();
-
-    platform: platform.VAO,
-
-    pub fn init() Self {
-        return .{
-            .platform = platform.VAO.init(),
-        };
-    }
-
-    pub fn bind(self: Self) void {
-        self.platform.bind();
-    }
-
-    pub fn deinit(self: *Self) void {
-        self.platform.deinit();
-    }
-};
-
 pub fn VertexBuffer(comptime vertex: type) type {
     return struct {
         const Self = @This();
@@ -127,6 +107,42 @@ pub fn VertexBuffer(comptime vertex: type) type {
         }
     };
 }
+
+pub const Interval = struct {
+    const Self = @This();
+
+    platform: platform.Interval,
+
+    pub fn init(timer_handler: *const fn () callconv(.C) void, delay: u32, count: ?u32) Self {
+        return .{
+            .platform = platform.Interval.init(timer_handler, delay, count),
+        };
+    }
+
+    pub fn clear(self: Self) void {
+        self.platform.clear();
+    }
+};
+
+pub const VAO = struct {
+    const Self = @This();
+
+    platform: platform.VAO,
+
+    pub fn init() Self {
+        return .{
+            .platform = platform.VAO.init(),
+        };
+    }
+
+    pub fn bind(self: Self) void {
+        self.platform.bind();
+    }
+
+    pub fn deinit(self: *Self) void {
+        self.platform.deinit();
+    }
+};
 
 pub const State = struct {
     const Self = @This();

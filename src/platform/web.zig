@@ -1,11 +1,12 @@
-const geoclone = @import("../root.zig");
+const geoc = @import("../root.zig");
 const std = @import("std");
-const canvas = geoclone.canvas;
+const canvas = geoc.canvas;
 
 const js = struct { //TODO remove all unused fn
     extern fn init() void;
     extern fn deinit() void;
     extern fn run(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void;
+    extern fn time() f32;
     extern fn _log(ptr: [*]const u8, len: usize) void;
     extern fn initShader(@"type": u32, ptr_source: [*]const u8, ptr_len: u32) i32;
     extern fn deinitShader(js_handle: i32) void;
@@ -26,7 +27,7 @@ const js = struct { //TODO remove all unused fn
         offset: usize,
     ) void;
     extern fn setScene(ptr: *anyopaque) void;
-    extern fn drawArrays(mode: geoclone.DrawMode, first: usize, count: usize) void;
+    extern fn drawArrays(mode: geoc.DrawMode, first: usize, count: usize) void;
     extern fn uniformMatrix4fv(
         location_ptr: [*]const u8,
         location_len: usize,
@@ -181,6 +182,18 @@ export fn translate(
     translate_fn_ptr(ptr, indexes_ptr, indexes_len, shorts, dx, dy, dz);
 }
 
+export fn reflect(
+    ptr: *anyopaque,
+    reflect_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, u8, f32) callconv(.C) void,
+    indexes_ptr: [*]const u32,
+    indexes_len: usize,
+    shorts: u32,
+    coord_idx: u8,
+    factor: f32,
+) void {
+    reflect_fn_ptr(ptr, indexes_ptr, indexes_len, shorts, coord_idx, factor);
+}
+
 pub fn log(message: []const u8) void {
     js._log(message.ptr, message.len);
 }
@@ -190,7 +203,7 @@ pub const Shader = struct {
 
     js_handle: i32,
 
-    pub fn init(geoc_instance: geoclone.Geoc, @"type": geoclone.ShaderType, source: []const u8) Self {
+    pub fn init(geoc_instance: geoc.Geoc, @"type": geoc.ShaderType, source: []const u8) Self {
         _ = geoc_instance;
 
         return .{
@@ -278,7 +291,7 @@ pub const State = struct {
         js.deinit();
     }
 
-    pub fn run(_: Self, state: geoclone.State) void {
+    pub fn run(_: Self, state: geoc.State) void {
         js.run(state.ptr, state.drawFn);
     }
 
@@ -291,7 +304,10 @@ pub const State = struct {
     }
 
     pub fn clear(_: Self, r: f32, g: f32, b: f32, a: f32) void {
-        js.clear(r, g, b, a);
+        _ = r;
+        _ = g;
+        _ = b;
+        _ = a;
     }
 
     pub fn vertexAttributePointer(
@@ -319,7 +335,7 @@ pub const State = struct {
         );
     }
 
-    pub fn drawArrays(_: Self, mode: geoclone.DrawMode, first: usize, count: usize) void {
+    pub fn drawArrays(_: Self, mode: geoc.DrawMode, first: usize, count: usize) void {
         js.drawArrays(mode, first, count);
     }
 

@@ -50,6 +50,7 @@ pub const State = struct {
             .scale_fn_ptr = scaleFn,
             .rotate_fn_ptr = rotateFn,
             .translate_fn_ptr = translateFn,
+            .reflect_fn_ptr = reflectFn,
         };
         geoc_instance.setScene(s);
 
@@ -230,12 +231,7 @@ fn setAnglesFn(ptr: *anyopaque, p_angle: f32, y_angle: f32) callconv(.C) void {
         false,
         &scene.view_matrix,
     );
-    // state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
-
-// fn sliceFromStringLiteral(str: []const u8) []const u8 { // :)
-//     return str;
-// }
 
 fn getPitch(ptr: *anyopaque) callconv(.C) f32 {
     return @as(*Scene, @ptrCast(@alignCast(ptr))).pitch;
@@ -290,6 +286,8 @@ fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
 fn setCameraFn(ptr: *anyopaque, index: usize) callconv(.C) void {
     const scene: *Scene = @ptrCast(@alignCast(ptr));
     scene.setCamera(index);
+    scene.updateViewMatrix();
+
     @as(
         *State,
         @fieldParentPtr("scene", @constCast(&scene)),
@@ -305,18 +303,16 @@ fn setCameraFn(ptr: *anyopaque, index: usize) callconv(.C) void {
     // state.grid_buffer = g.VertexBuffer(V3).init(scene.grid);
 }
 
-fn scaleFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, factor: f32) callconv(.C) void {
-    Scene.scale(@ptrCast(@alignCast(ptr)), idxs_ptr, idxs_len, shorts, factor);
-}
-
-fn rotateFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, x: f32, y: f32, z: f32) callconv(.C) void {
-    Scene.rotate(@ptrCast(@alignCast(ptr)), idxs_ptr, idxs_len, shorts, x, y, z);
-}
-
-fn translateFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, dx: f32, dy: f32, dz: f32) callconv(.C) void { //TODO: make this animate
-    // Scene.translate(@ptrCast(@alignCast(ptr)), idxs_ptr, idxs_len, shorts, dx, dy, dz);
+fn scaleFn(
+    ptr: *anyopaque,
+    idxs_ptr: [*]const u32,
+    idxs_len: usize,
+    shorts: u32,
+    factor: f32,
+) callconv(.C) void {
     const scene: *Scene = @ptrCast(@alignCast(ptr));
-    scene.translate(idxs_ptr, idxs_len, shorts, dx, dy, dz);
+    scene.scale(idxs_ptr, idxs_len, shorts, factor);
+    scene.updateViewMatrix();
 
     @as(
         *State,
@@ -324,8 +320,78 @@ fn translateFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, shorts:
     ).geoc.uniformMatrix4fv(
         "view_matrix",
         false,
-        &scene.camera.createViewMatrix(),
+        &scene.view_matrix,
     );
+}
+
+fn rotateFn(
+    ptr: *anyopaque,
+    idxs_ptr: [*]const u32,
+    idxs_len: usize,
+    shorts: u32,
+    x: f32,
+    y: f32,
+    z: f32,
+) callconv(.C) void {
+    const scene: *Scene = @ptrCast(@alignCast(ptr));
+    scene.rotate(idxs_ptr, idxs_len, shorts, x, y, z);
+    scene.updateViewMatrix();
+
+    @as(
+        *State,
+        @fieldParentPtr("scene", @constCast(&scene)),
+    ).geoc.uniformMatrix4fv(
+        "view_matrix",
+        false,
+        &scene.view_matrix,
+    );
+}
+
+fn translateFn(
+    ptr: *anyopaque,
+    idxs_ptr: [*]const u32,
+    idxs_len: usize,
+    shorts: u32,
+    dx: f32,
+    dy: f32,
+    dz: f32,
+) callconv(.C) void { //TODO: make this animate
+    const scene: *Scene = @ptrCast(@alignCast(ptr));
+    scene.translate(idxs_ptr, idxs_len, shorts, dx, dy, dz);
+    scene.updateViewMatrix();
+
+    @as(
+        *State,
+        @fieldParentPtr("scene", @constCast(&scene)),
+    ).geoc.uniformMatrix4fv(
+        "view_matrix",
+        false,
+        &scene.view_matrix,
+    );
+}
+
+fn reflectFn(
+    ptr: *anyopaque,
+    idxs_ptr: [*]const u32,
+    idxs_len: usize,
+    shorts: u32,
+    coord_idx: u8,
+    factor: f32,
+) callconv(.C) void {
+    const scene: *Scene = @ptrCast(@alignCast(ptr));
+    scene.reflect(idxs_ptr, idxs_len, shorts, coord_idx, factor);
+    scene.updateViewMatrix();
+
+    @as(
+        *State,
+        @fieldParentPtr("scene", @constCast(&scene)),
+    ).geoc.uniformMatrix4fv(
+        "view_matrix",
+        false,
+        &scene.view_matrix,
+    );
+    // const state: *State = @fieldParentPtr("scene", @constCast(&scene));
+    // state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
 
 pub fn main() void {

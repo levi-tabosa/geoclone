@@ -16,6 +16,8 @@ pub const std_options = .{
     .logFn = g.logFn,
 };
 
+fn dummy() callconv(.C) void {}
+
 const V3 = canvas.V3;
 
 pub const State = struct {
@@ -53,28 +55,32 @@ pub const State = struct {
             .reflect_fn_ptr = reflectFn,
         };
         geoc_instance.setScene(s);
+        const interval = g.Interval.init(dummy, 30, 25);
+        _ = interval;
 
-        _LOGF(
-            geoc_instance.allocator,
-            "Size of Scene.State: {} \nAlign of Scene.State:{}",
-            .{
-                @sizeOf(@TypeOf(s)),
-                @alignOf(@TypeOf(s)),
-            },
-        );
-        inline for (std.meta.fields(canvas.State)) |field| {
-            _LOGF(
-                geoc_instance.allocator,
-                "Offset of {s}:\t{}\nAlignment :\t{}\nType :\t{any}\nValue in state:\t{}",
-                .{
-                    field.name,
-                    @offsetOf(canvas.State, field.name),
-                    field.alignment,
-                    field.type,
-                    @intFromPtr(@field(s, field.name)),
-                },
-            );
-        }
+        // defer interval.clear();
+
+        // _LOGF(
+        //     geoc_instance.allocator,
+        //     "Size of Scene.State: {} \nAlign of Scene.State:{}",
+        //     .{
+        //         @sizeOf(@TypeOf(s)),
+        //         @alignOf(@TypeOf(s)),
+        //     },
+        // );
+        // inline for (std.meta.fields(canvas.State)) |field| {
+        //     _LOGF(
+        //         geoc_instance.allocator,
+        //         "Offset of {s}:\t{}\nAlignment :\t{}\nType :\t{any}\nValue in state:\t{}",
+        //         .{
+        //             field.name,
+        //             @offsetOf(canvas.State, field.name),
+        //             field.alignment,
+        //             field.type,
+        //             @intFromPtr(@field(s, field.name)),
+        //         },
+        //     );
+        // }
 
         const vertex_shader_source =
             \\uniform mat4 projection_matrix;
@@ -355,7 +361,7 @@ fn translateFn(
     dx: f32,
     dy: f32,
     dz: f32,
-) callconv(.C) void { //TODO: make this animate
+) callconv(.C) void {
     const scene: *Scene = @ptrCast(@alignCast(ptr));
     scene.translate(idxs_ptr, idxs_len, shorts, dx, dy, dz);
     scene.updateViewMatrix();

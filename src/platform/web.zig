@@ -7,7 +7,7 @@ const js = struct { //TODO remove all unused fn
     extern fn deinit() void;
     extern fn run(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void;
     extern fn time() f32;
-    extern fn _log(ptr: [*]const u8, len: usize) void;
+    extern fn print(ptr: [*]const u8, len: usize) void;
     extern fn initShader(@"type": u32, ptr_source: [*]const u8, ptr_len: u32) i32;
     extern fn deinitShader(js_handle: i32) void;
     extern fn initProgram(shader1_handle: i32, shader2_handle: i32) i32;
@@ -16,6 +16,12 @@ const js = struct { //TODO remove all unused fn
     extern fn initVertexBuffer(data_ptr: [*]const u8, data_len: usize) i32;
     extern fn deinitVertexBuffer(js_handle: i32) void;
     extern fn bindVertexBuffer(js_handle: i32) void;
+    extern fn setInterval(
+        timer_handler: *const fn () callconv(.C) void,
+        delay: u32,
+        count: u32,
+    ) i32;
+    extern fn clearInterval(js_handle: i32) void;
     extern fn vertexAttribPointer(
         program_handle: i32,
         name_ptr: [*]const u8,
@@ -43,6 +49,8 @@ export fn draw(
     drawFn(ptr);
 }
 
+export fn reflectHandler() void {} //TODO: MAYBE REMOVE
+
 export fn setAngles(
     ptr: *anyopaque,
     set_angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
@@ -66,14 +74,6 @@ export fn getYaw(
     return get_yaw_fn_ptr(ptr);
 }
 
-export fn setZoom(
-    ptr: *anyopaque,
-    zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
-    zoom: f32,
-) void {
-    zoom_fn_ptr(ptr, zoom);
-}
-
 export fn insertVector(
     ptr: *anyopaque,
     insert_vector_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
@@ -82,6 +82,14 @@ export fn insertVector(
     z: f32,
 ) void {
     insert_vector_fn_ptr(ptr, x, y, z);
+}
+
+export fn setZoom(
+    ptr: *anyopaque,
+    zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
+    zoom: f32,
+) void {
+    zoom_fn_ptr(ptr, zoom);
 }
 
 export fn insertCamera(
@@ -195,7 +203,7 @@ export fn reflect(
 }
 
 pub fn log(message: []const u8) void {
-    js._log(message.ptr, message.len);
+    js.print(message.ptr, message.len);
 }
 
 pub const Shader = struct {
@@ -257,6 +265,22 @@ pub const VertexBuffer = struct {
 
     pub fn bind(self: Self) void {
         js.bindVertexBuffer(self.js_handle);
+    }
+};
+
+pub const Interval = struct {
+    const Self = @This();
+
+    js_handle: i32,
+
+    pub fn init(timer_handler: *const fn () callconv(.C) void, delay: u32, count: ?u32) Self {
+        return .{
+            .js_handle = js.setInterval(timer_handler, delay, count orelse 0),
+        };
+    }
+
+    pub fn clear(self: Self) void {
+        js.clearInterval(self.js_handle);
     }
 };
 

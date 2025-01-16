@@ -428,35 +428,25 @@ class SceneController {
 
     const shorts =
       (this.selected_vectors.length << 16) + this.selected_shapes.length;
-
+    const coord_idx = (() => {
+      switch (axis) {
+        case "X":
+          return 0;
+        case "Y":
+          return 1;
+        case "Z":
+          return 2;
+        default:
+          return null;
+      }
+    })();
     const buffer = new Uint32Array(this.wasm_memory.buffer);
     const offset = buffer.length - len;
     buffer.set(combined, offset);
 
-    let count = 0;
-    const reflection_interval = setInterval(() => {
-      console.log("JS : COUNT * INTERVAL :\t" + count * INTERVAL);
-      this.wasm_interface.reflect(
-        offset * 4,
-        len,
-        shorts,
-        (() => {
-          switch (axis) {
-            case "X":
-              return 0;
-            case "Y":
-              return 1;
-            case "Z":
-              return 2;
-            default:
-              return null;
-          }
-        })(),
-        1 - (count++ * 2) / FRAMES
-      );
-      if (count >= FRAMES) clearInterval(reflection_interval);
-    }, INTERVAL);
+    // let count = 0;
 
+    this.wasm_interface.reflect(offset * 4, len, shorts, coord_idx, -1);
     this.selected_vectors.forEach((idx) => {
       let { x, y, z } = this.vectors[idx];
 
@@ -492,8 +482,8 @@ class SceneController {
         vectors_column,
         "vector-item",
         `${vector.x.toFixed(2)},
-        ${vector.y.toFixed(2)},
-        ${vector.z.toFixed(2)}`
+      ${vector.y.toFixed(2)},
+      ${vector.z.toFixed(2)}`
       );
     });
 
@@ -1079,11 +1069,11 @@ const env = {
   setScene: function (ptr) {
     scene.ptr = ptr;
   },
-  _log(ptr, len) {
-    console.log(getStr(ptr, len));
-  },
   time() {
     return performance.now();
+  },
+  print(ptr, len) {
+    console.log(getStr(ptr, len));
   },
   initShader(type, source_ptr, source_len) {
     const shaderType = type === 0 ? webgl.VERTEX_SHADER : webgl.FRAGMENT_SHADER;
@@ -1204,6 +1194,15 @@ const env = {
   bindVertexBuffer(handle) {
     const vertex_buffer = buffers.get(handle) ?? null;
     webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
+  },
+  setInterval(fn_ptr, delay, count) {
+    const interval_handle = setInterval(() => console.log("aaaaaaaaa"), delay);
+    // return setInterval(this.wasm_exports.someFunction(scene.ptr, fn_ptr), delay);
+    if (count > 0) setTimeout(() => clearInterval(interval_handle), count * delay);
+    return interval_handle;
+  },
+  clearInterval(handle) {
+    clearInterval(handle);
   },
   vertexAttribPointer(
     program_handle,

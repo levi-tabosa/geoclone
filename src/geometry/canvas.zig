@@ -129,16 +129,25 @@ pub const Camera = struct {
     const Self = @This();
 
     pos: V3,
-    target: V3 = V3{ .coords = .{ 0.0, 0.0, 0.0 } },
-    up: V3 = V3{ .coords = .{ 0.0, 0.0, 1.0 } },
+    target: V3 = .{ .coords = .{ 0.0, 0.0, 0.0 } },
+    up: V3 = .{ .coords = .{ 0.0, 0.0, 1.0 } },
     radius: ?f32 = null,
-    // shape: []V3, TODO: implement
+    shape: []V3,
 
     pub fn init(allocator: Allocator, position: V3, radius: ?f32) Self {
-        _ = allocator;
+        const shape = allocator.alloc(V3, 8) catch unreachable;
+        shape[0] = .{ .coords = .{ -0.05, -0.05, -0.05 } };
+        shape[1] = .{ .coords = .{ -0.05, -0.05, 0.05 } };
+        shape[2] = .{ .coords = .{ 0.05, -0.05, 0.05 } };
+        shape[3] = .{ .coords = .{ 0.05, -0.05, -0.05 } };
+        shape[4] = .{ .coords = .{ -0.05, 0.05, -0.05 } };
+        shape[5] = .{ .coords = .{ -0.05, 0.05, 0.05 } };
+        shape[6] = .{ .coords = .{ 0.05, 0.05, 0.05 } };
+        shape[7] = .{ .coords = .{ 0.05, 0.05, -0.05 } };
         return .{
             .pos = position,
             .radius = radius,
+            .shape = shape,
         };
     }
 
@@ -273,7 +282,7 @@ pub const Scene = struct {
     }
 
     pub fn setZoom(self: *Scene, zoom_delta: f32) void {
-        self.zoom += zoom_delta; //TODO: MAYBE INCREMENT INSTEAD ??
+        self.zoom += zoom_delta;
         self.updateViewMatrix();
     }
 
@@ -296,6 +305,27 @@ pub const Scene = struct {
     }
 
     pub fn insertCamera(self: *Self, pos_x: f32, pos_y: f32, pos_z: f32) void {
+        _LOGF(
+            self.allocator,
+            "Size of Scene: {} \nAlign of Scene:{}",
+            .{
+                @sizeOf(Scene),
+                @alignOf(Scene),
+            },
+        );
+        inline for (std.meta.fields(Self)) |field| {
+            _LOGF(
+                self.allocator,
+                "Offset of {s}:\t{}\nAlignment :\t{}\nType :\t{any}\nValue in scene:\t{any}",
+                .{
+                    field.name,
+                    @offsetOf(Self, field.name),
+                    field.alignment,
+                    field.type,
+                    @field(self, field.name),
+                },
+            );
+        }
         const len = if (self.cameras) |cameras| cameras.len else 0;
 
         var new_cameras_array = self.allocator.alloc(Camera, len + 1) catch unreachable;
@@ -386,9 +416,9 @@ pub const Scene = struct {
         };
     }
 
-    pub fn setCamera(self: *Self, index: usize) void { // TODO: rework this part, maybe even move view_matrix to other example
+    pub fn setCamera(self: *Self, index: usize) void {
         if (self.cameras) |cameras| {
-            if (index < cameras.len) { // stink
+            if (index < cameras.len) {
                 if (self.camera.radius != null) {
                     self.allocator.destroy(self.camera);
                 }
@@ -472,6 +502,11 @@ pub const Scene = struct {
             self.cameras.?[idx].pos.coords[0] += dx;
             self.cameras.?[idx].pos.coords[1] += dy;
             self.cameras.?[idx].pos.coords[2] += dz;
+            for (self.cameras.?[idx].shape) |*vertex| {
+                vertex.coords[0] += dx;
+                vertex.coords[1] += dy;
+                vertex.coords[2] += dz;
+            }
         }
     }
 

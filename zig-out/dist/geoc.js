@@ -154,7 +154,7 @@ class SceneController {
       passive: true,
     });
     canvas.addEventListener("touchend", this.handleMouseUp, { passive: true });
-    canvas.addEventListener("touchmove", this.handleTouch);
+    canvas.addEventListener("touchmove", this.handleTouch, { passive: true });
     canvas.addEventListener("wheel", this.handleWheel, { passive: true });
   }
 
@@ -297,16 +297,31 @@ class SceneController {
     this.updateTable();
   }
 
-  rotate(angle_x, angle_y, angle_z) {
+  rotate(
+    /** @type {String} */ angle_x,
+    /** @type {String} */ angle_y,
+    /** @type {String} */ angle_z
+  ) {
     const combined = this.concatAndGetSelected();
     const len = combined.length;
-    if (len === 0 || [angle_x, angle_y, angle_z].some(isNaN)) {
+
+    if (
+      len === 0 ||
+      [angle_x, angle_y, angle_z].some(isNaN) ||
+      ((angle_x.length | angle_y.length) | angle_z.length) == 0
+    ) {
       this.toggleAutoRotation();
       return;
     }
 
     const shorts =
       (this.selected_vectors.length << 16) + this.selected_shapes.length;
+
+    const rotation_step = {
+      x: angle_x / FRAMES,
+      y: angle_y / FRAMES,
+      z: angle_z / FRAMES,
+    };
 
     const buffer = new Uint32Array(this.wasm_memory.buffer);
     const offset = buffer.length - len;
@@ -323,10 +338,27 @@ class SceneController {
       );
     };
 
-    const rotation_step = {
-      x: angle_x / FRAMES,
-      y: angle_y / FRAMES,
-      z: angle_z / FRAMES,
+    const rotateVector = (x, y, z, angle, axis) => {
+      switch (axis) {
+        case "x":
+          return {
+            x,
+            y: y * Math.cos(angle) - z * Math.sin(angle),
+            z: y * Math.sin(angle) + z * Math.cos(angle),
+          };
+        case "y":
+          return {
+            x: z * Math.sin(angle) + x * Math.cos(angle),
+            y,
+            z: z * Math.cos(angle) - x * Math.sin(angle),
+          };
+        case "z":
+          return {
+            x: x * Math.cos(angle) - y * Math.sin(angle),
+            y: x * Math.sin(angle) + y * Math.cos(angle),
+            z,
+          };
+      }
     };
 
     const flags =
@@ -352,28 +384,6 @@ class SceneController {
 
     this.selected_vectors.forEach((idx) => {
       let { x, y, z } = this.vectors[idx];
-      const rotateVector = (x, y, z, angle, axis) => {
-        switch (axis) {
-          case "x":
-            return {
-              x,
-              y: y * Math.cos(angle) - z * Math.sin(angle),
-              z: y * Math.sin(angle) + z * Math.cos(angle),
-            };
-          case "y":
-            return {
-              x: z * Math.sin(angle) + x * Math.cos(angle),
-              y,
-              z: z * Math.cos(angle) - x * Math.sin(angle),
-            };
-          case "z":
-            return {
-              x: x * Math.cos(angle) - y * Math.sin(angle),
-              y: x * Math.sin(angle) + y * Math.cos(angle),
-              z,
-            };
-        }
-      };
 
       ({ x, y, z } = rotateVector(x, y, z, angle_z, "z"));
       ({ x, y, z } = rotateVector(x, y, z, angle_y, "y"));
@@ -460,6 +470,8 @@ class SceneController {
         case "Y":
           y = -y;
           break;
+        default:
+          return;
       }
 
       this.vectors[idx] = { x, y, z };
@@ -482,8 +494,8 @@ class SceneController {
         vectors_column,
         "vector-item",
         `${vector.x.toFixed(2)},
-      ${vector.y.toFixed(2)},
-      ${vector.z.toFixed(2)}`
+    ${vector.y.toFixed(2)},
+    ${vector.z.toFixed(2)}`
       );
     });
 
@@ -1126,8 +1138,9 @@ const env = {
 
     for (let i = 0; i < attribute_count; i++) {
       const attribute = webgl.getActiveAttrib(program, i);
-      if (attribute)
+      if (attribute) {
         attributes.set(attribute.name, { index: i, info: attribute });
+      }
     }
 
     const uniform_count = webgl.getProgramParameter(
@@ -1138,7 +1151,9 @@ const env = {
 
     for (let i = 0; i < uniform_count; i++) {
       const uniform = webgl.getActiveUniform(program, i);
-      if (uniform) uniforms.set(uniform.name, uniform);
+      if (uniform) {
+        uniforms.set(uniform.name, uniform);
+      }
     }
 
     webgl.useProgram(program);
@@ -1195,10 +1210,12 @@ const env = {
     const vertex_buffer = buffers.get(handle) ?? null;
     webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
   },
-  setInterval(fn_ptr, delay, count) {
-    const interval_handle = setInterval(() => console.log("aaaaaaaaa"), delay);
-    // return setInterval(this.wasm_exports.someFunction(scene.ptr, fn_ptr), delay);
-    if (count > 0) setTimeout(() => clearInterval(interval_handle), count * delay);
+  setInterval(fn_ptr, delay, timeout) {
+    console.log(fn_ptr, delay, timeout);
+    const interval_handle = setInterval(() => {
+      wasm_instance.exports.intervalCall(fn_ptr);
+    }, delay);
+    if (timeout > 0) setTimeout(() => clearInterval(interval_handle), timeout);
     return interval_handle;
   },
   clearInterval(handle) {

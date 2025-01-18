@@ -49,7 +49,9 @@ export fn draw(
     drawFn(ptr);
 }
 
-export fn reflectHandler() void {} //TODO: MAYBE REMOVE
+export fn intervalCall(fn_ptr: *const fn () callconv(.C) void) void {
+    fn_ptr();
+}
 
 export fn setAngles(
     ptr: *anyopaque,

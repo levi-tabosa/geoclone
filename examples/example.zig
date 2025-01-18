@@ -3,12 +3,12 @@ const std = @import("std");
 const canvas = g.canvas;
 const Scene = canvas.Scene;
 
-fn _log(txt: []const u8) void { //TODO: erase
+fn print(txt: []const u8) void { //TODO: erase
     g.platform.log(txt);
 }
 
 fn _LOGF(allocator: std.mem.Allocator, comptime txt: []const u8, args: anytype) void { //TODO: erase
-    _log(std.fmt.allocPrint(allocator, txt, args) catch unreachable);
+    print(std.fmt.allocPrint(allocator, txt, args) catch unreachable);
 }
 
 pub const std_options = .{
@@ -16,7 +16,9 @@ pub const std_options = .{
     .logFn = g.logFn,
 };
 
-fn dummy() callconv(.C) void {}
+fn dummy() callconv(.C) void {
+    print("aaaaaa");
+}
 
 const V3 = canvas.V3;
 
@@ -54,11 +56,8 @@ pub const State = struct {
             .translate_fn_ptr = translateFn,
             .reflect_fn_ptr = reflectFn,
         };
-        geoc_instance.setScene(s);
-        const interval = g.Interval.init(dummy, 30, 25);
-        _ = interval;
 
-        // defer interval.clear();
+        geoc_instance.setScene(s);
 
         // _LOGF(
         //     geoc_instance.allocator,
@@ -81,6 +80,9 @@ pub const State = struct {
         //         },
         //     );
         // }
+        _LOGF(geoc_instance.allocator, "{}", .{@intFromPtr(&dummy)});
+        const interval = g.Interval.init(dummy, 30, 3000);
+        _ = interval;
 
         const vertex_shader_source =
             \\uniform mat4 projection_matrix;
@@ -100,7 +102,7 @@ pub const State = struct {
         const g_fragment_shader_source =
             \\uniform vec4 color;
             \\void main() {
-            \\    gl_FragColor = vec4(0.8, 0.0, 0.3, 1.0);
+            \\    gl_FragColor = vec4(0.6, 0.6, 0.6, 1.0);
             \\}
         ;
         const v_fragment_shader_source =
@@ -175,7 +177,7 @@ pub const State = struct {
 
         self.drawVectors();
         self.drawShapes();
-        // self.drawCameras();
+        self.drawCameras();
     }
 
     fn drawVectors(self: Self) void {
@@ -201,7 +203,7 @@ pub const State = struct {
             for (cameras) |camera| {
                 const cameras_buffer = g.VertexBuffer(V3).init(camera.shape); //TODO: fix
                 defer cameras_buffer.deinit();
-                self.geoc.draw(V3, self.cameras_program, cameras_buffer, g.DrawMode.Line_loop);
+                self.geoc.draw(V3, self.cameras_program, cameras_buffer, g.DrawMode.LineLoop);
             }
         }
     }
@@ -219,8 +221,7 @@ pub const State = struct {
 };
 
 fn drawFn(ptr: *anyopaque) callconv(.C) void {
-    const state: *State = @ptrCast(@alignCast(ptr));
-    state.draw();
+    @as(*State, @ptrCast(@alignCast(ptr))).draw();
 }
 
 fn setAnglesFn(ptr: *anyopaque, p_angle: f32, y_angle: f32) callconv(.C) void {

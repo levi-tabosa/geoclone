@@ -81,7 +81,7 @@ pub const State = struct {
         //     );
         // }
         _LOGF(geoc_instance.allocator, "{}", .{@intFromPtr(&dummy)});
-        const interval = g.Interval.init(dummy, 30, 3000);
+        const interval = g.Interval.init(@intFromPtr(&dummy), &[_]f32{}, 100, 300);
         _ = interval;
 
         const vertex_shader_source =

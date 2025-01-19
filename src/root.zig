@@ -113,9 +113,9 @@ pub const Interval = struct {
 
     platform: platform.Interval,
 
-    pub fn init(timer_handler: *const fn () callconv(.C) void, delay: u32, count: ?u32) Self {
+    pub fn init(cb_fn_ptr: usize, args: []const f32, delay: u32, count: ?u32) Self {
         return .{
-            .platform = platform.Interval.init(timer_handler, delay, count),
+            .platform = platform.Interval.init(cb_fn_ptr, args, delay, count),
         };
     }
 

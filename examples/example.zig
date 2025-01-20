@@ -16,7 +16,8 @@ pub const std_options = .{
     .logFn = g.logFn,
 };
 
-fn dummy() callconv(.C) void {
+fn dummyFn(ptr: *anyopaque) callconv(.C) void {
+    _ = ptr;
     print("aaaaaa");
 }
 
@@ -80,9 +81,8 @@ pub const State = struct {
         //         },
         //     );
         // }
-        _LOGF(geoc_instance.allocator, "{}", .{@intFromPtr(&dummy)});
-        const interval = g.Interval.init(@intFromPtr(&dummy), &[_]f32{}, 100, 300);
-        _ = interval;
+        // const interval' = g.Interval.init("dummyFn", @intFromPtr(&dummy), &[_]u8{}, 100, 1);
+        // _ = interval;'
 
         const vertex_shader_source =
             \\uniform mat4 projection_matrix;
@@ -256,7 +256,7 @@ fn insertVectorFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
     Scene.insertVector(@ptrCast(@alignCast(ptr)), x, y, z);
 }
 
-fn insertCameraFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
+fn insertCameraFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void { //TODO:crashes tab after clear call on fps camera (FIX)
     Scene.insertCamera(@ptrCast(@alignCast(ptr)), x, y, z);
 }
 
@@ -280,7 +280,7 @@ fn clearFn(ptr: *anyopaque) callconv(.C) void {
     Scene.clear(@ptrCast(@alignCast(ptr)));
 }
 
-fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
+fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void { // TODO: fix crash on set 0
     const scene: *Scene = @ptrCast(@alignCast(ptr));
     scene.setResolution(res);
     // const state: *State = @fieldParentPtr("scene", @constCast(&scene));
@@ -363,7 +363,42 @@ fn translateFn(
     dy: f32,
     dz: f32,
 ) callconv(.C) void {
+    const args = struct {
+        idxs_ptr: [*]const u32,
+        idxs_len: usize,
+        shorts: u32,
+        dx: f32,
+        dy: f32,
+        dz: f32,
+    }{
+        .idxs_ptr = idxs_ptr,
+        .idxs_len = idxs_len,
+        .shorts = shorts,
+        .dx = dx / 25,
+        .dy = dy / 25,
+        .dz = dz / 25,
+    };
+
+    const bytes = std.mem.asBytes(&args);
+    const slice: []const u8 = std.mem.bytesAsSlice(u8, bytes);
+
+    _LOGF(@as(*Scene, @alignCast(@ptrCast(ptr))).allocator, "args : {any}\nzig args slice : {any}", .{ args, slice });
+
+    const handle = g.Interval.init("translate", @intFromPtr(&applyTranslateFn), slice, 30, 25);
+    _ = handle;
+}
+
+fn applyTranslateFn(
+    ptr: *anyopaque,
+    idxs_ptr: [*]const u32,
+    idxs_len: usize,
+    shorts: u32,
+    dx: f32,
+    dy: f32,
+    dz: f32,
+) void {
     const scene: *Scene = @ptrCast(@alignCast(ptr));
+    _LOGF(scene.allocator, "{} {} {} {}\n{} {} {}", .{ @intFromPtr(ptr), @intFromPtr(idxs_ptr), idxs_len, shorts, dx, dy, dz });
     scene.translate(idxs_ptr, idxs_len, shorts, dx, dy, dz);
     scene.updateViewMatrix();
 

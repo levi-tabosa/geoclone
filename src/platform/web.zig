@@ -17,11 +17,13 @@ const js = struct { //TODO remove all unused fn
     extern fn deinitVertexBuffer(js_handle: i32) void;
     extern fn bindVertexBuffer(js_handle: i32) void;
     extern fn setInterval(
-        timer_handler: usize,
-        args_ptr: [*]const f32,
+        cb_name_ptr: [*]const u8,
+        cb_name_len: usize,
+        fn_ptr: usize,
+        args_ptr: [*]const u8,
         args_len: usize,
         delay: u32,
-        count: u32,
+        timeout: u32,
     ) i32;
     extern fn clearInterval(js_handle: i32) void;
     extern fn vertexAttribPointer(
@@ -51,8 +53,8 @@ export fn draw(
     drawFn(ptr);
 }
 
-export fn intervalCall(fn_ptr: *const fn () callconv(.C) void) void { //TODO:REMOVE
-    fn_ptr();
+export fn dummy(ptr: *anyopaque, fn_ptr: *const fn (*anyopaque) callconv(.C) void) void { //TODO:MAYBE REMOVE
+    fn_ptr(ptr);
 }
 
 export fn setAngles(
@@ -277,9 +279,17 @@ pub const Interval = struct {
 
     js_handle: i32,
 
-    pub fn init(cb_fn_ptr: usize, args: []const f32, delay: u32, count: ?u32) Self {
+    pub fn init(cb_name: []const u8, cb_fn_ptr: usize, args: []const u8, delay: u32, count: ?u32) Self {
         return .{
-            .js_handle = js.setInterval(cb_fn_ptr, args.ptr, args.len, delay, count orelse 0),
+            .js_handle = js.setInterval(
+                cb_name.ptr,
+                cb_name.len,
+                cb_fn_ptr,
+                args.ptr,
+                args.len / 4,
+                delay,
+                delay * (count orelse 0),
+            ),
         };
     }
 

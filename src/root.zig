@@ -113,9 +113,15 @@ pub const Interval = struct {
 
     platform: platform.Interval,
 
-    pub fn init(cb_fn_ptr: usize, args: []const f32, delay: u32, count: ?u32) Self {
+    pub fn init(cb_name: []const u8, cb_fn_ptr: usize, args: []const u8, delay: u32, count: ?u32) Self {
         return .{
-            .platform = platform.Interval.init(cb_fn_ptr, args, delay, count),
+            .platform = platform.Interval.init(
+                cb_name,
+                cb_fn_ptr,
+                args,
+                delay,
+                count,
+            ),
         };
     }
 

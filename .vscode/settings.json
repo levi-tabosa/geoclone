@@ -6,6 +6,8 @@
   },
   "window.title": "${dirty}${activeEditorShort}${separator}${rootName}${separator}${profileName}${separator}${appName}${separator}[Branch: setInterval-Zig]",
   "cSpell.words": [
-    "mediump", "deinit"
+    "deinit",
+    "geoc",
+    "mediump"
   ],
 }

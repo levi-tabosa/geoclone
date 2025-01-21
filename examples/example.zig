@@ -1,5 +1,6 @@
 const g = @import("geoc");
 const std = @import("std");
+const mem = std.mem;
 const canvas = g.canvas;
 const Scene = canvas.Scene;
 
@@ -7,7 +8,7 @@ fn print(txt: []const u8) void { //TODO: erase
     g.platform.log(txt);
 }
 
-fn _LOGF(allocator: std.mem.Allocator, comptime txt: []const u8, args: anytype) void { //TODO: erase
+fn _LOGF(allocator: mem.Allocator, comptime txt: []const u8, args: anytype) void { //TODO: erase
     print(std.fmt.allocPrint(allocator, txt, args) catch unreachable);
 }
 
@@ -20,6 +21,31 @@ fn dummyFn(ptr: *anyopaque) callconv(.C) void {
     _ = ptr;
     print("aaaaaa");
 }
+
+pub const SceneState = struct {
+    ptr: *anyopaque,
+    vtable: *const Vtable,
+};
+
+const Vtable = struct {
+    set_angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
+    get_pitch_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
+    get_yaw_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
+    set_zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
+    insert_vector_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
+    insert_camera_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
+    cube_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    pyramid_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    sphere_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    cone_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    set_res_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
+    set_camera_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
+    scale_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32) callconv(.C) void,
+    rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
+    translate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
+    reflect_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, u8) callconv(.C) void,
+};
 
 const V3 = canvas.V3;
 
@@ -37,47 +63,52 @@ pub const State = struct {
     scene: *Scene,
 
     pub fn init(geoc_instance: g.Geoc, scene: *Scene) Self {
-        const s: canvas.State = .{
+        const s: SceneState = .{
             .ptr = scene,
-            .set_angles_fn_ptr = setAnglesFn,
-            .get_pitch_fn_ptr = getPitch,
-            .get_yaw_fn_ptr = getYaw,
-            .set_zoom_fn_ptr = setZoomFn,
-            .insert_vector_fn_ptr = insertVectorFn,
-            .insert_camera_fn_ptr = insertCameraFn,
-            .cube_fn_ptr = insertCubeFn,
-            .pyramid_fn_ptr = insertPyramidFn,
-            .sphere_fn_ptr = insertSphereFn,
-            .cone_fn_ptr = insertConeFn,
-            .clear_fn_ptr = clearFn,
-            .set_res_fn_ptr = setResolutionFn,
-            .set_camera_fn_ptr = setCameraFn,
-            .scale_fn_ptr = scaleFn,
-            .rotate_fn_ptr = rotateFn,
-            .translate_fn_ptr = translateFn,
-            .reflect_fn_ptr = reflectFn,
+            .vtable = &.{
+                .set_angles_fn_ptr = setAnglesFn,
+                .get_pitch_fn_ptr = getPitch,
+                .get_yaw_fn_ptr = getYaw,
+                .set_zoom_fn_ptr = setZoomFn,
+                .insert_vector_fn_ptr = insertVectorFn,
+                .insert_camera_fn_ptr = insertCameraFn,
+                .cube_fn_ptr = insertCubeFn,
+                .pyramid_fn_ptr = insertPyramidFn,
+                .sphere_fn_ptr = insertSphereFn,
+                .cone_fn_ptr = insertConeFn,
+                .clear_fn_ptr = clearFn,
+                .set_res_fn_ptr = setResolutionFn,
+                .set_camera_fn_ptr = setCameraFn,
+                .scale_fn_ptr = scaleFn,
+                .rotate_fn_ptr = rotateFn,
+                .translate_fn_ptr = translateFn,
+                .reflect_fn_ptr = reflectFn,
+            },
         };
 
-        geoc_instance.setScene(s);
+        geoc_instance.setScenePtr(s.ptr);
+        inline for (std.meta.fields(Vtable)) |fn_ptr| {
+            geoc_instance.setFnPtrs(fn_ptr.name, @intFromPtr(@field(s.vtable, fn_ptr.name)));
+        }
 
         // _LOGF(
         //     geoc_instance.allocator,
-        //     "Size of Scene.State: {} \nAlign of Scene.State:{}",
+        //     "Size of Scene.State: {} \nAlign of SceneState:{}",
         //     .{
         //         @sizeOf(@TypeOf(s)),
         //         @alignOf(@TypeOf(s)),
         //     },
         // );
-        // inline for (std.meta.fields(canvas.State)) |field| {
+        // inline for (std.meta.fields(Vtable)) |field| {
         //     _LOGF(
         //         geoc_instance.allocator,
         //         "Offset of {s}:\t{}\nAlignment :\t{}\nType :\t{any}\nValue in state:\t{}",
         //         .{
         //             field.name,
-        //             @offsetOf(canvas.State, field.name),
+        //             @offsetOf(Vtable, field.name),
         //             field.alignment,
         //             field.type,
-        //             @intFromPtr(@field(s, field.name)),
+        //             @intFromPtr(@field(s.vtable, field.name)),
         //         },
         //     );
         // }
@@ -201,7 +232,7 @@ pub const State = struct {
     fn drawCameras(self: Self) void {
         if (self.scene.cameras) |cameras| {
             for (cameras) |camera| {
-                const cameras_buffer = g.VertexBuffer(V3).init(camera.shape); //TODO: fix
+                const cameras_buffer = g.VertexBuffer(V3).init(camera.shape);
                 defer cameras_buffer.deinit();
                 self.geoc.draw(V3, self.cameras_program, cameras_buffer, g.DrawMode.LineLoop);
             }
@@ -363,6 +394,7 @@ fn translateFn(
     dy: f32,
     dz: f32,
 ) callconv(.C) void {
+    _ = ptr;
     const args = struct {
         idxs_ptr: [*]const u32,
         idxs_len: usize,
@@ -380,15 +412,15 @@ fn translateFn(
     };
 
     const bytes = std.mem.asBytes(&args);
-    const slice: []const u8 = std.mem.bytesAsSlice(u8, bytes);
+    const slice = std.mem.bytesAsSlice(u8, bytes);
+    // _LOGF(@as(*Scene, @alignCast(@ptrCast(ptr))).allocator, "args : {any}\nzig args slice : {any}", .{ args, slice });
 
-    _LOGF(@as(*Scene, @alignCast(@ptrCast(ptr))).allocator, "args : {any}\nzig args slice : {any}", .{ args, slice });
-
+    // maybe call this on defer block after returning copy V3[]
     const handle = g.Interval.init("translate", @intFromPtr(&applyTranslateFn), slice, 30, 25);
     _ = handle;
 }
 
-fn applyTranslateFn(
+fn applyTranslateFn( //TODO: adapt fn to accepts args as u8 slice allocated on translate?
     ptr: *anyopaque,
     idxs_ptr: [*]const u32,
     idxs_len: usize,
@@ -398,7 +430,7 @@ fn applyTranslateFn(
     dz: f32,
 ) void {
     const scene: *Scene = @ptrCast(@alignCast(ptr));
-    _LOGF(scene.allocator, "{} {} {} {}\n{} {} {}", .{ @intFromPtr(ptr), @intFromPtr(idxs_ptr), idxs_len, shorts, dx, dy, dz });
+    // _LOGF(scene.allocator, "{} {} {} {}\n{} {} {}", .{ @intFromPtr(ptr), @intFromPtr(idxs_ptr), idxs_len, shorts, dx, dy, dz });
     scene.translate(idxs_ptr, idxs_len, shorts, dx, dy, dz);
     scene.updateViewMatrix();
 
@@ -418,8 +450,68 @@ fn reflectFn(
     idxs_len: usize,
     shorts: u32,
     coord_idx: u8,
-    factor: f32,
 ) callconv(.C) void {
+    const scene: *Scene = @alignCast(@ptrCast(ptr));
+
+    const bytes = std.mem.asBytes(&struct {
+        idxs_ptr: [*]const u32,
+        idxs_len: usize,
+        shorts: u32,
+        coord_idx: u8,
+    }{
+        .idxs_ptr = idxs_ptr,
+        .idxs_len = idxs_len,
+        .shorts = shorts,
+        .coord_idx = coord_idx,
+    });
+    //TODO: somehow call destroy on this or hold memory on js side?
+    const args = scene.allocator.alloc(u8, bytes.len) catch unreachable;
+    std.mem.copyBackwards(u8, args, std.mem.bytesAsSlice(u8, bytes));
+
+    // _LOGF(scene.allocator, "BEFORE INTERVAL INIT\nargs as string: {s}\nargs : {any}\nzig args slice : {any}", .{ slice, args, slice });
+
+    const handle = g.Interval.init("apply", @intFromPtr(&applyFn), args, 30, 25);
+    _ = handle;
+    // maybe call this on defer block after returning copy V3[]
+}
+
+pub fn applyFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) void {
+    const scene: *Scene = @ptrCast(@alignCast(ptr));
+    const Args = struct {
+        idxs_ptr: [*]const u32,
+        idxs_len: usize,
+        shorts: u32,
+        coord_idx: u8,
+    };
+
+    const bytes = std.mem.sliceAsBytes(args_ptr[0..args_len]);
+    _LOGF(
+        scene.allocator,
+        "ON APPLY \n args as string: {s}\nargs : {any}\nargs as bytes string: {s}\nargs as bytes : {any}",
+        .{ args_ptr[0..args_len], args_ptr[0..args_len], bytes, bytes },
+    );
+
+    const val = std.mem.bytesAsValue(Args, bytes);
+    _LOGF( //TODO: maybe just print val
+        scene.allocator,
+        "bytesAsValue \nidxs_ptr: {} idxs_len: {} shorts: {} coord_idx: {}",
+        .{ @intFromPtr(val.idxs_ptr), val.idxs_len, val.shorts, val.coord_idx },
+    );
+
+    scene.reflect(val.idxs_ptr, val.idxs_len, val.shorts, val.coord_idx, -1.0);
+    scene.updateViewMatrix();
+
+    @as(
+        *State,
+        @fieldParentPtr("scene", @constCast(&scene)),
+    ).geoc.uniformMatrix4fv(
+        "view_matrix",
+        false,
+        &scene.view_matrix,
+    );
+}
+
+pub fn applyReflectFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, coord_idx: u8, factor: f32) void {
     const scene: *Scene = @ptrCast(@alignCast(ptr));
     scene.reflect(idxs_ptr, idxs_len, shorts, coord_idx, factor);
     scene.updateViewMatrix();

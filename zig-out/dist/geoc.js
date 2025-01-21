@@ -53,29 +53,29 @@ const CONFIG = {
    ZOOM_SENSITIVITY: 0.1,
    PINCH_ZOOM_SENSITIVITY: 2000, //TODO: test with gh pages
 };
-// Wasm function pointers are defined in an indexed table style
-// in the order that they are referenced after main call
-/** @type { Scene } */
-let scene = {
-   ptr: undefined,
-   set_angles_fn_ptr: 1,
-   get_pitch_fn_ptr: 2,
-   get_yaw_fn_ptr: 3,
-   zoom_fn_ptr: 4,
-   insert_vector_fn_ptr: 5,
-   insert_camera_fn_ptr: 6,
-   cube_fn_ptr: 7,
-   pyramid_fn_ptr: 8,
-   sphere_fn_ptr: 9,
-   cone_fn_ptr: 10,
-   clear_fn_ptr: 11,
-   set_res_fn_ptr: 12,
-   set_camera_fn_ptr: 13,
-   scale_fn_ptr: 14,
-   rotate_fn_ptr: 15,
-   translate_fn_ptr: 16,
-   reflect_fn_ptr: 17,
-};
+
+let scene_ptr;
+/** @type {Map<String, number>} */
+const fn_ptrs = new Map();
+// {
+// set_angles_fn_ptr: 1 + 4,
+// get_pitch_fn_ptr: 2 + 4,
+// get_yaw_fn_ptr: 3 + 4,
+// zoom_fn_ptr: 4 + 4,
+// insert_vector_fn_ptr: 5 + 4,
+// insert_camera_fn_ptr: 6 + 4,
+// cube_fn_ptr: 7 + 4,
+// pyramid_fn_ptr: 8 + 4,
+// sphere_fn_ptr: 9 + 4,
+// cone_fn_ptr: 10 + 4,
+// clear_fn_ptr: 11 + 4,
+// set_res_fn_ptr: 12 + 4,
+// set_camera_fn_ptr: 13 + 4,
+// scale_fn_ptr: 14 + 4,
+// rotate_fn_ptr: 15 + 4,
+// translate_fn_ptr: 16 + 4,
+// reflect_fn_ptr: 17 + 4,
+// };
 
 function getData(c_ptr, len) {
    return new Uint8Array(wasm_memory.buffer, c_ptr, len);
@@ -90,10 +90,6 @@ function call(ptr, fnPtr) {
 }
 // Delegate methods matching Zig Scene/Handler methods
 class SceneController {
-   /**
-    * @param { WebAssembly.Instance } wasm_instance - The WebAssembly instance.
-    * @param { Scene } scene - The scene object.
-    */
    constructor() {
       // Instance properties
       this.wasm_interface = new WasmInterface();
@@ -412,7 +408,7 @@ class SceneController {
 
       // let count = 0;
 
-      this.wasm_interface.reflect(offset * 4, len, shorts, coord_idx, -1);
+      this.wasm_interface.reflect(offset * 4, len, shorts, coord_idx);
       this.selected_vectors.forEach((idx) => {
          let { x, y, z } = this.vectors[idx];
 
@@ -550,46 +546,67 @@ class WasmInterface {
    }
 
    setAngles(p_angle, y_angle) {
-      this.wasm_exports.setAngles(scene.ptr, scene.set_angles_fn_ptr, p_angle, y_angle);
+      this.wasm_exports.setAngles(
+         scene_ptr,
+         fn_ptrs.get("set_angles_fn_ptr"),
+         p_angle,
+         y_angle
+      );
    }
 
    setZoom(zoom_delta) {
-      this.wasm_exports.setZoom(scene.ptr, scene.zoom_fn_ptr, zoom_delta);
+      this.wasm_exports.setZoom(scene_ptr, fn_ptrs.get("zoom_fn_ptr"), zoom_delta);
    }
 
    getPitch() {
-      return this.wasm_exports.getPitch(scene.ptr, scene.get_pitch_fn_ptr);
+      return this.wasm_exports.getPitch(scene_ptr, fn_ptrs.get("get_pitch_fn_ptr"));
    }
 
    insertVector(x, y, z) {
-      this.wasm_exports.insertVector(scene.ptr, scene.insert_vector_fn_ptr, x, y, z);
+      this.wasm_exports.insertVector(
+         scene_ptr,
+         fn_ptrs.get("insert_vector_fn_ptr"),
+         x,
+         y,
+         z
+      );
    }
 
    insertCamera(x, y, z) {
-      this.wasm_exports.insertCamera(scene.ptr, scene.insert_camera_fn_ptr, x, y, z);
+      this.wasm_exports.insertCamera(
+         scene_ptr,
+         fn_ptrs.get("insert_camera_fn_ptr"),
+         x,
+         y,
+         z
+      );
    }
 
    insertShape(shape) {
-      const shapeFnPtr = scene[`${shape.toLowerCase()}_fn_ptr`];
-      this.wasm_exports[`insert${shape}`](scene.ptr, shapeFnPtr);
+      const shape_fn_ptr = fn_ptrs.get(`${shape.toLowerCase()}_fn_ptr`);
+      this.wasm_exports[`insert${shape}`](scene_ptr, shape_fn_ptr);
    }
 
    clear() {
-      this.wasm_exports.clear(scene.ptr, scene.clear_fn_ptr);
+      this.wasm_exports.clear(scene_ptr, fn_ptrs.get("clear_fn_ptr"));
    }
 
    setResolution(resolution) {
-      this.wasm_exports.setResolution(scene.ptr, scene.set_res_fn_ptr, resolution);
+      this.wasm_exports.setResolution(
+         scene_ptr,
+         fn_ptrs.get("set_res_fn_ptr"),
+         resolution
+      );
    }
 
    setCamera(index) {
-      this.wasm_exports.setCamera(scene.ptr, scene.set_camera_fn_ptr, index);
+      this.wasm_exports.setCamera(scene_ptr, fn_ptrs.get("set_camera_fn_ptr"), index);
    }
 
    rotate(indexes_ptr, indexes_len, shorts, x, y, z) {
       this.wasm_exports.rotate(
-         scene.ptr,
-         scene.rotate_fn_ptr,
+         scene_ptr,
+         fn_ptrs.get("rotate_fn_ptr"),
          indexes_ptr,
          indexes_len,
          shorts,
@@ -601,8 +618,8 @@ class WasmInterface {
 
    scale(indexes_ptr, indexes_len, shorts, factor) {
       this.wasm_exports.scale(
-         scene.ptr,
-         scene.scale_fn_ptr,
+         scene_ptr,
+         fn_ptrs.get("scale_fn_ptr"),
          indexes_ptr,
          indexes_len,
          shorts,
@@ -612,8 +629,8 @@ class WasmInterface {
 
    translate(indexes_ptr, indexes_len, shorts, dx, dy, dz) {
       this.wasm_exports.translate(
-         scene.ptr,
-         scene.translate_fn_ptr,
+         scene_ptr,
+         fn_ptrs.get("translate_fn_ptr"),
          indexes_ptr,
          indexes_len,
          shorts,
@@ -625,8 +642,8 @@ class WasmInterface {
 
    reflect(indexes_ptr, indexes_len, shorts, coord_idx, factor) {
       this.wasm_exports.reflect(
-         scene.ptr,
-         scene.reflect_fn_ptr,
+         scene_ptr,
+         fn_ptrs.get("reflect_fn_ptr"),
          indexes_ptr,
          indexes_len,
          shorts,
@@ -642,6 +659,7 @@ const resize_listener = (entries) => {
    canvas.height = height;
 
    webgl.viewport(0, 0, width, height);
+   webgl.clear(webgl.COLOR_BUFFER_BIT);
    setAspectRatioUniform(width / height);
    scene_config.aspect_ratio = width / height;
 };
@@ -693,14 +711,15 @@ function createProjectionMatrix(fov, aspect_ratio, near, far) {
 }
 
 const env = {
-   init: function () {
+   init() {
       canvas = document.createElement("canvas");
+      canvas.id = "canvas";
       webgl = canvas.getContext("webgl");
       if (webgl == null) {
          throw new Error("No WebGL support on browser");
       }
 
-      const scene_handler = new SceneController(wasm_instance, scene);
+      const scene_handler = new SceneController();
 
       btn_listeners.splice(
          0,
@@ -716,8 +735,6 @@ const env = {
          input.id = id;
          return input;
       });
-
-      canvas.id = "canvas";
 
       container.id = "container";
       text_fields.id = "text-inputs";
@@ -737,10 +754,10 @@ const env = {
       );
       text_fields.append(...inputs);
    },
-   deinit: function () {
+   deinit() {
       webgl.finish();
    },
-   run: function (ptr, fnPtr) {
+   run(ptr, fnPtr) {
       function frame() {
          call(ptr, fnPtr);
          setTimeout(() => requestAnimationFrame(frame), 1000 / FPS);
@@ -748,8 +765,11 @@ const env = {
       requestAnimationFrame(frame);
       throw new Error("Not an error");
    },
-   setScene: function (ptr) {
-      scene.ptr = ptr;
+   setScenePtr(ptr) {
+      scene_ptr = ptr;
+   },
+   setFnPtrs(fn_name_ptr, fn_ptrs_len, value) {
+      fn_ptrs.set(getStr(fn_name_ptr, fn_ptrs_len), value);
    },
    time() {
       return performance.now();
@@ -871,20 +891,18 @@ const env = {
       webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
    },
    setInterval(cb_name_ptr, cb_name_len, fn_ptr, args_ptr, args_len, delay, timeout) {
-      const args =
-         args_ptr > 0
-            ? [
-                 ...Array.from(new Uint32Array(wasm_memory.buffer, args_ptr, 3)),
-                 ...Array.from(
-                    new Float32Array(wasm_memory.buffer, args_ptr + 3 * 4, args_len - 3)
-                 ),
-              ]
-            : undefined;
+      console.log("js\t" + getStr(args_ptr, args_len * 4));
+
+
 
       const cb_name = getStr(cb_name_ptr, cb_name_len);
 
+      // const interval_handle = setInterval(() => {
+      //    wasm_instance.exports[cb_name](scene_ptr, fn_ptr, ...(args || []));
+      // }, delay);
+
       const interval_handle = setInterval(() => {
-         wasm_instance.exports[cb_name](scene.ptr, fn_ptr, ...(args || []));
+         wasm_instance.exports[cb_name](scene_ptr, fn_ptr, args_ptr, args_len * 4);
       }, delay);
 
       if (timeout > 0) {

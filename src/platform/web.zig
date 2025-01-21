@@ -1,6 +1,5 @@
 const geoc = @import("../root.zig");
 const std = @import("std");
-const canvas = geoc.canvas;
 
 const js = struct { //TODO remove all unused fn
     extern fn init() void;
@@ -36,7 +35,8 @@ const js = struct { //TODO remove all unused fn
         stride: usize,
         offset: usize,
     ) void;
-    extern fn setScene(ptr: *anyopaque) void;
+    extern fn setScenePtr(ptr: *anyopaque) void;
+    extern fn setFnPtrs(fn_name_ptr: [*]const u8, fn_name_len: usize, fn_ptr: u32) void;
     extern fn drawArrays(mode: geoc.DrawMode, first: usize, count: usize) void;
     extern fn uniformMatrix4fv(
         location_ptr: [*]const u8,
@@ -55,6 +55,15 @@ export fn draw(
 
 export fn dummy(ptr: *anyopaque, fn_ptr: *const fn (*anyopaque) callconv(.C) void) void { //TODO:MAYBE REMOVE
     fn_ptr(ptr);
+}
+
+export fn apply(
+    ptr: *anyopaque,
+    fn_ptr: *const fn (*anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void,
+    args_ptr: [*]const u8,
+    args_len: usize,
+) void {
+    fn_ptr(ptr, args_ptr, args_len);
 }
 
 export fn setAngles(
@@ -198,14 +207,13 @@ export fn translate(
 
 export fn reflect(
     ptr: *anyopaque,
-    reflect_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, u8, f32) callconv(.C) void,
+    reflect_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, u8) callconv(.C) void,
     indexes_ptr: [*]const u32,
     indexes_len: usize,
     shorts: u32,
     coord_idx: u8,
-    factor: f32,
 ) void {
-    reflect_fn_ptr(ptr, indexes_ptr, indexes_len, shorts, coord_idx, factor);
+    reflect_fn_ptr(ptr, indexes_ptr, indexes_len, shorts, coord_idx);
 }
 
 pub fn log(message: []const u8) void {
@@ -333,8 +341,12 @@ pub const State = struct {
         js.run(state.ptr, state.drawFn);
     }
 
-    pub fn setScene(_: Self, state: canvas.State) void {
-        js.setScene(state.ptr);
+    pub fn setScenePtr(_: Self, ptr: *anyopaque) void {
+        js.setScenePtr(ptr);
+    }
+
+    pub fn setFnPtrs(_: Self, fn_name: []const u8, fn_ptr: u32) void {
+        js.setFnPtrs(fn_name.ptr, fn_name.len, fn_ptr);
     }
 
     pub fn currentTime(_: Self) f32 {

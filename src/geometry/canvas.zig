@@ -386,6 +386,7 @@ pub const Scene = struct {
             self.allocator.free(cameras);
             self.cameras = null;
         }
+        _LOGF(self.allocator, "{}", .{geoc.gpa.detectLeaks()});
     }
 
     pub fn setResolution(self: *Self, res: usize) void {
@@ -618,25 +619,4 @@ pub const Cone = struct {
         vertexes[index] = .{ .coords = .{ 0, 0, 0 } };
         return vertexes;
     }
-};
-
-pub const State = struct {
-    ptr: *anyopaque,
-    set_angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
-    get_pitch_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
-    get_yaw_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
-    set_zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
-    insert_vector_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
-    insert_camera_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
-    cube_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
-    pyramid_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
-    sphere_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
-    cone_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
-    clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
-    set_res_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
-    set_camera_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
-    scale_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32) callconv(.C) void,
-    rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
-    translate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
-    reflect_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, u8, f32) callconv(.C) void,
 };

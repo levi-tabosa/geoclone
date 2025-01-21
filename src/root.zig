@@ -7,8 +7,8 @@ pub const platform = switch (builtin.target.isWasm()) {
 };
 
 pub const canvas = @import("geometry/canvas.zig");
-
-var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true, .verbose_log = true }){};
+//TODO: remove pub acess modifier after fixing leaks
+pub var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true, .verbose_log = true }){};
 
 // used in example.zig, prevents build error if gpa is used
 pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral), comptime format: []const u8, args: anytype) void {
@@ -24,7 +24,7 @@ pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral
 
     const formatStr = prefix ++ format ++ "\n";
     if (builtin.target.isWasm()) {
-        platform.log(std.fmt.allocPrint(gpa.allocator(), formatStr, args) catch "allocPrint FAILED in logFn (root.zig)");
+        platform.log(std.fmt.allocPrint(gpa.allocator(), formatStr, args) catch unreachable);
     } else {
         const stderr = std.io.getStdErr().writer();
         nosuspend stderr.print(formatStr, args) catch return;
@@ -91,7 +91,7 @@ pub fn VertexBuffer(comptime vertex: type) type {
         count: usize,
 
         pub fn init(data: []const vertex) Self {
-            const aux: [*c]const u8 = @ptrCast(data.ptr);
+            const aux: [*]const u8 = @ptrCast(data.ptr);
             return .{
                 .platform = platform.VertexBuffer.init(aux[0 .. data.len * @sizeOf(vertex)]),
                 .count = data.len,
@@ -182,8 +182,12 @@ pub const Geoc = struct {
         self.platform.run(state);
     }
 
-    pub fn setScene(self: Self, state: canvas.State) void {
-        self.platform.setScene(state);
+    pub fn setScenePtr(self: Self, state: *anyopaque) void {
+        self.platform.setScenePtr(state);
+    }
+
+    pub fn setFnPtrs(self: Self, fn_name: []const u8, fn_ptr: u32) void {
+        self.platform.setFnPtrs(fn_name, fn_ptr);
     }
 
     pub fn currentTime(self: Self) f32 {

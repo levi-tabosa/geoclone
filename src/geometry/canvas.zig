@@ -78,93 +78,6 @@ fn rotXYZ(
     u.coords[2] = z;
 }
 
-pub const V3 = struct {
-    coords: [3]f32,
-
-    pub fn init(x: f32, y: f32, z: f32) V3 {
-        return .{ .coords = .{ x, y, z } };
-    }
-
-    pub fn add(a: V3, b: V3) V3 {
-        return .{ .coords = .{
-            a.coords[0] + b.coords[0],
-            a.coords[1] + b.coords[1],
-            a.coords[2] + b.coords[2],
-        } };
-    }
-
-    pub fn subtract(a: V3, b: V3) V3 {
-        return .{ .coords = .{
-            a.coords[0] - b.coords[0],
-            a.coords[1] - b.coords[1],
-            a.coords[2] - b.coords[2],
-        } };
-    }
-
-    pub fn dot(a: V3, b: V3) f32 {
-        return a.coords[0] * b.coords[0] + a.coords[1] * b.coords[1] + a.coords[2] * b.coords[2];
-    }
-
-    pub fn cross(a: V3, b: V3) V3 {
-        return .{ .coords = .{
-            a.coords[1] * b.coords[2] - a.coords[2] * b.coords[1],
-            a.coords[2] * b.coords[0] - a.coords[0] * b.coords[2],
-            a.coords[0] * b.coords[1] - a.coords[1] * b.coords[0],
-        } };
-    }
-
-    pub fn normalize(v: V3) V3 {
-        const length = std.math.sqrt(
-            v.coords[0] * v.coords[0] + v.coords[1] * v.coords[1] + v.coords[2] * v.coords[2],
-        );
-        return .{ .coords = .{
-            v.coords[0] / length,
-            v.coords[1] / length,
-            v.coords[2] / length,
-        } };
-    }
-};
-
-pub const Camera = struct {
-    const Self = @This();
-
-    pos: V3,
-    target: V3 = .{ .coords = .{ 0.0, 0.0, 0.0 } },
-    up: V3 = .{ .coords = .{ 0.0, 0.0, 1.0 } },
-    radius: ?f32 = null,
-    shape: []V3,
-
-    pub fn init(allocator: Allocator, position: V3, radius: ?f32) Self {
-        const shape = allocator.alloc(V3, 8) catch unreachable;
-        shape[0] = .{ .coords = .{ -0.05, -0.05, -0.05 } };
-        shape[1] = .{ .coords = .{ -0.05, -0.05, 0.05 } };
-        shape[2] = .{ .coords = .{ 0.05, -0.05, 0.05 } };
-        shape[3] = .{ .coords = .{ 0.05, -0.05, -0.05 } };
-        shape[4] = .{ .coords = .{ -0.05, 0.05, -0.05 } };
-        shape[5] = .{ .coords = .{ -0.05, 0.05, 0.05 } };
-        shape[6] = .{ .coords = .{ 0.05, 0.05, 0.05 } };
-        shape[7] = .{ .coords = .{ 0.05, 0.05, -0.05 } };
-        return .{
-            .pos = position,
-            .radius = radius,
-            .shape = shape,
-        };
-    }
-
-    pub fn createViewMatrix(self: Self) [16]f32 {
-        const z_axis = V3.normalize(V3.subtract(self.pos, self.target));
-        const x_axis = V3.normalize(V3.cross(self.up, z_axis));
-        const y_axis = V3.cross(z_axis, x_axis);
-
-        return .{
-            x_axis.coords[0],          y_axis.coords[0],          z_axis.coords[0],          0.0,
-            x_axis.coords[1],          y_axis.coords[1],          z_axis.coords[1],          0.0,
-            x_axis.coords[2],          y_axis.coords[2],          z_axis.coords[2],          0.0,
-            -V3.dot(x_axis, self.pos), -V3.dot(y_axis, self.pos), -V3.dot(z_axis, self.pos), 1.0,
-        };
-    }
-};
-
 pub const Scene = struct {
     const Self = @This();
     const resolution = 10;
@@ -249,6 +162,9 @@ pub const Scene = struct {
         }
 
         if (self.cameras) |cameras| {
+            for (cameras) |camera| {
+                self.allocator.free(camera.shape);
+            }
             self.allocator.free(cameras);
         }
     }
@@ -383,6 +299,9 @@ pub const Scene = struct {
             self.shapes = null;
         }
         if (self.cameras) |cameras| {
+            for (cameras) |camera| {
+                self.allocator.free(camera.shape);
+            }
             self.allocator.free(cameras);
             self.cameras = null;
         }
@@ -531,6 +450,50 @@ pub const Scene = struct {
     }
 };
 
+pub const Camera = struct {
+    const Self = @This();
+
+    pos: V3,
+    target: V3 = .{ .coords = .{ 0.0, 0.0, 0.0 } },
+    up: V3 = .{ .coords = .{ 0.0, 0.0, 1.0 } },
+    radius: ?f32 = null,
+    shape: []V3,
+
+    pub fn init(allocator: Allocator, position: V3, radius: ?f32) Self {
+        const shape = allocator.alloc(V3, 8) catch unreachable;
+        shape[0] = .{ .coords = .{ -0.05, -0.05, -0.05 } };
+        shape[1] = .{ .coords = .{ -0.05, -0.05, 0.05 } };
+        shape[2] = .{ .coords = .{ 0.05, -0.05, 0.05 } };
+        shape[3] = .{ .coords = .{ 0.05, -0.05, -0.05 } };
+        shape[4] = .{ .coords = .{ -0.05, 0.05, -0.05 } };
+        shape[5] = .{ .coords = .{ -0.05, 0.05, 0.05 } };
+        shape[6] = .{ .coords = .{ 0.05, 0.05, 0.05 } };
+        shape[7] = .{ .coords = .{ 0.05, 0.05, -0.05 } };
+        return .{
+            .pos = position,
+            .radius = radius,
+            .shape = shape,
+        };
+    }
+
+    pub fn deinit(allocator: Allocator, self: Self) void {
+        allocator.free(self.shape);
+    }
+
+    pub fn createViewMatrix(self: Self) [16]f32 {
+        const z_axis = V3.normalize(V3.subtract(self.pos, self.target));
+        const x_axis = V3.normalize(V3.cross(self.up, z_axis));
+        const y_axis = V3.cross(z_axis, x_axis);
+
+        return .{
+            x_axis.coords[0],          y_axis.coords[0],          z_axis.coords[0],          0.0,
+            x_axis.coords[1],          y_axis.coords[1],          z_axis.coords[1],          0.0,
+            x_axis.coords[2],          y_axis.coords[2],          z_axis.coords[2],          0.0,
+            -V3.dot(x_axis, self.pos), -V3.dot(y_axis, self.pos), -V3.dot(z_axis, self.pos), 1.0,
+        };
+    }
+};
+
 pub const Shape = enum {
     CUBE,
     PYRAMID,
@@ -618,5 +581,52 @@ pub const Cone = struct {
 
         vertexes[index] = .{ .coords = .{ 0, 0, 0 } };
         return vertexes;
+    }
+};
+
+pub const V3 = struct {
+    coords: [3]f32,
+
+    pub fn init(x: f32, y: f32, z: f32) V3 {
+        return .{ .coords = .{ x, y, z } };
+    }
+
+    pub fn add(a: V3, b: V3) V3 {
+        return .{ .coords = .{
+            a.coords[0] + b.coords[0],
+            a.coords[1] + b.coords[1],
+            a.coords[2] + b.coords[2],
+        } };
+    }
+
+    pub fn subtract(a: V3, b: V3) V3 {
+        return .{ .coords = .{
+            a.coords[0] - b.coords[0],
+            a.coords[1] - b.coords[1],
+            a.coords[2] - b.coords[2],
+        } };
+    }
+
+    pub fn dot(a: V3, b: V3) f32 {
+        return a.coords[0] * b.coords[0] + a.coords[1] * b.coords[1] + a.coords[2] * b.coords[2];
+    }
+
+    pub fn cross(a: V3, b: V3) V3 {
+        return .{ .coords = .{
+            a.coords[1] * b.coords[2] - a.coords[2] * b.coords[1],
+            a.coords[2] * b.coords[0] - a.coords[0] * b.coords[2],
+            a.coords[0] * b.coords[1] - a.coords[1] * b.coords[0],
+        } };
+    }
+
+    pub fn normalize(v: V3) V3 {
+        const length = std.math.sqrt(
+            v.coords[0] * v.coords[0] + v.coords[1] * v.coords[1] + v.coords[2] * v.coords[2],
+        );
+        return .{ .coords = .{
+            v.coords[0] / length,
+            v.coords[1] / length,
+            v.coords[2] / length,
+        } };
     }
 };

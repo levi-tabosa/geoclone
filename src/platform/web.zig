@@ -36,7 +36,7 @@ const js = struct { //TODO remove all unused fn
         offset: usize,
     ) void;
     extern fn setScenePtr(ptr: *anyopaque) void;
-    extern fn setFnPtrs(fn_name_ptr: [*]const u8, fn_name_len: usize, fn_ptr: u32) void;
+    extern fn setFnPtr(fn_name_ptr: [*]const u8, fn_name_len: usize, fn_ptr: u32) void;
     extern fn drawArrays(mode: geoc.DrawMode, first: usize, count: usize) void;
     extern fn uniformMatrix4fv(
         location_ptr: [*]const u8,
@@ -345,8 +345,8 @@ pub const State = struct {
         js.setScenePtr(ptr);
     }
 
-    pub fn setFnPtrs(_: Self, fn_name: []const u8, fn_ptr: u32) void {
-        js.setFnPtrs(fn_name.ptr, fn_name.len, fn_ptr);
+    pub fn setFnPtr(_: Self, fn_name: []const u8, fn_ptr: u32) void {
+        js.setFnPtr(fn_name.ptr, fn_name.len, fn_ptr);
     }
 
     pub fn currentTime(_: Self) f32 {

@@ -760,7 +760,7 @@ const env = {
   run(ptr, fnPtr) {
      function frame() {
         call(ptr, fnPtr);
-        setTimeout(() => requestAnimationFrame(frame), 1000 / FPS);
+        setTimeout(() => requestAnimationFrame(frame), 3000);
      }
      requestAnimationFrame(frame);
      throw new Error("Not an error");
@@ -768,7 +768,7 @@ const env = {
   setScenePtr(ptr) {
      scene_ptr = ptr;
   },
-  setFnPtrs(fn_name_ptr, fn_ptrs_len, value) {
+  setFnPtr(fn_name_ptr, fn_ptrs_len, value) {
      fn_ptrs.set(getStr(fn_name_ptr, fn_ptrs_len), value);
   },
   time() {
@@ -866,6 +866,7 @@ const env = {
      }
   },
   initVertexBuffer(data_ptr, data_len) {
+     console.log("JS initVBuffer\tdata_len : " + data_len);
      const vertex_buffer = webgl.createBuffer();
      // if (!vertex_buffer) throw new Error("Failed to create buffer");
 
@@ -882,7 +883,9 @@ const env = {
   },
   deinitVertexBuffer(handle) {
      const buffer = buffers.get(handle) ?? null;
-     buffers.delete(handle);
+     if (!buffers.delete(handle))
+        console.log("Failed to delete buffer\nhandle : " + handle);
+     else console.log("deleted buffer : " + handle, "next_buffer : "+next_buffer);
      webgl.deleteBuffer(buffer);
      next_buffer--;
   },
@@ -893,13 +896,7 @@ const env = {
   setInterval(cb_name_ptr, cb_name_len, fn_ptr, args_ptr, args_len, delay, timeout) {
      console.log("js\t" + getStr(args_ptr, args_len * 4));
 
-
-
      const cb_name = getStr(cb_name_ptr, cb_name_len);
-
-     // const interval_handle = setInterval(() => {
-     //    wasm_instance.exports[cb_name](scene_ptr, fn_ptr, ...(args || []));
-     // }, delay);
 
      const interval_handle = setInterval(() => {
         wasm_instance.exports[cb_name](scene_ptr, fn_ptr, args_ptr, args_len * 4);
@@ -954,7 +951,6 @@ const env = {
         webgl.TRIANGLE_FAN,
      ][mode];
      if (gl_mode === undefined) throw new Error("Unsupported draw mode");
-
      webgl.drawArrays(gl_mode, first, count);
   },
   uniformMatrix4fv(location_ptr, location_len, transpose, value_ptr) {

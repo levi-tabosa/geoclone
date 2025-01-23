@@ -88,7 +88,7 @@ pub const State = struct {
 
         geoc_instance.setScenePtr(s.ptr);
         inline for (std.meta.fields(Vtable)) |fn_ptr| {
-            geoc_instance.setFnPtrs(fn_ptr.name, @intFromPtr(@field(s.vtable, fn_ptr.name)));
+            geoc_instance.setFnPtr(fn_ptr.name, @intFromPtr(@field(s.vtable, fn_ptr.name)));
         }
 
         // _LOGF(
@@ -169,9 +169,16 @@ pub const State = struct {
         const c_fragment_shader = g.Shader.init(geoc_instance, g.ShaderType.Fragment, c_fragment_shader_source);
         defer c_fragment_shader.deinit();
 
+        // const axis_buffer = geoc_instance.allocator.create(g.VertexBuffer(V3)) catch unreachable;
+        // axis_buffer.* = g.VertexBuffer(V3).init(&scene.axis);
+        // const grid_buffer = geoc_instance.allocator.create(g.VertexBuffer(V3)) catch unreachable;
+        // grid_buffer.* = g.VertexBuffer(V3).init(scene.grid);
+
         defer geoc_instance.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 
         return .{
+            // .grid_buffer = grid_buffer,
+            // .axis_buffer = axis_buffer,
             .axis_buffer = g.VertexBuffer(V3).init(&scene.axis),
             .grid_buffer = g.VertexBuffer(V3).init(scene.grid),
             .axis_program = g.Program.init(geoc_instance, &.{ vertex_shader, a_fragment_shader }),
@@ -192,6 +199,7 @@ pub const State = struct {
         self.cameras_program.deinit();
         self.axis_buffer.deinit();
         self.grid_buffer.deinit();
+        // self.geoc.allocator.destroy(self.grid_buffer);
     }
 
     pub fn draw(self: Self) void {
@@ -202,9 +210,14 @@ pub const State = struct {
 
         self.geoc.draw(V3, self.grid_program, grid_buffer, g.DrawMode.Lines);
         self.geoc.draw(V3, self.axis_program, axis_buffer, g.DrawMode.Lines);
+        // _LOGF(
+        //     self.geoc.allocator,
+        //     "state.draw: axis handle: {}, grid handle: {}",
+        //     .{ self.axis_buffer.platform.js_handle, self.grid_buffer.platform.js_handle },
+        // );
 
-        // self.geoc.draw(V3, self.grid_program, self.grid_buffer, g.DrawMode.Lines); TODO: make this work??
-        // self.geoc.draw(V3, self.axis_program, self.axis_buffer, g.DrawMode.Lines);
+        // self.geoc.draw(V3, self.grid_program, self.grid_buffer.*, g.DrawMode.Lines);
+        // self.geoc.draw(V3, self.axis_program, self.axis_buffer.*, g.DrawMode.Lines);
 
         self.drawVectors();
         self.drawShapes();
@@ -311,14 +324,36 @@ fn clearFn(ptr: *anyopaque) callconv(.C) void {
     Scene.clear(@ptrCast(@alignCast(ptr)));
 }
 
-fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void { // TODO: fix crash on set 0
+fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
     const scene: *Scene = @ptrCast(@alignCast(ptr));
-    scene.setResolution(res);
     // const state: *State = @fieldParentPtr("scene", @constCast(&scene));
-    // state.axis_buffer.deinit();
+
+    // const old_axis_handle = state.axis_buffer.platform.js_handle;
+    // const old_grid_handle = state.grid_buffer.platform.js_handle;
+
     // state.grid_buffer.deinit();
-    // state.axis_buffer = g.VertexBuffer(V3).init(&scene.axis);
+    // state.axis_buffer.deinit();
+
+    scene.setResolution(res);
+
+    // state.grid_buffer = g.VertexBuffer(V3).init(&scene.axis);
     // state.grid_buffer = g.VertexBuffer(V3).init(scene.grid);
+
+    // state.axis_program.use();
+    // state.axis_buffer.bind();
+    // state.grid_program.use();
+    // state.grid_buffer.bind();
+
+    // _LOGF(
+    //     scene.allocator,
+    //     "setRes:\nold axis handle: {}, new axis handle: {}\nold grid handle: {} new grid handle: {}",
+    //     .{
+    //         old_axis_handle,
+    //         state.axis_buffer.platform.js_handle,
+    //         old_grid_handle,
+    //         state.grid_buffer.platform.js_handle,
+    //     },
+    // );
 }
 
 fn setCameraFn(ptr: *anyopaque, index: usize) callconv(.C) void {

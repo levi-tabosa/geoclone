@@ -446,8 +446,8 @@ class SceneController {
            vectors_column,
            "vector-item",
            `${vector.x.toFixed(2)},
-           ${vector.y.toFixed(2)},
-           ${vector.z.toFixed(2)}`
+          ${vector.y.toFixed(2)},
+          ${vector.z.toFixed(2)}`
         );
      });
 
@@ -760,7 +760,8 @@ const env = {
   run(ptr, fnPtr) {
      function frame() {
         call(ptr, fnPtr);
-        setTimeout(() => requestAnimationFrame(frame), 3000);
+        setTimeout(() => requestAnimationFrame(frame), 1500);
+        // setTimeout(() => requestAnimationFrame(frame), 1000 / FPS);
      }
      requestAnimationFrame(frame);
      throw new Error("Not an error");
@@ -866,9 +867,10 @@ const env = {
      }
   },
   initVertexBuffer(data_ptr, data_len) {
-     console.log("JS initVBuffer\tdata_len : " + data_len);
+     console.log(
+        "Initialized buffer\nhandle: " + next_buffer + "\tdata_len : " + data_len / 12
+     );
      const vertex_buffer = webgl.createBuffer();
-     // if (!vertex_buffer) throw new Error("Failed to create buffer");
 
      webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
      webgl.bufferData(
@@ -882,16 +884,34 @@ const env = {
      return handle;
   },
   deinitVertexBuffer(handle) {
-     const buffer = buffers.get(handle) ?? null;
-     if (!buffers.delete(handle))
-        console.log("Failed to delete buffer\nhandle : " + handle);
-     else console.log("deleted buffer : " + handle, "next_buffer : "+next_buffer);
-     webgl.deleteBuffer(buffer);
-     next_buffer--;
+     const buffer = buffers.get(handle);
+     if (buffers.delete(handle)) {
+        webgl.deleteBuffer(buffer);
+        // next_buffer--;
+        console.log(
+           "Deleted buffer\nhandle : " + handle,
+           "new next_buffer : " + next_buffer
+        );
+     } else {
+        console.error(
+           "Failed to delete buffer\nhandle : " + handle,
+           "next_buffer : " + next_buffer
+        );
+     }
   },
   bindVertexBuffer(handle) {
-     const vertex_buffer = buffers.get(handle) ?? null;
-     webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
+     const vertex_buffer = buffers.get(handle);
+     if (vertex_buffer) {
+        webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
+        console.log("Bound buffer : " + handle);
+     } else console.error("Failed to bind handle : " + handle);
+  },
+  bufferData(handle, data_ptr, data_len) {
+     webgl.bufferData(
+        webgl.ARRAY_BUFFER,
+        getData(data_ptr, data_len),
+        webgl.STATIC_DRAW
+     );
   },
   setInterval(cb_name_ptr, cb_name_len, fn_ptr, args_ptr, args_len, delay, timeout) {
      console.log("js\t" + getStr(args_ptr, args_len * 4));
@@ -1206,13 +1226,13 @@ function createPerspectiveInputs(/** @type {SceneController} */ scene_handler) {
      const far = parseFloat(input2.value) || scene_config.far;
      const fov = (parseFloat(input4.value) * Math.PI) / 180 || scene_config.fov;
      const resolution = parseFloat(input3.value);
-
+     
      setPerspectiveUniforms(fov, near, far);
-
+     
      if (!isNaN(resolution)) {
         scene_handler.setResolution(resolution);
      }
-
+     
      scene_config.near = near;
      scene_config.far = far;
      scene_config.fov = fov;

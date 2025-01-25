@@ -203,21 +203,35 @@ pub const State = struct {
     }
 
     pub fn draw(self: Self) void {
-        const axis_buffer = g.VertexBuffer(V3).init(&self.scene.axis);
-        defer axis_buffer.deinit();
-        const grid_buffer = g.VertexBuffer(V3).init(self.scene.grid);
-        defer grid_buffer.deinit();
+        // const axis_buffer = g.VertexBuffer(V3).init(&self.scene.axis);
+        // defer axis_buffer.deinit();
+        // const grid_buffer = g.VertexBuffer(V3).init(self.scene.grid);
+        // defer grid_buffer.deinit();
 
-        self.geoc.draw(V3, self.grid_program, grid_buffer, g.DrawMode.Lines);
-        self.geoc.draw(V3, self.axis_program, axis_buffer, g.DrawMode.Lines);
-        // _LOGF(
-        //     self.geoc.allocator,
-        //     "state.draw: axis handle: {}, grid handle: {}",
-        //     .{ self.axis_buffer.platform.js_handle, self.grid_buffer.platform.js_handle },
-        // );
+        // self.geoc.draw(V3, self.grid_program, grid_buffer, g.DrawMode.Lines);
+        // self.geoc.draw(V3, self.axis_program, axis_buffer, g.DrawMode.Lines);
+        _LOGF(
+            self.geoc.allocator,
+            \\state.draw: axis handle: {}, grid handle: {}
+            \\state ptr : {*}
+            \\scene ptr : {*}
+            \\axis buffer: ({*}) {any}
+            \\grid buffer: ({*}) {any}
+        ,
+            .{
+                self.axis_buffer.platform.js_handle,
+                self.grid_buffer.platform.js_handle,
+                &self,
+                self.scene,
+                &self.axis_buffer,
+                self.axis_buffer,
+                &self.grid_buffer,
+                self.grid_buffer,
+            },
+        );
 
-        // self.geoc.draw(V3, self.grid_program, self.grid_buffer.*, g.DrawMode.Lines);
-        // self.geoc.draw(V3, self.axis_program, self.axis_buffer.*, g.DrawMode.Lines);
+        self.geoc.draw(V3, self.grid_program, self.grid_buffer, g.DrawMode.Lines);
+        self.geoc.draw(V3, self.axis_program, self.axis_buffer, g.DrawMode.Lines);
 
         self.drawVectors();
         self.drawShapes();
@@ -326,50 +340,78 @@ fn clearFn(ptr: *anyopaque) callconv(.C) void {
 
 fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
     const scene: *Scene = @ptrCast(@alignCast(ptr));
-    // const state: *State = @fieldParentPtr("scene", @constCast(&scene));
+    const state: *State = @fieldParentPtr("scene", @constCast(&scene));
+    state.axis_buffer.platform.js_handle += 1;
+    const old_axis_handle = state.axis_buffer.platform.js_handle;
+    const old_grid_handle = state.grid_buffer.platform.js_handle;
 
-    // const old_axis_handle = state.axis_buffer.platform.js_handle;
-    // const old_grid_handle = state.grid_buffer.platform.js_handle;
-
-    // state.grid_buffer.deinit();
-    // state.axis_buffer.deinit();
+    state.grid_buffer.deinit();
+    state.axis_buffer.deinit();
 
     scene.setResolution(res);
 
-    // state.grid_buffer = g.VertexBuffer(V3).init(&scene.axis);
-    // state.grid_buffer = g.VertexBuffer(V3).init(scene.grid);
+    _LOGF(
+        scene.allocator,
+        \\setRes:
+        \\state ptr : {*}
+        \\scene ptr : {*}
+        \\axis_buffer ptr : {*}
+        \\grid_buffer ptr : {*}
+        \\old axis handle: {}, new axis handle: {}
+        \\old grid handle: {}, new grid handle: {}
+    ,
+        .{
+            &state,
+            ptr,
+            &state.axis_buffer,
+            &state.grid_buffer,
+            old_axis_handle,
+            state.axis_buffer.platform.js_handle,
+            old_grid_handle,
+            state.grid_buffer.platform.js_handle,
+        },
+    );
+
+    state.axis_buffer = g.VertexBuffer(V3).init(&scene.axis);
+    state.grid_buffer = g.VertexBuffer(V3).init(scene.grid);
 
     // state.axis_program.use();
     // state.axis_buffer.bind();
     // state.grid_program.use();
     // state.grid_buffer.bind();
-
-    // _LOGF(
-    //     scene.allocator,
-    //     "setRes:\nold axis handle: {}, new axis handle: {}\nold grid handle: {} new grid handle: {}",
-    //     .{
-    //         old_axis_handle,
-    //         state.axis_buffer.platform.js_handle,
-    //         old_grid_handle,
-    //         state.grid_buffer.platform.js_handle,
-    //     },
-    // );
 }
 
 fn setCameraFn(ptr: *anyopaque, index: usize) callconv(.C) void {
     const scene: *Scene = @ptrCast(@alignCast(ptr));
     scene.setCamera(index);
     scene.updateViewMatrix();
+    const state: *State = @fieldParentPtr("scene", @constCast(&scene));
 
-    @as(
-        *State,
-        @fieldParentPtr("scene", @constCast(&scene)),
-    ).geoc.uniformMatrix4fv(
-        "view_matrix",
-        false,
-        &scene.view_matrix,
+    state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
+    _LOGF(
+        scene.allocator,
+        \\setCamera:
+        \\state ptr : {*}
+        \\scene ptr : {*}
+        \\axis_buffer ptr : {*}
+        \\grid_buffer ptr : {*}
+    ,
+        .{
+            &state,
+            ptr,
+            &state.axis_buffer,
+            &state.grid_buffer,
+        },
     );
-    // const state: *State = @fieldParentPtr("scene", @constCast(&scene));
+
+    // @as(
+    //     *State,
+    //     @fieldParentPtr("scene", @constCast(&scene)),
+    // ).geoc.uniformMatrix4fv(
+    //     "view_matrix",
+    //     false,
+    //     &scene.view_matrix,
+    // );
     // state.axis_buffer.deinit();
     // state.grid_buffer.deinit();
     // state.axis_buffer = g.VertexBuffer(V3).init(&scene.axis);

@@ -10,7 +10,12 @@ pub const canvas = @import("geometry/canvas.zig");
 //TODO: remove pub acess modifier after fixing leaks
 pub var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true, .verbose_log = true }){};
 // used in example.zig, prevents build error if gpa is used
-pub fn logFn(comptime level: std.log.Level, comptime scope: @TypeOf(.EnumLiteral), comptime format: []const u8, args: anytype) void {
+pub fn logFn(
+    comptime level: std.log.Level,
+    comptime scope: @TypeOf(.EnumLiteral),
+    comptime format: []const u8,
+    args: anytype,
+) void {
     const scope_prefix = "(" ++ switch (scope) {
         .geoclone, .geoc, std.log.default_log_scope => @tagName(scope),
         else => if (@intFromEnum(level) <= @intFromEnum(std.log.Level.err))
@@ -97,6 +102,22 @@ pub fn VertexBuffer(comptime vertex: type) type {
                 .platform = platform.VertexBuffer.init(aux[0 .. data.len * @sizeOf(vertex)]),
                 .count = data.len,
             };
+        }
+
+        pub fn update(self: *Self, data: []const vertex) void {
+            const aux: [*c]const u8 = @ptrCast(data.ptr);
+
+            platform.log(std.fmt.allocPrint(
+                gpa.allocator(),
+                \\update V3Buffer
+                \\handle : {}
+                \\old count : {}\t new count : {}
+            ,
+                .{ self.platform.js_handle, self.count, data.len },
+            ) catch unreachable);
+
+            self.platform.update(aux[0 .. data.len * @sizeOf(vertex)]);
+            self.count = data.len;
         }
 
         pub fn bind(self: Self) void {

@@ -760,7 +760,8 @@ const env = {
    run(ptr, fnPtr) {
       function frame() {
          call(ptr, fnPtr);
-         setTimeout(() => requestAnimationFrame(frame), 1000/FPS);
+         setTimeout(() => requestAnimationFrame(frame), 1500);
+         // setTimeout(() => requestAnimationFrame(frame), 1000 / FPS);
       }
       requestAnimationFrame(frame);
       throw new Error("Not an error");
@@ -866,7 +867,9 @@ const env = {
       }
    },
    initVertexBuffer(data_ptr, data_len) {
-      console.log("JS initialized buffer " + next_buffer + "\tdata_len : " + data_len / 12);
+      console.log(
+         "Initialized buffer\nhandle: " + next_buffer + "\tdata_len : " + data_len / 12
+      );
       const vertex_buffer = webgl.createBuffer();
 
       webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
@@ -882,12 +885,11 @@ const env = {
    },
    deinitVertexBuffer(handle) {
       const buffer = buffers.get(handle);
-      if (buffers) {
-         buffers.delete(handle);
+      if (buffers.delete(handle)) {
          webgl.deleteBuffer(buffer);
-         next_buffer--;
+         // next_buffer--;
          console.log(
-            "deleted buffer\nhandle : " + handle,
+            "Deleted buffer\nhandle : " + handle,
             "new next_buffer : " + next_buffer
          );
       } else {
@@ -899,8 +901,17 @@ const env = {
    },
    bindVertexBuffer(handle) {
       const vertex_buffer = buffers.get(handle);
-      if (vertex_buffer) webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
-      else console.error("Failed to bind handle : " + handle);
+      if (vertex_buffer) {
+         webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
+         console.log("Bound buffer : " + handle);
+      } else console.error("Failed to bind handle : " + handle);
+   },
+   bufferData(handle, data_ptr, data_len) {
+      webgl.bufferData(
+         webgl.ARRAY_BUFFER,
+         getData(data_ptr, data_len),
+         webgl.STATIC_DRAW
+      );
    },
    setInterval(cb_name_ptr, cb_name_len, fn_ptr, args_ptr, args_len, delay, timeout) {
       console.log("js\t" + getStr(args_ptr, args_len * 4));
@@ -1215,13 +1226,13 @@ function createPerspectiveInputs(/** @type {SceneController} */ scene_handler) {
       const far = parseFloat(input2.value) || scene_config.far;
       const fov = (parseFloat(input4.value) * Math.PI) / 180 || scene_config.fov;
       const resolution = parseFloat(input3.value);
-
+      
       setPerspectiveUniforms(fov, near, far);
-
+      
       if (!isNaN(resolution)) {
          scene_handler.setResolution(resolution);
       }
-
+      
       scene_config.near = near;
       scene_config.far = far;
       scene_config.fov = fov;

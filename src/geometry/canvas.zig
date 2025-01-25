@@ -221,27 +221,27 @@ pub const Scene = struct {
     }
 
     pub fn insertCamera(self: *Self, pos_x: f32, pos_y: f32, pos_z: f32) void {
-        _LOGF(
-            self.allocator,
-            "Size of Scene: {} \nAlign of Scene:{}",
-            .{
-                @sizeOf(Scene),
-                @alignOf(Scene),
-            },
-        );
-        inline for (std.meta.fields(Self)) |field| {
-            _LOGF(
-                self.allocator,
-                "Offset of {s}:\t{}\nAlignment :\t{}\nType :\t{any}\nValue in scene:\t{any}",
-                .{
-                    field.name,
-                    @offsetOf(Self, field.name),
-                    field.alignment,
-                    field.type,
-                    @field(self, field.name),
-                },
-            );
-        }
+        // _LOGF(
+        //     self.allocator,
+        //     "Size of Scene: {} \nAlign of Scene:{}",
+        //     .{
+        //         @sizeOf(Scene),
+        //         @alignOf(Scene),
+        //     },
+        // );
+        // inline for (std.meta.fields(Self)) |field| {
+        //     _LOGF(
+        //         self.allocator,
+        //         "Offset of {s}:\t{}\nAlignment :\t{}\nType :\t{any}\nValue in scene:\t{any}",
+        //         .{
+        //             field.name,
+        //             @offsetOf(Self, field.name),
+        //             field.alignment,
+        //             field.type,
+        //             @field(self, field.name),
+        //         },
+        //     );
+        // }
         const len = if (self.cameras) |cameras| cameras.len else 0;
 
         var new_cameras_array = self.allocator.alloc(Camera, len + 1) catch unreachable;

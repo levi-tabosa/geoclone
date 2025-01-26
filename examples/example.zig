@@ -91,27 +91,27 @@ pub const State = struct {
             geoc_instance.setFnPtr(fn_ptr.name, @intFromPtr(@field(s.vtable, fn_ptr.name)));
         }
 
-        // _LOGF(
-        //     geoc_instance.allocator,
-        //     "Size of Scene.State: {} \nAlign of SceneState:{}",
-        //     .{
-        //         @sizeOf(@TypeOf(s)),
-        //         @alignOf(@TypeOf(s)),
-        //     },
-        // );
-        // inline for (std.meta.fields(Vtable)) |field| {
-        //     _LOGF(
-        //         geoc_instance.allocator,
-        //         "Offset of {s}:\t{}\nAlignment :\t{}\nType :\t{any}\nValue in state:\t{}",
-        //         .{
-        //             field.name,
-        //             @offsetOf(Vtable, field.name),
-        //             field.alignment,
-        //             field.type,
-        //             @intFromPtr(@field(s.vtable, field.name)),
-        //         },
-        //     );
-        // }
+        _LOGF(
+            geoc_instance.allocator,
+            "Size of Scene.State: {} \nAlign of SceneState:{}",
+            .{
+                @sizeOf(@TypeOf(s)),
+                @alignOf(@TypeOf(s)),
+            },
+        );
+        inline for (std.meta.fields(Vtable)) |field| {
+            _LOGF(
+                geoc_instance.allocator,
+                "Offset of {s}:\t{}\nAlignment :\t{}\nType :\t{any}\nValue in state:\t{}",
+                .{
+                    field.name,
+                    @offsetOf(Vtable, field.name),
+                    field.alignment,
+                    field.type,
+                    @intFromPtr(@field(s.vtable, field.name)),
+                },
+            );
+        }
         // const interval' = g.Interval.init("dummyFn", @intFromPtr(&dummy), &[_]u8{}, 100, 1);
         // _ = interval;'
 
@@ -217,6 +217,7 @@ pub const State = struct {
             \\scene ptr : {*}
             \\axis buffer: ({*}) {any}
             \\grid buffer: ({*}) {any}
+            \\offset of scene in state: {}
         ,
             .{
                 self.axis_buffer.platform.js_handle,
@@ -227,6 +228,7 @@ pub const State = struct {
                 self.axis_buffer,
                 &self.grid_buffer,
                 self.grid_buffer,
+                @offsetOf(State, "scene"),
             },
         );
 
@@ -340,8 +342,8 @@ fn clearFn(ptr: *anyopaque) callconv(.C) void {
 
 fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
     const scene: *Scene = @ptrCast(@alignCast(ptr));
-    const state: *State = @fieldParentPtr("scene", @constCast(&scene));
-    state.axis_buffer.platform.js_handle += 1;
+    const state: *State = @ptrFromInt(@intFromPtr(ptr) - 24 - @offsetOf(State, "scene") * 12);
+    // const state: *State = @fieldParentPtr("scene", @constCast(&scene));
     const old_axis_handle = state.axis_buffer.platform.js_handle;
     const old_grid_handle = state.grid_buffer.platform.js_handle;
 
@@ -349,6 +351,9 @@ fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
     state.axis_buffer.deinit();
 
     scene.setResolution(res);
+
+    state.axis_buffer = g.VertexBuffer(V3).init(&scene.axis);
+    state.grid_buffer = g.VertexBuffer(V3).init(scene.grid);
 
     _LOGF(
         scene.allocator,
@@ -359,9 +364,10 @@ fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
         \\grid_buffer ptr : {*}
         \\old axis handle: {}, new axis handle: {}
         \\old grid handle: {}, new grid handle: {}
+        \\offset of scene in state: {}
     ,
         .{
-            &state,
+            state,
             ptr,
             &state.axis_buffer,
             &state.grid_buffer,
@@ -369,11 +375,9 @@ fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
             state.axis_buffer.platform.js_handle,
             old_grid_handle,
             state.grid_buffer.platform.js_handle,
+            @intFromPtr(ptr) - @intFromPtr(state),
         },
     );
-
-    state.axis_buffer = g.VertexBuffer(V3).init(&scene.axis);
-    state.grid_buffer = g.VertexBuffer(V3).init(scene.grid);
 
     // state.axis_program.use();
     // state.axis_buffer.bind();

@@ -760,7 +760,8 @@ const env = {
    run(ptr, fnPtr) {
       function frame() {
          call(ptr, fnPtr);
-         setTimeout(() => requestAnimationFrame(frame), 1500);
+         requestAnimationFrame(frame);
+         // setTimeout(() => requestAnimationFrame(frame), 1500);
          // setTimeout(() => requestAnimationFrame(frame), 1000 / FPS);
       }
       requestAnimationFrame(frame);
@@ -887,7 +888,7 @@ const env = {
       const buffer = buffers.get(handle);
       if (buffers.delete(handle)) {
          webgl.deleteBuffer(buffer);
-         // next_buffer--;
+         next_buffer--;
          console.log(
             "Deleted buffer\nhandle : " + handle,
             "new next_buffer : " + next_buffer

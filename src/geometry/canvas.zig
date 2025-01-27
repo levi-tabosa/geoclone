@@ -80,7 +80,7 @@ fn rotXYZ(
 
 pub const Scene = struct {
     const Self = @This();
-    const resolution = 10;
+    const resolution = 20;
 
     allocator: Allocator,
     zoom: f32,

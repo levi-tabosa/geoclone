@@ -192,6 +192,7 @@ pub const State = struct {
     }
 
     pub fn deinit(self: *Self) void {
+        self.scene.deinit();
         self.axis_program.deinit();
         self.grid_program.deinit();
         self.vectors_program.deinit();
@@ -203,13 +204,6 @@ pub const State = struct {
     }
 
     pub fn draw(self: Self) void {
-        // const axis_buffer = g.VertexBuffer(V3).init(&self.scene.axis);
-        // defer axis_buffer.deinit();
-        // const grid_buffer = g.VertexBuffer(V3).init(self.scene.grid);
-        // defer grid_buffer.deinit();
-
-        // self.geoc.draw(V3, self.grid_program, grid_buffer, g.DrawMode.Lines);
-        // self.geoc.draw(V3, self.axis_program, axis_buffer, g.DrawMode.Lines);
         _LOGF(
             self.geoc.allocator,
             \\state.draw: axis handle: {}, grid handle: {}
@@ -347,8 +341,13 @@ fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
     const old_axis_handle = state.axis_buffer.platform.js_handle;
     const old_grid_handle = state.grid_buffer.platform.js_handle;
 
-    state.grid_buffer.deinit();
-    state.axis_buffer.deinit();
+    const grid_buff = g.VertexBuffer(V3){ .platform = .{ .js_handle = 1 }, .count = 0 };
+    grid_buff.deinit();
+    const axis_buff = g.VertexBuffer(V3){ .platform = .{ .js_handle = 0 }, .count = 0 };
+    axis_buff.deinit();
+
+    // state.grid_buffer.deinit();
+    // state.axis_buffer.deinit();
 
     scene.setResolution(res);
 
@@ -359,6 +358,7 @@ fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
         scene.allocator,
         \\setRes:
         \\state ptr : {*}
+        \\state value : {any}
         \\scene ptr : {*}
         \\axis_buffer ptr : {*}
         \\grid_buffer ptr : {*}
@@ -368,6 +368,7 @@ fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
     ,
         .{
             state,
+            state.*,
             ptr,
             &state.axis_buffer,
             &state.grid_buffer,
@@ -378,7 +379,6 @@ fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
             @intFromPtr(ptr) - @intFromPtr(state),
         },
     );
-
     // state.axis_program.use();
     // state.axis_buffer.bind();
     // state.grid_program.use();
@@ -475,8 +475,7 @@ fn translateFn(
     dy: f32,
     dz: f32,
 ) callconv(.C) void {
-    _ = ptr;
-    const args = struct {
+    const bytes = std.mem.asBytes(&struct {
         idxs_ptr: [*]const u32,
         idxs_len: usize,
         shorts: u32,
@@ -490,15 +489,13 @@ fn translateFn(
         .dx = dx / 25,
         .dy = dy / 25,
         .dz = dz / 25,
-    };
+    });
+    const args = std.mem.bytesAsSlice(u8, bytes);
 
-    const bytes = std.mem.asBytes(&args);
-    const slice = std.mem.bytesAsSlice(u8, bytes);
-    // _LOGF(@as(*Scene, @alignCast(@ptrCast(ptr))).allocator, "args : {any}\nzig args slice : {any}", .{ args, slice });
+    const handle = g.Interval.init("translate", @intFromPtr(&applyTranslateFn), args, 30, 25);
 
-    // maybe call this on defer block after returning copy V3[]
-    const handle = g.Interval.init("translate", @intFromPtr(&applyTranslateFn), slice, 30, 25);
     _ = handle;
+    _ = ptr;
 }
 
 fn applyTranslateFn( //TODO: adapt fn to accepts args as u8 slice allocated on translate?

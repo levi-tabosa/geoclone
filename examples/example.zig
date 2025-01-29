@@ -17,11 +17,6 @@ pub const std_options = .{
     .logFn = g.logFn,
 };
 
-fn dummyFn(ptr: *anyopaque) callconv(.C) void {
-    _ = ptr;
-    print("aaaaaa");
-}
-
 pub const SceneState = struct {
     ptr: *anyopaque,
     vtable: *const Vtable,
@@ -112,8 +107,6 @@ pub const State = struct {
                 },
             );
         }
-        // const interval' = g.Interval.init("dummyFn", @intFromPtr(&dummy), &[_]u8{}, 100, 1);
-        // _ = interval;'
 
         const vertex_shader_source =
             \\uniform mat4 projection_matrix;
@@ -169,16 +162,9 @@ pub const State = struct {
         const c_fragment_shader = g.Shader.init(geoc_instance, g.ShaderType.Fragment, c_fragment_shader_source);
         defer c_fragment_shader.deinit();
 
-        // const axis_buffer = geoc_instance.allocator.create(g.VertexBuffer(V3)) catch unreachable;
-        // axis_buffer.* = g.VertexBuffer(V3).init(&scene.axis);
-        // const grid_buffer = geoc_instance.allocator.create(g.VertexBuffer(V3)) catch unreachable;
-        // grid_buffer.* = g.VertexBuffer(V3).init(scene.grid);
-
         defer geoc_instance.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 
         return .{
-            // .grid_buffer = grid_buffer,
-            // .axis_buffer = axis_buffer,
             .axis_buffer = g.VertexBuffer(V3).init(&scene.axis),
             .grid_buffer = g.VertexBuffer(V3).init(scene.grid),
             .axis_program = g.Program.init(geoc_instance, &.{ vertex_shader, a_fragment_shader }),
@@ -200,7 +186,6 @@ pub const State = struct {
         self.cameras_program.deinit();
         self.axis_buffer.deinit();
         self.grid_buffer.deinit();
-        // self.geoc.allocator.destroy(self.grid_buffer);
     }
 
     pub fn draw(self: Self) void {
@@ -272,7 +257,51 @@ pub const State = struct {
             .drawFn = drawFn,
         };
     }
+
+    pub fn setResolution(self: *Self, res: usize) void {
+        const old_axis_handle = self.axis_buffer.platform.js_handle;
+        const old_grid_handle = self.grid_buffer.platform.js_handle;
+
+        self.grid_buffer.deinit();
+        self.axis_buffer.deinit();
+
+        self.scene.setResolution(res);
+
+        self.axis_buffer = g.VertexBuffer(V3).init(&self.scene.axis);
+        self.grid_buffer = g.VertexBuffer(V3).init(self.scene.grid);
+
+        _LOGF(
+            self.scene.allocator,
+            \\setRes:
+            \\state ptr : {*}
+            \\state value : {any}
+            \\scene ptr : {*}
+            \\axis_buffer ptr : {*}
+            \\grid_buffer ptr : {*}
+            \\old axis handle: {}, new axis handle: {}
+            \\old grid handle: {}, new grid handle: {}
+            \\offset of scene in state: {}
+        ,
+            .{
+                self,
+                self.*,
+                self.scene,
+                &self.axis_buffer,
+                &self.grid_buffer,
+                old_axis_handle,
+                self.axis_buffer.platform.js_handle,
+                old_grid_handle,
+                self.grid_buffer.platform.js_handle,
+                @offsetOf(State, "scene"),
+            },
+        );
+    }
 };
+
+fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
+    const state: *State = @ptrCast(@alignCast(ptr));
+    state.setResolution(res);
+}
 
 fn drawFn(ptr: *anyopaque) callconv(.C) void {
     @as(*State, @ptrCast(@alignCast(ptr))).draw();
@@ -334,57 +363,6 @@ fn clearFn(ptr: *anyopaque) callconv(.C) void {
     Scene.clear(@ptrCast(@alignCast(ptr)));
 }
 
-fn setResolutionFn(ptr: *anyopaque, res: usize) callconv(.C) void {
-    const scene: *Scene = @ptrCast(@alignCast(ptr));
-    const state: *State = @ptrFromInt(@intFromPtr(ptr) - 24 - @offsetOf(State, "scene") * 12);
-    // const state: *State = @fieldParentPtr("scene", @constCast(&scene));
-    const old_axis_handle = state.axis_buffer.platform.js_handle;
-    const old_grid_handle = state.grid_buffer.platform.js_handle;
-
-    const grid_buff = g.VertexBuffer(V3){ .platform = .{ .js_handle = 1 }, .count = 0 };
-    grid_buff.deinit();
-    const axis_buff = g.VertexBuffer(V3){ .platform = .{ .js_handle = 0 }, .count = 0 };
-    axis_buff.deinit();
-
-    // state.grid_buffer.deinit();
-    // state.axis_buffer.deinit();
-
-    scene.setResolution(res);
-
-    state.axis_buffer = g.VertexBuffer(V3).init(&scene.axis);
-    state.grid_buffer = g.VertexBuffer(V3).init(scene.grid);
-
-    _LOGF(
-        scene.allocator,
-        \\setRes:
-        \\state ptr : {*}
-        \\state value : {any}
-        \\scene ptr : {*}
-        \\axis_buffer ptr : {*}
-        \\grid_buffer ptr : {*}
-        \\old axis handle: {}, new axis handle: {}
-        \\old grid handle: {}, new grid handle: {}
-        \\offset of scene in state: {}
-    ,
-        .{
-            state,
-            state.*,
-            ptr,
-            &state.axis_buffer,
-            &state.grid_buffer,
-            old_axis_handle,
-            state.axis_buffer.platform.js_handle,
-            old_grid_handle,
-            state.grid_buffer.platform.js_handle,
-            @intFromPtr(ptr) - @intFromPtr(state),
-        },
-    );
-    // state.axis_program.use();
-    // state.axis_buffer.bind();
-    // state.grid_program.use();
-    // state.grid_buffer.bind();
-}
-
 fn setCameraFn(ptr: *anyopaque, index: usize) callconv(.C) void {
     const scene: *Scene = @ptrCast(@alignCast(ptr));
     scene.setCamera(index);
@@ -407,19 +385,6 @@ fn setCameraFn(ptr: *anyopaque, index: usize) callconv(.C) void {
             &state.grid_buffer,
         },
     );
-
-    // @as(
-    //     *State,
-    //     @fieldParentPtr("scene", @constCast(&scene)),
-    // ).geoc.uniformMatrix4fv(
-    //     "view_matrix",
-    //     false,
-    //     &scene.view_matrix,
-    // );
-    // state.axis_buffer.deinit();
-    // state.grid_buffer.deinit();
-    // state.axis_buffer = g.VertexBuffer(V3).init(&scene.axis);
-    // state.grid_buffer = g.VertexBuffer(V3).init(scene.grid);
 }
 
 fn scaleFn(
@@ -476,6 +441,7 @@ fn translateFn(
     dz: f32,
 ) callconv(.C) void {
     const bytes = std.mem.asBytes(&struct {
+        ptr: *anyopaque,
         idxs_ptr: [*]const u32,
         idxs_len: usize,
         shorts: u32,
@@ -483,6 +449,7 @@ fn translateFn(
         dy: f32,
         dz: f32,
     }{
+        .ptr = ptr,
         .idxs_ptr = idxs_ptr,
         .idxs_len = idxs_len,
         .shorts = shorts,
@@ -495,7 +462,6 @@ fn translateFn(
     const handle = g.Interval.init("translate", @intFromPtr(&applyTranslateFn), args, 30, 25);
 
     _ = handle;
-    _ = ptr;
 }
 
 fn applyTranslateFn( //TODO: adapt fn to accepts args as u8 slice allocated on translate?
@@ -508,7 +474,6 @@ fn applyTranslateFn( //TODO: adapt fn to accepts args as u8 slice allocated on t
     dz: f32,
 ) void {
     const scene: *Scene = @ptrCast(@alignCast(ptr));
-    // _LOGF(scene.allocator, "{} {} {} {}\n{} {} {}", .{ @intFromPtr(ptr), @intFromPtr(idxs_ptr), idxs_len, shorts, dx, dy, dz });
     scene.translate(idxs_ptr, idxs_len, shorts, dx, dy, dz);
     scene.updateViewMatrix();
 
@@ -563,18 +528,18 @@ pub fn applyFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) void {
     };
 
     const bytes = std.mem.sliceAsBytes(args_ptr[0..args_len]);
-    _LOGF(
-        scene.allocator,
-        "ON APPLY \n args as string: {s}\nargs : {any}\nargs as bytes string: {s}\nargs as bytes : {any}",
-        .{ args_ptr[0..args_len], args_ptr[0..args_len], bytes, bytes },
-    );
+    // _LOGF(
+    //     scene.allocator,
+    //     "ON APPLY \n args as string: {s}\nargs : {any}\nargs as bytes string: {s}\nargs as bytes : {any}",
+    //     .{ args_ptr[0..args_len], args_ptr[0..args_len], bytes, bytes },
+    // );
 
     const val = std.mem.bytesAsValue(Args, bytes);
-    _LOGF( //TODO: maybe just print val
-        scene.allocator,
-        "bytesAsValue \nidxs_ptr: {} idxs_len: {} shorts: {} coord_idx: {}",
-        .{ @intFromPtr(val.idxs_ptr), val.idxs_len, val.shorts, val.coord_idx },
-    );
+    // _LOGF( //TODO: maybe just print val
+    //     scene.allocator,
+    //     "bytesAsValue \nidxs_ptr: {} idxs_len: {} shorts: {} coord_idx: {}",
+    //     .{ @intFromPtr(val.idxs_ptr), val.idxs_len, val.shorts, val.coord_idx },
+    // );
 
     scene.reflect(val.idxs_ptr, val.idxs_len, val.shorts, val.coord_idx, -1.0);
     scene.updateViewMatrix();
@@ -602,8 +567,6 @@ pub fn applyReflectFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, 
         false,
         &scene.view_matrix,
     );
-    // const state: *State = @fieldParentPtr("scene", @constCast(&scene));
-    // state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
 
 pub fn main() void {

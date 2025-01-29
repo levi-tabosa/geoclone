@@ -55,27 +55,9 @@ const CONFIG = {
 };
 
 let scene_ptr;
+let state_ptr
 /** @type {Map<String, number>} */
 const fn_ptrs = new Map();
-// {
-// set_angles_fn_ptr: 1 + 4,
-// get_pitch_fn_ptr: 2 + 4,
-// get_yaw_fn_ptr: 3 + 4,
-// zoom_fn_ptr: 4 + 4,
-// insert_vector_fn_ptr: 5 + 4,
-// insert_camera_fn_ptr: 6 + 4,
-// cube_fn_ptr: 7 + 4,
-// pyramid_fn_ptr: 8 + 4,
-// sphere_fn_ptr: 9 + 4,
-// cone_fn_ptr: 10 + 4,
-// clear_fn_ptr: 11 + 4,
-// set_res_fn_ptr: 12 + 4,
-// set_camera_fn_ptr: 13 + 4,
-// scale_fn_ptr: 14 + 4,
-// rotate_fn_ptr: 15 + 4,
-// translate_fn_ptr: 16 + 4,
-// reflect_fn_ptr: 17 + 4,
-// };
 
 function getData(c_ptr, len) {
   return new Uint8Array(wasm_memory.buffer, c_ptr, len);
@@ -593,7 +575,8 @@ class WasmInterface {
 
   setResolution(resolution) {
      this.wasm_exports.setResolution(
-        scene_ptr,
+        state_ptr,
+        // scene_ptr,
         fn_ptrs.get("set_res_fn_ptr"),
         resolution
      );
@@ -758,9 +741,12 @@ const env = {
      webgl.finish();
   },
   run(ptr, fnPtr) {
+     state_ptr = ptr;
      function frame() {
         call(ptr, fnPtr);
-        setTimeout(() => requestAnimationFrame(frame), 1500);
+        console.log("js ptr : " + ptr.toString(16));
+        requestAnimationFrame(frame);
+        // setTimeout(() => requestAnimationFrame(frame), 1500);
         // setTimeout(() => requestAnimationFrame(frame), 1000 / FPS);
      }
      requestAnimationFrame(frame);
@@ -887,7 +873,7 @@ const env = {
      const buffer = buffers.get(handle);
      if (buffers.delete(handle)) {
         webgl.deleteBuffer(buffer);
-        // next_buffer--;
+        next_buffer--;
         console.log(
            "Deleted buffer\nhandle : " + handle,
            "new next_buffer : " + next_buffer

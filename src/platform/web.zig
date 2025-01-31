@@ -7,7 +7,7 @@ const js = struct { //TODO remove all unused fn
     extern fn run(ptr: *anyopaque, drawFn: *const fn (ptr: *anyopaque) callconv(.C) void) void;
     extern fn time() f32;
     extern fn print(ptr: [*]const u8, len: usize) void;
-    extern fn initShader(@"type": u32, ptr_source: [*]const u8, ptr_len: u32) i32;
+    extern fn initShader(@"type": u32, ptr_source: [*]const u8, ptr_len: usize) i32;
     extern fn deinitShader(js_handle: i32) void;
     extern fn initProgram(shader1_handle: i32, shader2_handle: i32) i32;
     extern fn deinitProgram(js_handle: i32) void;
@@ -351,13 +351,6 @@ pub const State = struct {
 
     pub fn currentTime(_: Self) f32 {
         return js.time();
-    }
-
-    pub fn clear(_: Self, r: f32, g: f32, b: f32, a: f32) void {
-        _ = r;
-        _ = g;
-        _ = b;
-        _ = a;
     }
 
     pub fn vertexAttributePointer(

@@ -58,10 +58,15 @@ let state_ptr;
 /** @type {Map<String, number>} */
 const fn_ptrs = new Map();
 
-function getData(c_ptr, len) {
-   return new Uint8Array(wasm_memory.buffer, c_ptr, len);
+function getData(ptr, len) {
+   return new Uint8Array(wasm_memory.buffer, ptr, len);
 }
 
+/**
+ * @param {number} c_ptr - Pointer to string
+ * @param {number} len - Length of string  
+ * @returns {string} - Decoded string
+ * */
 function getStr(c_ptr, len) {
    return new TextDecoder().decode(getData(c_ptr, len));
 }
@@ -891,7 +896,7 @@ const env = {
       } else console.error("Failed to bind handle : " + handle);
    },
    setInterval(cb_name_ptr, cb_name_len, fn_ptr, args_ptr, args_len, delay, timeout) {
-      console.log("js\t" + getStr(args_ptr, args_len * 4));
+      console.log("js\n" + getStr(args_ptr, args_len * 4), getData(args_ptr, args_len * 4));
 
       const cb_name = getStr(cb_name_ptr, cb_name_len);
 

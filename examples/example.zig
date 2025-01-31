@@ -1,6 +1,5 @@
 const g = @import("geoc");
 const std = @import("std");
-const mem = std.mem;
 const canvas = g.canvas;
 const Scene = canvas.Scene;
 
@@ -8,7 +7,7 @@ fn print(txt: []const u8) void { //TODO: erase
     g.platform.log(txt);
 }
 
-fn _LOGF(allocator: mem.Allocator, comptime txt: []const u8, args: anytype) void { //TODO: erase
+fn _LOGF(allocator: std.mem.Allocator, comptime txt: []const u8, args: anytype) void { //TODO: erase
     print(std.fmt.allocPrint(allocator, txt, args) catch unreachable);
 }
 
@@ -44,9 +43,9 @@ pub const State = struct {
 
     axis_buffer: g.VertexBuffer(V3),
     grid_buffer: g.VertexBuffer(V3),
-    // vector_buffer: g.VertexBuffer(V3),
-    // shape_buffer: g.VertexBuffer(V3),
-    // camera_buffer: g.VertexBuffer(V3),
+    vector_buffer: ?g.VertexBuffer(V3),
+    shape_buffers: ?[]g.VertexBuffer(V3),
+    camera_buffers: ?[]g.VertexBuffer(V3),
     axis_program: g.Program,
     grid_program: g.Program,
     vectors_program: g.Program,
@@ -139,6 +138,9 @@ pub const State = struct {
         return .{
             .axis_buffer = g.VertexBuffer(V3).init(&scene.axis),
             .grid_buffer = g.VertexBuffer(V3).init(scene.grid),
+            .vector_buffer = null,
+            .shape_buffers = null,
+            .camera_buffers = null,
             .axis_program = g.Program.init(geoc, &.{ vertex_shader, a_fragment_shader }),
             .grid_program = g.Program.init(geoc, &.{ vertex_shader, g_fragment_shader }),
             .vectors_program = g.Program.init(geoc, &.{ vertex_shader, v_fragment_shader }),
@@ -150,16 +152,30 @@ pub const State = struct {
     }
 
     pub fn deinit(self: *Self) void {
-        self.axis_buffer.deinit();
-        self.grid_buffer.deinit();
         self.axis_program.deinit();
         self.grid_program.deinit();
         self.vectors_program.deinit();
         self.shapes_program.deinit();
         self.cameras_program.deinit();
+        self.axis_buffer.deinit();
+        self.grid_buffer.deinit();
+
+        if (self.vector_buffer) |buffer| {
+            buffer.deinit();
+        }
+        if (self.shape_buffers) |buffers| {
+            for (buffers) |buff| {
+                buff.deinit();
+            }
+        }
+        if (self.camera_buffers) |buffers| {
+            for (buffers) |buff| {
+                buff.deinit();
+            }
+        }
     }
 
-    pub fn draw(self: *Self) void {
+    pub fn draw(self: Self) void {
         self.geoc.draw(V3, self.grid_program, self.grid_buffer, g.DrawMode.Lines);
         self.geoc.draw(V3, self.axis_program, self.axis_buffer, g.DrawMode.Lines);
 
@@ -169,29 +185,23 @@ pub const State = struct {
     }
 
     fn drawVectors(self: Self) void {
-        if (self.scene.vectors) |vectors| {
-            const vectors_buffer = g.VertexBuffer(V3).init(vectors);
-            defer vectors_buffer.deinit();
-            self.geoc.draw(V3, self.vectors_program, vectors_buffer, g.DrawMode.Lines);
+        if (self.vector_buffer) |buffer| {
+            self.geoc.draw(V3, self.vectors_program, buffer, g.DrawMode.Lines);
         }
     }
 
     fn drawShapes(self: Self) void {
-        if (self.scene.shapes) |shapes| {
-            for (shapes) |s| {
-                const shapes_buffer = g.VertexBuffer(V3).init(s);
-                defer shapes_buffer.deinit();
-                self.geoc.draw(V3, self.shapes_program, shapes_buffer, g.DrawMode.TriangleFan);
+        if (self.shape_buffers) |buffers| {
+            for (buffers) |buffer| {
+                self.geoc.draw(V3, self.shapes_program, buffer, g.DrawMode.TriangleFan);
             }
         }
     }
 
     fn drawCameras(self: Self) void {
-        if (self.scene.cameras) |cameras| {
-            for (cameras) |camera| {
-                const cameras_buffer = g.VertexBuffer(V3).init(camera.shape);
-                defer cameras_buffer.deinit();
-                self.geoc.draw(V3, self.cameras_program, cameras_buffer, g.DrawMode.LineLoop);
+        if (self.camera_buffers) |buffers| {
+            for (buffers) |buffer| {
+                self.geoc.draw(V3, self.cameras_program, buffer, g.DrawMode.LineLoop);
             }
         }
     }
@@ -255,36 +265,80 @@ fn setZoomFn(ptr: *anyopaque, zoom: f32) callconv(.C) void {
 fn insertVectorFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
     state.scene.insertVector(x, y, z);
+    if (state.vector_buffer) |buffer| {
+        buffer.deinit();
+    }
+    state.vector_buffer = g.VertexBuffer(V3).init(state.scene.vectors.?);
 }
 
-fn insertCameraFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void { //TODO:crashes tab after clear call on fps camera (FIX)
+//TODO: fix crash browser tab after clearFn call on fp camera
+fn insertCameraFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
+    const len = if (state.camera_buffers) |b| b.len else 0;
+
+    var new_buffers = state.geoc.allocator.alloc(g.VertexBuffer(V3), len + 1) catch unreachable;
     state.scene.insertCamera(x, y, z);
+
+    if (state.camera_buffers) |buffers| {
+        std.mem.copyBackwards(g.VertexBuffer(V3), new_buffers, buffers);
+        state.geoc.allocator.free(buffers);
+    }
+    new_buffers[len] = g.VertexBuffer(V3).init(state.scene.cameras.?[len].shape);
+
+    state.camera_buffers = new_buffers;
+}
+
+fn insertShapeFn(ptr: *anyopaque, shape: canvas.Shape) void {
+    const state: *State = @ptrCast(@alignCast(ptr));
+    const len = if (state.shape_buffers) |b| b.len else 0;
+
+    var new_buffers = state.geoc.allocator.alloc(g.VertexBuffer(V3), len + 1) catch unreachable;
+    state.scene.insertShape(shape);
+
+    if (state.shape_buffers) |buffers| {
+        std.mem.copyBackwards(g.VertexBuffer(V3), new_buffers, buffers);
+        state.geoc.allocator.free(buffers);
+    }
+    new_buffers[len] = g.VertexBuffer(V3).init(state.scene.shapes.?[len]);
+
+    state.shape_buffers = new_buffers;
 }
 
 fn insertCubeFn(ptr: *anyopaque) callconv(.C) void {
-    const state: *State = @ptrCast(@alignCast(ptr));
-    state.scene.insertCube();
+    insertShapeFn(ptr, canvas.Shape.CUBE);
 }
 
 fn insertPyramidFn(ptr: *anyopaque) callconv(.C) void {
-    const state: *State = @ptrCast(@alignCast(ptr));
-    state.scene.insertPyramid();
+    insertShapeFn(ptr, canvas.Shape.PYRAMID);
 }
 
 fn insertSphereFn(ptr: *anyopaque) callconv(.C) void {
-    const state: *State = @ptrCast(@alignCast(ptr));
-    state.scene.insertSphere();
+    insertShapeFn(ptr, canvas.Shape.SPHERE);
 }
 
 fn insertConeFn(ptr: *anyopaque) callconv(.C) void {
-    const state: *State = @ptrCast(@alignCast(ptr));
-    state.scene.insertCone();
+    insertShapeFn(ptr, canvas.Shape.CONE);
 }
 
 fn clearFn(ptr: *anyopaque) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
     state.scene.clear();
+    if (state.vector_buffer) |buffer| {
+        buffer.deinit();
+        state.vector_buffer = null;
+    }
+    if (state.shape_buffers) |buffers| {
+        for (buffers) |buff| {
+            buff.deinit();
+        }
+        state.shape_buffers = null;
+    }
+    if (state.camera_buffers) |buffers| {
+        for (buffers) |buff| {
+            buff.deinit();
+        }
+        state.camera_buffers = null;
+    }
 }
 
 fn setCameraFn(ptr: *anyopaque, index: usize) callconv(.C) void {
@@ -293,21 +347,6 @@ fn setCameraFn(ptr: *anyopaque, index: usize) callconv(.C) void {
     scene.setCamera(index);
     scene.updateViewMatrix();
     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
-    _LOGF(
-        scene.allocator,
-        \\setCamera:
-        \\state ptr : {*}
-        \\scene ptr : {*}
-        \\axis_buffer ptr : {*}
-        \\grid_buffer ptr : {*}
-    ,
-        .{
-            &state,
-            ptr,
-            &state.axis_buffer,
-            &state.grid_buffer,
-        },
-    );
 }
 
 fn scaleFn(
@@ -352,7 +391,7 @@ fn translateFn(
     dz: f32,
 ) callconv(.C) void {
     const bytes = std.mem.asBytes(&struct {
-        ptr: *anyopaque,
+        // ptr: *anyopaque,
         idxs_ptr: [*]const u32,
         idxs_len: usize,
         shorts: u32,
@@ -360,7 +399,7 @@ fn translateFn(
         dy: f32,
         dz: f32,
     }{
-        .ptr = ptr,
+        // .ptr = ptr,
         .idxs_ptr = idxs_ptr,
         .idxs_len = idxs_len,
         .shorts = shorts,
@@ -370,8 +409,11 @@ fn translateFn(
     });
     const args = std.mem.bytesAsSlice(u8, bytes);
 
+    print(args);
+
     const handle = g.Interval.init("translate", @intFromPtr(&applyTranslateFn), args, 30, 25);
 
+    _ = ptr;
     _ = handle;
 }
 

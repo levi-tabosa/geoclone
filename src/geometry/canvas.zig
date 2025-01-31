@@ -205,88 +205,45 @@ pub const Scene = struct {
     pub fn insertVector(self: *Self, x: f32, y: f32, z: f32) void {
         const len = if (self.vectors) |vectors| vectors.len else 0;
 
-        var new_vector_array = self.allocator.alloc(V3, len + 2) catch unreachable;
+        var new_vector_slice = self.allocator.alloc(V3, len + 2) catch unreachable;
 
-        for (0..len) |i| {
-            new_vector_array[i] = self.vectors.?[i];
-        }
-        new_vector_array[len] = V3.init(x, y, z);
-        new_vector_array[len + 1] = V3.init(0.0, 0.0, 0.0);
-
-        if (len > 0) {
+        if (self.vectors) |vectors| {
+            std.mem.copyBackwards(V3, new_vector_slice, vectors);
             self.allocator.free(self.vectors.?);
         }
+        new_vector_slice[len] = V3.init(x, y, z);
+        new_vector_slice[len + 1] = V3.init(0.0, 0.0, 0.0);
 
-        self.vectors = new_vector_array;
+        self.vectors = new_vector_slice;
     }
 
     pub fn insertCamera(self: *Self, pos_x: f32, pos_y: f32, pos_z: f32) void {
-        // _LOGF(
-        //     self.allocator,
-        //     "Size of Scene: {} \nAlign of Scene:{}",
-        //     .{
-        //         @sizeOf(Scene),
-        //         @alignOf(Scene),
-        //     },
-        // );
-        // inline for (std.meta.fields(Self)) |field| {
-        //     _LOGF(
-        //         self.allocator,
-        //         "Offset of {s}:\t{}\nAlignment :\t{}\nType :\t{any}\nValue in scene:\t{any}",
-        //         .{
-        //             field.name,
-        //             @offsetOf(Self, field.name),
-        //             field.alignment,
-        //             field.type,
-        //             @field(self, field.name),
-        //         },
-        //     );
-        // }
         const len = if (self.cameras) |cameras| cameras.len else 0;
 
-        var new_cameras_array = self.allocator.alloc(Camera, len + 1) catch unreachable;
+        var new_cameras_slice = self.allocator.alloc(Camera, len + 1) catch unreachable;
 
-        for (0..len) |i| {
-            new_cameras_array[i] = self.cameras.?[i];
-        }
-        new_cameras_array[len] = Camera.init(self.allocator, V3.init(pos_x, pos_y, pos_z), null);
-
-        if (len > 0) {
+        if (self.cameras) |cameras| {
+            std.mem.copyBackwards(Camera, new_cameras_slice, cameras);
             self.allocator.free(self.cameras.?);
         }
+        new_cameras_slice[len] = Camera.init(self.allocator, V3.init(pos_x, pos_y, pos_z), null);
 
-        self.cameras = new_cameras_array;
+        self.cameras = new_cameras_slice;
     }
 
-    fn insertShape(self: *Self, shape: Shape) void {
+    pub fn insertShape(self: *Self, shape: Shape) void {
         const len = if (self.shapes) |shapes| shapes.len else 0;
 
         var new_shapes = self.allocator.alloc([]V3, len + 1) catch unreachable;
 
-        for (0..len) |i| {
-            new_shapes[i] = self.shapes.?[i];
+        if (self.shapes) |shapes| {
+            std.mem.copyBackwards([]V3, new_shapes, shapes);
+            self.allocator.free(shapes);
         }
+
         new_shapes[len] = shape.getVectors(self.allocator, null);
 
-        if (len > 0) self.allocator.free(self.shapes.?);
-
         self.shapes = new_shapes;
-    }
-
-    pub fn insertCube(self: *Self) void {
-        self.insertShape(Shape.CUBE);
-    }
-
-    pub fn insertPyramid(self: *Self) void {
-        self.insertShape(Shape.PYRAMID);
-    }
-
-    pub fn insertSphere(self: *Self) void {
-        self.insertShape(Shape.SPHERE);
-    }
-
-    pub fn insertCone(self: *Self) void {
-        self.insertShape(Shape.CONE);
     }
 
     pub fn clear(self: *Self) void {
@@ -295,6 +252,9 @@ pub const Scene = struct {
             self.vectors = null;
         }
         if (self.shapes) |shapes| {
+            for (shapes) |shape| {
+                self.allocator.free(shape);
+            }
             self.allocator.free(shapes);
             self.shapes = null;
         }
@@ -305,8 +265,8 @@ pub const Scene = struct {
             self.allocator.free(cameras);
             self.cameras = null;
         }
-        // this may show memory in use as leaked
         // TODO: change to gpa.deinit to procure actual leaks
+        // this may show memory in use as leaked
         _LOGF(self.allocator, "{}", .{geoc.gpa.detectLeaks()});
     }
 
@@ -461,18 +421,18 @@ pub const Camera = struct {
     radius: ?f32 = null,
     shape: []V3,
 
-    pub fn init(allocator: Allocator, position: V3, radius: ?f32) Self {
+    pub fn init(allocator: Allocator, pos: V3, radius: ?f32) Self {
         const shape = allocator.alloc(V3, 8) catch unreachable;
-        shape[0] = .{ .coords = .{ -0.05, -0.05, -0.05 } };
-        shape[1] = .{ .coords = .{ -0.05, -0.05, 0.05 } };
-        shape[2] = .{ .coords = .{ 0.05, -0.05, 0.05 } };
-        shape[3] = .{ .coords = .{ 0.05, -0.05, -0.05 } };
-        shape[4] = .{ .coords = .{ -0.05, 0.05, -0.05 } };
-        shape[5] = .{ .coords = .{ -0.05, 0.05, 0.05 } };
-        shape[6] = .{ .coords = .{ 0.05, 0.05, 0.05 } };
-        shape[7] = .{ .coords = .{ 0.05, 0.05, -0.05 } };
+        shape[0] = .{ .coords = .{ pos.coords[0] - 0.05, pos.coords[1] - 0.05, pos.coords[2] - 0.05 } };
+        shape[1] = .{ .coords = .{ pos.coords[0] - 0.05, pos.coords[1] - 0.05, pos.coords[2] + 0.05 } };
+        shape[2] = .{ .coords = .{ pos.coords[0] + 0.05, pos.coords[1] - 0.05, pos.coords[2] + 0.05 } };
+        shape[3] = .{ .coords = .{ pos.coords[0] + 0.05, pos.coords[1] - 0.05, pos.coords[2] - 0.05 } };
+        shape[4] = .{ .coords = .{ pos.coords[0] - 0.05, pos.coords[1] + 0.05, pos.coords[2] - 0.05 } };
+        shape[5] = .{ .coords = .{ pos.coords[0] - 0.05, pos.coords[1] + 0.05, pos.coords[2] + 0.05 } };
+        shape[6] = .{ .coords = .{ pos.coords[0] + 0.05, pos.coords[1] + 0.05, pos.coords[2] + 0.05 } };
+        shape[7] = .{ .coords = .{ pos.coords[0] + 0.05, pos.coords[1] + 0.05, pos.coords[2] - 0.05 } };
         return .{
-            .pos = position,
+            .pos = pos,
             .radius = radius,
             .shape = shape,
         };
@@ -496,13 +456,13 @@ pub const Camera = struct {
     }
 };
 
-pub const Shape = enum {
+pub const Shape = enum(u8) {
     CUBE,
     PYRAMID,
     SPHERE,
     CONE,
-    // CAMERA, //TODO: maybe change
 
+    /// Caller must free
     pub fn getVectors(self: Shape, allocator: Allocator, res: ?usize) []V3 {
         const resolution = res orelse 16;
         return switch (self) {
@@ -568,20 +528,22 @@ pub const Cone = struct {
 
         const vertexes = allocator.alloc(V3, slices + 2) catch unreachable;
 
-        var index: usize = 0;
-        vertexes[index] = .{ .coords = .{ 0, 0, height } };
-        index += 1;
+        var idx: usize = 0;
+        vertexes[idx] = .{ .coords = .{ 0, 0, height } };
+        idx += 1;
 
         for (0..slices) |i| {
             const theta = @as(f32, @floatFromInt(i)) * 2.0 * std.math.pi / @as(f32, @floatFromInt(slices));
-            const x = @cos(theta) * radius;
-            const y = @sin(theta) * radius;
 
-            vertexes[index] = .{ .coords = .{ x, y, 0 } };
-            index += 1;
+            vertexes[idx] = .{ .coords = .{
+                @cos(theta) * radius,
+                @sin(theta) * radius,
+                0,
+            } };
+            idx += 1;
         }
 
-        vertexes[index] = .{ .coords = .{ 0, 0, 0 } };
+        vertexes[idx] = .{ .coords = .{ 0, 0, 0 } };
         return vertexes;
     }
 };

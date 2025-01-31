@@ -104,33 +104,12 @@ pub fn VertexBuffer(comptime vertex: type) type {
             };
         }
 
-        pub fn update(self: *Self, data: []const vertex) void {
-            const aux: [*c]const u8 = @ptrCast(data.ptr);
-
-            platform.log(std.fmt.allocPrint(
-                gpa.allocator(),
-                \\update V3Buffer
-                \\handle : {}
-                \\old count : {}\t new count : {}
-            ,
-                .{ self.platform.js_handle, self.count, data.len },
-            ) catch unreachable);
-
-            self.platform.update(aux[0 .. data.len * @sizeOf(vertex)]);
-            self.count = data.len;
+        pub fn deinit(self: Self) void {
+            self.platform.deinit();
         }
 
         pub fn bind(self: Self) void {
             self.platform.bind();
-        }
-
-        pub fn deinit(self: Self) void {
-            platform.log(std.fmt.allocPrint(
-                gpa.allocator(),
-                "deinit V3Buffer\n handle : {}",
-                .{self.platform.js_handle},
-            ) catch unreachable);
-            self.platform.deinit();
         }
     };
 }
@@ -209,8 +188,8 @@ pub const Geoc = struct {
         self.platform.run(state);
     }
 
-    pub fn setScenePtr(self: Self, state: *anyopaque) void {
-        self.platform.setScenePtr(state);
+    pub fn setStatePtr(self: Self, state: *anyopaque) void {
+        self.platform.setStatePtr(state);
     }
 
     pub fn setFnPtr(self: Self, fn_name: []const u8, fn_ptr: u32) void {

@@ -14,7 +14,6 @@ const js = struct { //TODO remove all unused fn
     extern fn useProgram(js_handle: i32) void;
     extern fn initVertexBuffer(data_ptr: [*]const u8, data_len: usize) i32;
     extern fn deinitVertexBuffer(js_handle: i32) void;
-    extern fn bufferData(js_handle: i32, data_ptr: [*]const u8, data_len: usize) void;
     extern fn bindVertexBuffer(js_handle: i32) void;
     extern fn setInterval(
         cb_name_ptr: [*]const u8,
@@ -36,7 +35,7 @@ const js = struct { //TODO remove all unused fn
         stride: usize,
         offset: usize,
     ) void;
-    extern fn setScenePtr(ptr: *anyopaque) void;
+    extern fn setStatePtr(ptr: *anyopaque) void;
     extern fn setFnPtr(fn_name_ptr: [*]const u8, fn_name_len: usize, fn_ptr: u32) void;
     extern fn drawArrays(mode: geoc.DrawMode, first: usize, count: usize) void;
     extern fn uniformMatrix4fv(
@@ -274,10 +273,6 @@ pub const VertexBuffer = struct {
         };
     }
 
-    pub fn update(self: *Self, data: []const u8) void {
-        js.bufferData(self.js_handle, data.ptr, data.len);
-    }
-
     pub fn deinit(self: Self) void {
         js.deinitVertexBuffer(self.js_handle);
     }
@@ -346,8 +341,8 @@ pub const State = struct {
         js.run(state.ptr, state.drawFn);
     }
 
-    pub fn setScenePtr(_: Self, ptr: *anyopaque) void {
-        js.setScenePtr(ptr);
+    pub fn setStatePtr(_: Self, ptr: *anyopaque) void {
+        js.setStatePtr(ptr);
     }
 
     pub fn setFnPtr(_: Self, fn_name: []const u8, fn_ptr: u32) void {

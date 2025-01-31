@@ -54,8 +54,7 @@ const CONFIG = {
    PINCH_ZOOM_SENSITIVITY: 2000, //TODO: test with gh pages
 };
 
-let scene_ptr;
-let state_ptr
+let state_ptr;
 /** @type {Map<String, number>} */
 const fn_ptrs = new Map();
 
@@ -529,7 +528,7 @@ class WasmInterface {
 
    setAngles(p_angle, y_angle) {
       this.wasm_exports.setAngles(
-         scene_ptr,
+         state_ptr,
          fn_ptrs.get("set_angles_fn_ptr"),
          p_angle,
          y_angle
@@ -537,16 +536,16 @@ class WasmInterface {
    }
 
    setZoom(zoom_delta) {
-      this.wasm_exports.setZoom(scene_ptr, fn_ptrs.get("zoom_fn_ptr"), zoom_delta);
+      this.wasm_exports.setZoom(state_ptr, fn_ptrs.get("set_zoom_fn_ptr"), zoom_delta);
    }
 
    getPitch() {
-      return this.wasm_exports.getPitch(scene_ptr, fn_ptrs.get("get_pitch_fn_ptr"));
+      return this.wasm_exports.getPitch(state_ptr, fn_ptrs.get("get_pitch_fn_ptr"));
    }
 
    insertVector(x, y, z) {
       this.wasm_exports.insertVector(
-         scene_ptr,
+         state_ptr,
          fn_ptrs.get("insert_vector_fn_ptr"),
          x,
          y,
@@ -556,7 +555,7 @@ class WasmInterface {
 
    insertCamera(x, y, z) {
       this.wasm_exports.insertCamera(
-         scene_ptr,
+         state_ptr,
          fn_ptrs.get("insert_camera_fn_ptr"),
          x,
          y,
@@ -566,29 +565,29 @@ class WasmInterface {
 
    insertShape(shape) {
       const shape_fn_ptr = fn_ptrs.get(`${shape.toLowerCase()}_fn_ptr`);
-      this.wasm_exports[`insert${shape}`](scene_ptr, shape_fn_ptr);
+      this.wasm_exports[`insert${shape}`](state_ptr, shape_fn_ptr);
    }
 
    clear() {
-      this.wasm_exports.clear(scene_ptr, fn_ptrs.get("clear_fn_ptr"));
+      this.wasm_exports.clear(state_ptr, fn_ptrs.get("clear_fn_ptr"));
    }
 
    setResolution(resolution) {
       this.wasm_exports.setResolution(
+         // state_ptr,
          state_ptr,
-         // scene_ptr,
          fn_ptrs.get("set_res_fn_ptr"),
          resolution
       );
    }
 
    setCamera(index) {
-      this.wasm_exports.setCamera(scene_ptr, fn_ptrs.get("set_camera_fn_ptr"), index);
+      this.wasm_exports.setCamera(state_ptr, fn_ptrs.get("set_camera_fn_ptr"), index);
    }
 
    rotate(indexes_ptr, indexes_len, shorts, x, y, z) {
       this.wasm_exports.rotate(
-         scene_ptr,
+         state_ptr,
          fn_ptrs.get("rotate_fn_ptr"),
          indexes_ptr,
          indexes_len,
@@ -601,7 +600,7 @@ class WasmInterface {
 
    scale(indexes_ptr, indexes_len, shorts, factor) {
       this.wasm_exports.scale(
-         scene_ptr,
+         state_ptr,
          fn_ptrs.get("scale_fn_ptr"),
          indexes_ptr,
          indexes_len,
@@ -612,7 +611,7 @@ class WasmInterface {
 
    translate(indexes_ptr, indexes_len, shorts, dx, dy, dz) {
       this.wasm_exports.translate(
-         scene_ptr,
+         state_ptr,
          fn_ptrs.get("translate_fn_ptr"),
          indexes_ptr,
          indexes_len,
@@ -625,7 +624,7 @@ class WasmInterface {
 
    reflect(indexes_ptr, indexes_len, shorts, coord_idx, factor) {
       this.wasm_exports.reflect(
-         scene_ptr,
+         state_ptr,
          fn_ptrs.get("reflect_fn_ptr"),
          indexes_ptr,
          indexes_len,
@@ -741,19 +740,18 @@ const env = {
       webgl.finish();
    },
    run(ptr, fnPtr) {
-      state_ptr = ptr;
       function frame() {
          call(ptr, fnPtr);
-         console.log("js ptr : " + ptr.toString(16));
-         requestAnimationFrame(frame);
+         // console.log("js ptr : " + ptr.toString(16));
          // setTimeout(() => requestAnimationFrame(frame), 1500);
          // setTimeout(() => requestAnimationFrame(frame), 1000 / FPS);
+         requestAnimationFrame(frame);
       }
       requestAnimationFrame(frame);
       throw new Error("Not an error");
    },
-   setScenePtr(ptr) {
-      scene_ptr = ptr;
+   setStatePtr(ptr) {
+      state_ptr = ptr;
    },
    setFnPtr(fn_name_ptr, fn_ptrs_len, value) {
       fn_ptrs.set(getStr(fn_name_ptr, fn_ptrs_len), value);
@@ -889,15 +887,8 @@ const env = {
       const vertex_buffer = buffers.get(handle);
       if (vertex_buffer) {
          webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
-         console.log("Bound buffer : " + handle);
+         // console.log("Bound buffer : " + handle);
       } else console.error("Failed to bind handle : " + handle);
-   },
-   bufferData(handle, data_ptr, data_len) {
-      webgl.bufferData(
-         webgl.ARRAY_BUFFER,
-         getData(data_ptr, data_len),
-         webgl.STATIC_DRAW
-      );
    },
    setInterval(cb_name_ptr, cb_name_len, fn_ptr, args_ptr, args_len, delay, timeout) {
       console.log("js\t" + getStr(args_ptr, args_len * 4));
@@ -905,7 +896,7 @@ const env = {
       const cb_name = getStr(cb_name_ptr, cb_name_len);
 
       const interval_handle = setInterval(() => {
-         wasm_instance.exports[cb_name](scene_ptr, fn_ptr, args_ptr, args_len * 4);
+         wasm_instance.exports[cb_name](state_ptr, fn_ptr, args_ptr, args_len * 4);
       }, delay);
 
       if (timeout > 0) {
@@ -960,7 +951,7 @@ const env = {
       webgl.drawArrays(gl_mode, first, count);
    },
    uniformMatrix4fv(location_ptr, location_len, transpose, value_ptr) {
-      const location = new TextDecoder().decode(getData(location_ptr, location_len));
+      const location = getStr(location_ptr, location_len);
       const value = new Float32Array(wasm_memory.buffer, value_ptr, 16);
       for (let i = 0; i < next_program; i++) {
          const program = programs.get(i);
@@ -1027,6 +1018,7 @@ const btn_listeners = [];
 function createButtonGrid() {
    const grid = document.createElement("div");
    grid.id = "button-grid";
+   grid.classList.toggle("hidden");
 
    const labels = [
       "Insert",
@@ -1067,6 +1059,7 @@ function createToggleButtonGrid() {
 function createFloatingTable() {
    const table = document.createElement("div");
    table.id = "floating-table";
+   table.classList.toggle("hidden");
 
    const header = document.createElement("div");
    header.className = "table-header";
@@ -1212,13 +1205,13 @@ function createPerspectiveInputs(/** @type {SceneController} */ scene_handler) {
       const far = parseFloat(input2.value) || scene_config.far;
       const fov = (parseFloat(input4.value) * Math.PI) / 180 || scene_config.fov;
       const resolution = parseFloat(input3.value);
-      
+
       setPerspectiveUniforms(fov, near, far);
-      
+
       if (!isNaN(resolution)) {
          scene_handler.setResolution(resolution);
       }
-      
+
       scene_config.near = near;
       scene_config.far = far;
       scene_config.fov = fov;

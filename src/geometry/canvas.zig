@@ -305,6 +305,8 @@ pub const Scene = struct {
             self.allocator.free(cameras);
             self.cameras = null;
         }
+        // this may show memory in use as leaked
+        // TODO: change to gpa.deinit to procure actual leaks
         _LOGF(self.allocator, "{}", .{geoc.gpa.detectLeaks()});
     }
 

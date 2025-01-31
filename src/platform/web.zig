@@ -15,6 +15,7 @@ const js = struct { //TODO remove all unused fn
     extern fn initVertexBuffer(data_ptr: [*]const u8, data_len: usize) i32;
     extern fn deinitVertexBuffer(js_handle: i32) void;
     extern fn bindVertexBuffer(js_handle: i32) void;
+    extern fn bufferData(js_handle: i32, data_ptr: [*]const u32, data_len: usize) void;
     extern fn setInterval(
         cb_name_ptr: [*]const u8,
         cb_name_len: usize,
@@ -280,6 +281,10 @@ pub const VertexBuffer = struct {
     pub fn bind(self: Self) void {
         js.bindVertexBuffer(self.js_handle);
     }
+
+    pub fn bufferData(self: Self, data: []const u32) void {
+        js.bufferData(self.js_handle, data.ptr, data.len);
+    }
 };
 
 pub const Interval = struct {
@@ -294,7 +299,7 @@ pub const Interval = struct {
                 cb_name.len,
                 cb_fn_ptr,
                 args.ptr,
-                args.len / 4,
+                args.len,
                 delay,
                 delay * (count orelse 0),
             ),

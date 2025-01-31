@@ -111,6 +111,13 @@ pub fn VertexBuffer(comptime vertex: type) type {
         pub fn bind(self: Self) void {
             self.platform.bind();
         }
+
+        // pub fn bufferData(self: Self, data: []const vertex) void {
+        pub fn bufferData(self: Self, data: []const u32) void {
+            // const aux: [*c]const u8 = @ptrCast(data.ptr);
+            // self.platform.bufferData(data[0..data.len]);
+            self.platform.bufferData(data);
+        }
     };
 }
 

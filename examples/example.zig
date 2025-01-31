@@ -411,7 +411,7 @@ fn translateFn(
 
     print(args);
 
-    const handle = g.Interval.init("translate", @intFromPtr(&applyTranslateFn), args, 30, 25);
+    const handle = g.Interval.init("apply", @intFromPtr(&applyTranslateFn), args, 30, 25);
 
     _ = ptr;
     _ = handle;
@@ -419,20 +419,68 @@ fn translateFn(
 
 fn applyTranslateFn( //TODO: adapt fn to accepts args as u8 slice allocated on translate?
     ptr: *anyopaque,
-    idxs_ptr: [*]const u32,
-    idxs_len: usize,
-    shorts: u32,
-    dx: f32,
-    dy: f32,
-    dz: f32,
+    args_ptr: [*]const u8,
+    args_len: usize,
 ) void {
+    const Args = struct {
+        idxs_ptr: [*]const u32,
+        idxs_len: usize,
+        shorts: u32,
+        dx: f32,
+        dy: f32,
+        dz: f32,
+    };
+
+    const bytes = std.mem.sliceAsBytes(args_ptr[0..args_len]);
+    const val = std.mem.bytesAsValue(Args, bytes);
     const state: *State = @ptrCast(@alignCast(ptr));
     const scene = state.scene;
-    scene.translate(idxs_ptr, idxs_len, shorts, dx, dy, dz);
+
+    _LOGF(
+        scene.allocator,
+        \\in applyTranslateF
+        \\idxs_ptr: {*} idxs_len: {d} shorts: {d} dx: {} dy: {} dz: {}
+        \\bytes: {s}
+    ,
+        .{
+            val.idxs_ptr,
+            val.idxs_len,
+            val.shorts,
+            val.dx,
+            val.dy,
+            val.dz,
+            bytes,
+        },
+    );
+
+    scene.translate(val.idxs_ptr, val.idxs_len, val.shorts, val.dx, val.dy, val.dz);
     scene.updateViewMatrix();
+
+    if (state.vector_buffer) |buffer| {
+        buffer.deinit();
+    }
+    state.vector_buffer = g.VertexBuffer(V3).init(state.scene.vectors.?);
+    // state.vector_buffer.?.bufferData(val.idxs_ptr[0..val.idxs_len]);
 
     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
+
+// fn applyTranslateFn( //TODO: adapt fn to accepts args as u8 slice allocated on translate?
+//     ptr: *anyopaque,
+//     idxs_ptr: [*]const u32,
+//     idxs_len: usize,
+//     shorts: u32,
+//     dx: f32,
+//     dy: f32,
+//     dz: f32,
+// ) void {
+//     const state: *State = @ptrCast(@alignCast(ptr));
+//     const scene = state.scene;
+//     scene.translate(idxs_ptr, idxs_len, shorts, dx, dy, dz);
+//     scene.updateViewMatrix();
+
+//     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
+// }
 
 fn reflectFn(
     ptr: *anyopaque,

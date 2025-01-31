@@ -366,6 +366,23 @@ pub const Scene = struct {
         const l = shorts >> 16;
         const r = shorts & 65535;
 
+        _LOGF(
+            self.allocator,
+            \\in scene translate
+            \\idxs_ptr: {*} idxs_len: {d} shorts: {d} dx: {} dy: {} dz: {}
+            \\vecs : {any}
+        ,
+            .{
+                idxs_ptr,
+                idxs_len,
+                shorts,
+                dx,
+                dy,
+                dz,
+                self.vectors.?,
+            },
+        );
+
         for (idxs_ptr[0..l]) |idx| {
             self.vectors.?[idx * 2].coords[0] += dx;
             self.vectors.?[idx * 2].coords[1] += dy;

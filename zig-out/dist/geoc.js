@@ -64,7 +64,7 @@ function getData(ptr, len) {
 
 /**
  * @param {number} c_ptr - Pointer to string
- * @param {number} len - Length of string  
+ * @param {number} len - Length of string
  * @returns {string} - Decoded string
  * */
 function getStr(c_ptr, len) {
@@ -895,13 +895,27 @@ const env = {
          // console.log("Bound buffer : " + handle);
       } else console.error("Failed to bind handle : " + handle);
    },
+   bufferData(handle, data_ptr, data_len) {
+      const vertex_buffer = buffers.get(handle);
+      
+      const data = getData(data_ptr, data_len);
+      
+      console.log("in JS bufferData", data);
+      
+      webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
+      webgl.bufferData(webgl.ARRAY_BUFFER, data, webgl.STATIC_DRAW);
+   },
    setInterval(cb_name_ptr, cb_name_len, fn_ptr, args_ptr, args_len, delay, timeout) {
-      console.log("js\n" + getStr(args_ptr, args_len * 4), getData(args_ptr, args_len * 4));
+      console.log("js\n" + getStr(args_ptr, args_len));
+
+      const buffer = new Uint8Array(wasm_memory.buffer);
+      const offset = buffer.length - args_len;
+      buffer.set(getData(args_ptr, args_len), offset);
 
       const cb_name = getStr(cb_name_ptr, cb_name_len);
 
       const interval_handle = setInterval(() => {
-         wasm_instance.exports[cb_name](state_ptr, fn_ptr, args_ptr, args_len * 4);
+         wasm_instance.exports[cb_name](state_ptr, fn_ptr, offset, args_len);
       }, delay);
 
       if (timeout > 0) {

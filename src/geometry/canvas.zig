@@ -319,8 +319,8 @@ pub const Scene = struct {
     }
 
     pub fn scale(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, factor: f32) void { // maybe assert
-        const l = shorts >> 16;
-        const r = shorts & 65535;
+        const l = shorts >> 0x10;
+        const r = shorts & 0xFFFF;
 
         for (idxs_ptr[0..l]) |idx| {
             for (&self.vectors.?[idx * 2].coords) |*value| {
@@ -344,8 +344,8 @@ pub const Scene = struct {
     }
 
     pub fn rotate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, x: f32, y: f32, z: f32) void {
-        const l = shorts >> 16;
-        const r = shorts & 65535;
+        const l = shorts >> 0x10;
+        const r = shorts & 0xFFFF;
 
         for (idxs_ptr[0..l]) |idx| {
             rotXYZ(&self.vectors.?[idx * 2], x, y, z);
@@ -363,23 +363,24 @@ pub const Scene = struct {
     }
 
     pub fn translate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, dx: f32, dy: f32, dz: f32) void {
-        const l = shorts >> 16;
-        const r = shorts & 65535;
+        const l = shorts >> 0x10;
+        const r = shorts & 0xFFFF;
 
         _LOGF(
             self.allocator,
             \\in scene translate
-            \\idxs_ptr: {*} idxs_len: {d} shorts: {d} dx: {} dy: {} dz: {}
+            \\l : {d} r : {d}
+            \\idxs: {any} dx: {} dy: {} dz: {}
             \\vecs : {any}
         ,
             .{
-                idxs_ptr,
-                idxs_len,
-                shorts,
+                l,
+                r,
+                idxs_ptr[0..idxs_len],
                 dx,
                 dy,
                 dz,
-                self.vectors.?,
+                self.vectors orelse null,
             },
         );
 
@@ -410,8 +411,8 @@ pub const Scene = struct {
     }
 
     pub fn reflect(self: *Scene, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, coord_idx: u8, factor: f32) void {
-        const l = shorts >> 16;
-        const r = shorts & 65535;
+        const l = shorts >> 0x10;
+        const r = shorts & 0xFFFF;
 
         for (idxs_ptr[0..l]) |idx| {
             self.vectors.?[idx * 2].coords[coord_idx] *= factor;

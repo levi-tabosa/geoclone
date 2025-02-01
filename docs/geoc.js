@@ -58,10 +58,21 @@ let state_ptr;
 /** @type {Map<String, number>} */
 const fn_ptrs = new Map();
 
-function getData(c_ptr, len) {
-  return new Uint8Array(wasm_memory.buffer, c_ptr, len);
+/**
+*
+* @param {*} ptr
+* @param {*} len
+* @returns {Uint8Array<ArrayBuffer>}
+*/
+function getData(ptr, len) {
+  return new Uint8Array(wasm_memory.buffer, ptr, len);
 }
 
+/**
+* @param {number} c_ptr - Pointer to string
+* @param {number} len - Length of string
+* @returns {string} - Decoded string
+* */
 function getStr(c_ptr, len) {
   return new TextDecoder().decode(getData(c_ptr, len));
 }
@@ -171,7 +182,7 @@ class SceneController {
   }
 
   insertVector(x, y, z) {
-     const [xf, yf, zf] = [parseFloat(x), parseFloat(y), parseFloat(z)];
+     const [xf, yf, zf] = [parseFloat(x) || 0, parseFloat(y) || 0, parseFloat(z) || 0];
      if ([xf, yf, zf].some(isNaN)) return;
 
      this.wasm_interface.insertVector(xf, yf, zf);
@@ -351,6 +362,7 @@ class SceneController {
      const buffer = new Uint32Array(wasm_memory.buffer);
      const offset = buffer.length - len;
      buffer.set(combined, offset);
+     console.log("in JS\n" + combined);
 
      this.wasm_interface.translate(offset * 4, len, shorts, dx, dy, dz);
 
@@ -890,17 +902,39 @@ const env = {
         // console.log("Bound buffer : " + handle);
      } else console.error("Failed to bind handle : " + handle);
   },
+  bufferSubData(handle, idxs_ptr, idxs_len, data_ptr, data_len) {
+     const vertex_buffer = buffers.get(handle);
+
+     const data = getData(data_ptr, data_len);
+     const idxs = new Uint32Array(wasm_memory.buffer, idxs_ptr, idxs_len);
+
+     console.log("in JS \nbufferData : ", Array.from(data), "idxs : ", Array.from(idxs));
+
+     webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
+
+     for (let i = 0; i < idxs_len; i++) {
+        const idx = idxs[i];
+        const offset = idx * 3 * 4;
+        // the * 2 makes this work for vectors only
+        // TODO: for shapes and cameras use bufferData for inidividual buffers
+        webgl.bufferSubData(webgl.ARRAY_BUFFER, offset, data.subarray(offset, offset + 3 * 4 * 2));
+     }
+  },
   setInterval(cb_name_ptr, cb_name_len, fn_ptr, args_ptr, args_len, delay, timeout) {
-     console.log("js\t" + getStr(args_ptr, args_len * 4));
+     console.log("js\n" + getStr(args_ptr, args_len));
+
+     const buffer = new Uint8Array(wasm_memory.buffer);
+     const offset = buffer.length - args_len;
+     buffer.set(getData(args_ptr, args_len), offset);
 
      const cb_name = getStr(cb_name_ptr, cb_name_len);
 
      const interval_handle = setInterval(() => {
-        wasm_instance.exports[cb_name](state_ptr, fn_ptr, args_ptr, args_len * 4);
+        wasm_instance.exports[cb_name](state_ptr, fn_ptr, offset, args_len);
      }, delay);
 
      if (timeout > 0) {
-        setTimeout(() => clearInterval(interval_handle), timeout);
+        setTimeout(() => clearInterval(interval_handle), timeout); //call export to free indexes memory
      }
 
      return interval_handle;

@@ -390,8 +390,14 @@ fn translateFn(
     dy: f32,
     dz: f32,
 ) callconv(.C) void {
+    const state: *State = @ptrCast(@alignCast(ptr));
+
+    //TODO: free this through an export call in the js setTimeout callback
+    const indexes = state.geoc.allocator.alloc(u32, idxs_len) catch unreachable;
+
+    std.mem.copyBackwards(u32, indexes, idxs_ptr[0..idxs_len]);
+
     const bytes = std.mem.asBytes(&struct {
-        // ptr: *anyopaque,
         idxs_ptr: [*]const u32,
         idxs_len: usize,
         shorts: u32,
@@ -399,25 +405,26 @@ fn translateFn(
         dy: f32,
         dz: f32,
     }{
-        // .ptr = ptr,
-        .idxs_ptr = idxs_ptr,
+        .idxs_ptr = indexes.ptr,
         .idxs_len = idxs_len,
         .shorts = shorts,
         .dx = dx / 25,
         .dy = dy / 25,
         .dz = dz / 25,
     });
+
     const args = std.mem.bytesAsSlice(u8, bytes);
+    // _LOGF(
+    //     state.geoc.allocator,
+    //     \\IN translateFn\n{any}
+    // ,
+    //     .{indexes},
+    // );
 
-    print(args);
-
-    const handle = g.Interval.init("apply", @intFromPtr(&applyTranslateFn), args, 30, 25);
-
-    _ = ptr;
-    _ = handle;
+    _ = g.Interval.init("apply", @intFromPtr(&applyTranslateFn), args, 30, 25); //TODO: pass in ptr to free indexes
 }
 
-fn applyTranslateFn( //TODO: adapt fn to accepts args as u8 slice allocated on translate?
+fn applyTranslateFn( //TODO: adapt fn to accepts args as u8 slice allocated on translate
     ptr: *anyopaque,
     args_ptr: [*]const u8,
     args_len: usize,
@@ -432,36 +439,41 @@ fn applyTranslateFn( //TODO: adapt fn to accepts args as u8 slice allocated on t
     };
 
     const bytes = std.mem.sliceAsBytes(args_ptr[0..args_len]);
-    const val = std.mem.bytesAsValue(Args, bytes);
+    const args = std.mem.bytesAsValue(Args, bytes);
     const state: *State = @ptrCast(@alignCast(ptr));
     const scene = state.scene;
 
     _LOGF(
         scene.allocator,
-        \\in applyTranslateF
-        \\idxs_ptr: {*} idxs_len: {d} shorts: {d} dx: {} dy: {} dz: {}
-        \\bytes: {s}
-    ,
-        .{
-            val.idxs_ptr,
-            val.idxs_len,
-            val.shorts,
-            val.dx,
-            val.dy,
-            val.dz,
-            bytes,
-        },
+        "IN applyTranslationFn : {any}",
+        .{args.idxs_ptr[0..args.idxs_len]},
     );
 
-    scene.translate(val.idxs_ptr, val.idxs_len, val.shorts, val.dx, val.dy, val.dz);
+    scene.translate(args.idxs_ptr, args.idxs_len, args.shorts, args.dx, args.dy, args.dz);
     scene.updateViewMatrix();
 
-    if (state.vector_buffer) |buffer| {
-        buffer.deinit();
-    }
-    state.vector_buffer = g.VertexBuffer(V3).init(state.scene.vectors.?);
-    // state.vector_buffer.?.bufferData(val.idxs_ptr[0..val.idxs_len]);
+    // if (state.vector_buffer) |buffer| {
+    //     buffer.deinit();
+    // }
+    // state.vector_buffer = g.VertexBuffer(V3).init(state.scene.vectors.?);
 
+    const idxs = scene.allocator.alloc(u32, args.idxs_len) catch unreachable;
+    defer scene.allocator.free(idxs);
+
+    for (0..args.idxs_len) |i| {
+        idxs[i] = args.idxs_ptr[i] * 2;
+    }
+
+    const selected = scene.allocator.alloc(V3, idxs.len * 2) catch unreachable;
+    defer scene.allocator.free(selected);
+
+    for (0..idxs.len, idxs[0..idxs.len]) |i, index| {
+        selected[i * 2] = scene.vectors.?[index];
+        selected[i * 2 + 1] = scene.vectors.?[index + 1];
+    }
+    const data: [*c]const u8 = @ptrCast(selected.ptr);
+
+    state.vector_buffer.?.bufferSubData(idxs, data[0 .. idxs.len * @sizeOf(V3) * 2]);
     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
 

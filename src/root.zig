@@ -113,10 +113,10 @@ pub fn VertexBuffer(comptime vertex: type) type {
         }
 
         // pub fn bufferData(self: Self, data: []const vertex) void {
-        pub fn bufferData(self: Self, data: []const u32) void {
+        pub fn bufferSubData(self: Self, indexes: []const u32, data: []const u8) void {
             // const aux: [*c]const u8 = @ptrCast(data.ptr);
             // self.platform.bufferData(data[0..data.len]);
-            self.platform.bufferData(data);
+            self.platform.bufferSubData(indexes, data);
         }
     };
 }

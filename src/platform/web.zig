@@ -15,7 +15,13 @@ const js = struct { //TODO remove all unused fn
     extern fn initVertexBuffer(data_ptr: [*]const u8, data_len: usize) i32;
     extern fn deinitVertexBuffer(js_handle: i32) void;
     extern fn bindVertexBuffer(js_handle: i32) void;
-    extern fn bufferData(js_handle: i32, data_ptr: [*]const u32, data_len: usize) void;
+    extern fn bufferSubData(
+        js_handle: i32,
+        idxs_ptr: [*]const u32,
+        idxs_len: usize,
+        data_ptr: [*]const u8,
+        data_len: usize,
+    ) void;
     extern fn setInterval(
         cb_name_ptr: [*]const u8,
         cb_name_len: usize,
@@ -269,9 +275,7 @@ pub const VertexBuffer = struct {
     js_handle: i32,
 
     pub fn init(data: []const u8) Self {
-        return .{
-            .js_handle = js.initVertexBuffer(data.ptr, data.len),
-        };
+        return .{ .js_handle = js.initVertexBuffer(data.ptr, data.len) };
     }
 
     pub fn deinit(self: Self) void {
@@ -282,8 +286,8 @@ pub const VertexBuffer = struct {
         js.bindVertexBuffer(self.js_handle);
     }
 
-    pub fn bufferData(self: Self, data: []const u32) void {
-        js.bufferData(self.js_handle, data.ptr, data.len);
+    pub fn bufferSubData(self: Self, indexes: []const u32, data: []const u8) void {
+        js.bufferSubData(self.js_handle, indexes.ptr, indexes.len, data.ptr, data.len);
     }
 };
 

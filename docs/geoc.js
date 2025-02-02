@@ -906,9 +906,10 @@ const env = {
      const vertex_buffer = buffers.get(handle);
 
      const data = getData(data_ptr, data_len);
+     // const data_floats = new Float32Array(data.buffer, data.byteOffset, data.length / 4);
      const idxs = new Uint32Array(wasm_memory.buffer, idxs_ptr, idxs_len);
 
-     console.log("in JS \nbufferData : ", Array.from(data), "idxs : ", Array.from(idxs));
+     // console.log("in JS \nbufferData : ", Array.from(data_floats), "idxs : ", Array.from(idxs));
 
      webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
 
@@ -916,9 +917,10 @@ const env = {
         const idx = idxs[i];
         const offset = idx * 3 * 4;
         // the * 2 makes this work for vectors only
-        // TODO: for shapes and cameras use bufferData for inidividual buffers
+        // TODO: for shapes and cameras use bufferData for individual buffers
         webgl.bufferSubData(webgl.ARRAY_BUFFER, offset, data.subarray(offset, offset + 3 * 4 * 2));
      }
+     webgl.bufferSubData(webgl.ARRAY_BUFFER, data.length - 24, data.subarray(data.length - 24));
   },
   setInterval(cb_name_ptr, cb_name_len, fn_ptr, args_ptr, args_len, delay, timeout) {
      console.log("js\n" + getStr(args_ptr, args_len));

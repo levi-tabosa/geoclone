@@ -473,7 +473,7 @@ fn applyTranslateFn( //TODO: adapt fn to accepts args as u8 slice allocated on t
     }
     const data: [*c]const u8 = @ptrCast(selected.ptr);
 
-    state.vector_buffer.?.bufferSubData(idxs, data[0 .. idxs.len * @sizeOf(V3) * 2]);
+    state.vector_buffer.?.bufferSubData(args.idxs_ptr[0..idxs.len], data[0 .. idxs.len * @sizeOf(V3) * 2]);
     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
 

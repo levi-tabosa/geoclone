@@ -413,7 +413,9 @@ fn translateFn(
         .dz = dz / 25,
     });
 
-    const args = std.mem.bytesAsSlice(u8, bytes);
+    const slice = std.mem.bytesAsSlice(u8, bytes);
+    const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
+    std.mem.copyBackwards(u8, args, slice);
     // _LOGF(
     //     state.geoc.allocator,
     //     \\IN translateFn\n{any}
@@ -473,7 +475,7 @@ fn applyTranslateFn( //TODO: adapt fn to accepts args as u8 slice allocated on t
     }
     const data: [*c]const u8 = @ptrCast(selected.ptr);
 
-    state.vector_buffer.?.bufferSubData(args.idxs_ptr[0..idxs.len], data[0 .. idxs.len * @sizeOf(V3) * 2]);
+    state.vector_buffer.?.bufferSubData(idxs, data[0 .. idxs.len * @sizeOf(V3) * 2]);
     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
 
@@ -502,23 +504,21 @@ fn reflectFn(
     coord_idx: u8,
 ) callconv(.C) void {
     const scene: *Scene = @alignCast(@ptrCast(ptr));
-
-    const bytes = std.mem.asBytes(&struct {
+    const Args = struct {
         idxs_ptr: [*]const u32,
         idxs_len: usize,
         shorts: u32,
         coord_idx: u8,
-    }{
+    };
+    const bytes = std.mem.asBytes(&Args{
         .idxs_ptr = idxs_ptr,
         .idxs_len = idxs_len,
         .shorts = shorts,
         .coord_idx = coord_idx,
     });
-    //TODO: somehow call destroy on this or hold memory on js side?
+
     const args = scene.allocator.alloc(u8, bytes.len) catch unreachable;
     std.mem.copyBackwards(u8, args, std.mem.bytesAsSlice(u8, bytes));
-
-    // _LOGF(scene.allocator, "BEFORE INTERVAL INIT\nargs as string: {s}\nargs : {any}\nzig args slice : {any}", .{ slice, args, slice });
 
     const handle = g.Interval.init("apply", @intFromPtr(&applyFn), args, 30, 25);
     _ = handle;

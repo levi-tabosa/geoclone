@@ -918,25 +918,39 @@ const env = {
          const offset = idx * 3 * 4;
          // the * 2 makes this work for vectors only
          // TODO: for shapes and cameras use bufferData for individual buffers
-         webgl.bufferSubData(webgl.ARRAY_BUFFER, offset, data.subarray(offset, offset + 3 * 4 * 2));
+         webgl.bufferSubData(
+            webgl.ARRAY_BUFFER,
+            offset,
+            data.subarray(offset, offset + 3 * 4 * 2)
+         );
       }
-      webgl.bufferSubData(webgl.ARRAY_BUFFER, data.length - 24, data.subarray(data.length - 24));
+      webgl.bufferSubData(
+         webgl.ARRAY_BUFFER,
+         data.length - 24,
+         data.subarray(data.length - 24)
+      );
    },
    setInterval(cb_name_ptr, cb_name_len, fn_ptr, args_ptr, args_len, delay, timeout) {
-      console.log("js\n" + getStr(args_ptr, args_len));
+      // const buffer = new Uint8Array(wasm_memory.buffer);
+      // const offset = buffer.length - args_len;
+      // buffer.set(getData(args_ptr, args_len), offset);
 
-      const buffer = new Uint8Array(wasm_memory.buffer);
-      const offset = buffer.length - args_len;
-      buffer.set(getData(args_ptr, args_len), offset);
+      const ptr = new Uint32Array(wasm_memory.buffer, args_ptr, 1)[0];
+
+      console.log("js\n" + getStr(args_ptr, args_len), ptr);
+
 
       const cb_name = getStr(cb_name_ptr, cb_name_len);
 
       const interval_handle = setInterval(() => {
-         wasm_instance.exports[cb_name](state_ptr, fn_ptr, offset, args_len);
+         wasm_instance.exports[cb_name](state_ptr, fn_ptr, args_ptr, args_len);
       }, delay);
 
       if (timeout > 0) {
-         setTimeout(() => clearInterval(interval_handle), timeout); //call export to free indexes memory
+         setTimeout(() => {
+            clearInterval(interval_handle);
+            // wasm_instance.exports.free(state_ptr, fn_ptr, ptr);
+         }, timeout); //call export to free indexes memory
       }
 
       return interval_handle;

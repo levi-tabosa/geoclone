@@ -97,10 +97,8 @@ pub fn VertexBuffer(comptime vertex: type) type {
         count: usize,
 
         pub fn init(data: []const vertex) Self {
-            const aux: [*c]const u8 = @ptrCast(data.ptr);
-
             return .{
-                .platform = platform.VertexBuffer.init(aux[0 .. data.len * @sizeOf(vertex)]),
+                .platform = platform.VertexBuffer.init(std.mem.sliceAsBytes(data)),
                 .count = data.len,
             };
         }

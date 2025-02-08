@@ -23,8 +23,6 @@ const js = struct { //TODO remove all unused fn
         data_len: usize,
     ) void;
     extern fn setInterval(
-        cb_name_ptr: [*]const u8,
-        cb_name_len: usize,
         fn_ptr: usize,
         args_ptr: [*]const u8,
         args_len: usize,
@@ -71,6 +69,15 @@ export fn apply(
     args_len: usize,
 ) void {
     fn_ptr(ptr, args_ptr, args_len);
+}
+
+export fn free(
+    ptr: *anyopaque,
+    fn_ptr: *const fn (*anyopaque, [*]const u8, usize) callconv(.C) void,
+    mem: [*]const u8,
+    len: usize,
+) void {
+    fn_ptr(ptr, mem, len);
 }
 
 export fn setAngles(
@@ -296,11 +303,9 @@ pub const Interval = struct {
 
     js_handle: i32,
 
-    pub fn init(cb_name: []const u8, cb_fn_ptr: usize, args: []const u8, delay: u32, count: ?u32) Self {
+    pub fn init(cb_fn_ptr: usize, args: []const u8, delay: u32, count: ?u32) Self {
         return .{
             .js_handle = js.setInterval(
-                cb_name.ptr,
-                cb_name.len,
                 cb_fn_ptr,
                 args.ptr,
                 args.len,

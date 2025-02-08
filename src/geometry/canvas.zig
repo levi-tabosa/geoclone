@@ -143,7 +143,7 @@ pub const Scene = struct {
             .axis = axis,
             .grid = grid,
             .camera = camera,
-            .view_matrix = camera.createViewMatrix(),
+            .view_matrix = camera.viewMatrix(),
         };
     }
 
@@ -186,7 +186,7 @@ pub const Scene = struct {
             } });
         }
 
-        self.view_matrix = self.camera.createViewMatrix();
+        self.view_matrix = self.camera.viewMatrix();
     }
 
     pub fn setPitch(self: *Self, angle: f32) void {
@@ -241,11 +241,15 @@ pub const Scene = struct {
             self.allocator.free(shapes);
         }
 
-        new_shapes[len] = shape.getVectors(self.allocator, null);
+        new_shapes[len] = shape.create(self.allocator, null);
 
         self.shapes = new_shapes;
     }
 
+    /// TODO: change to gpa.deinit to procure actual leaks
+    /// this may show memory in use as leaked
+    /// Shows increasing number of leaks after each call
+    /// fix crash when calling this while a fps cam is active
     pub fn clear(self: *Self) void {
         if (self.vectors) |vectors| {
             self.allocator.free(vectors);
@@ -265,9 +269,8 @@ pub const Scene = struct {
             self.allocator.free(cameras);
             self.cameras = null;
         }
-        // TODO: change to gpa.deinit to procure actual leaks
-        // this may show memory in use as leaked
-        _LOGF(self.allocator, "{}", .{geoc.gpa.detectLeaks()});
+
+        _LOGF(std.heap.page_allocator, "{}", .{geoc.gpa.detectLeaks()});
     }
 
     pub fn setResolution(self: *Self, res: usize) void {
@@ -298,6 +301,7 @@ pub const Scene = struct {
         };
     }
 
+    ///TODO: change the passing -1 from js interpreted as usize::MAX hack to a proper solution
     pub fn setCamera(self: *Self, index: usize) void {
         if (self.cameras) |cameras| {
             if (index < cameras.len) {
@@ -318,17 +322,17 @@ pub const Scene = struct {
         }
     }
 
-    pub fn scale(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, factor: f32) void { // maybe assert
-        const l = shorts >> 0x10;
-        const r = shorts & 0xFFFF;
+    pub fn scale(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, counts: u32, factor: f32) void {
+        const vectors_count = counts >> 0x10;
+        const shapes_count = counts & 0xFFFF;
 
-        for (idxs_ptr[0..l]) |idx| {
+        for (idxs_ptr[0..vectors_count]) |idx| {
             for (&self.vectors.?[idx * 2].coords) |*value| {
                 value.* *= factor;
             }
         }
 
-        for (idxs_ptr[l .. l + r]) |idx| {
+        for (idxs_ptr[vectors_count .. vectors_count + shapes_count]) |idx| {
             for (self.shapes.?[idx]) |*vertex| {
                 for (&vertex.coords) |*value| {
                     value.* *= factor;
@@ -336,61 +340,43 @@ pub const Scene = struct {
             }
         }
 
-        for (idxs_ptr[l + r .. idxs_len]) |idx| {
+        for (idxs_ptr[vectors_count + shapes_count .. idxs_len]) |idx| {
             for (&self.cameras.?[idx].pos.coords) |*value| {
                 value.* *= factor;
             }
         }
     }
 
-    pub fn rotate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, x: f32, y: f32, z: f32) void {
-        const l = shorts >> 0x10;
-        const r = shorts & 0xFFFF;
+    pub fn rotate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, counts: u32, x: f32, y: f32, z: f32) void {
+        const vectors_count = counts >> 0x10;
+        const shapes_count = counts & 0xFFFF;
 
-        for (idxs_ptr[0..l]) |idx| {
+        for (idxs_ptr[0..vectors_count]) |idx| {
             rotXYZ(&self.vectors.?[idx * 2], x, y, z);
         }
 
-        for (idxs_ptr[l .. l + r]) |idx| {
+        for (idxs_ptr[vectors_count .. vectors_count + shapes_count]) |idx| {
             for (self.shapes.?[idx]) |*vertex| {
                 rotXYZ(vertex, x, y, z);
             }
         }
 
-        for (idxs_ptr[l + r .. idxs_len]) |idx| {
+        for (idxs_ptr[vectors_count + shapes_count .. idxs_len]) |idx| {
             rotXYZ(&self.cameras.?[idx].pos, x, y, z);
         }
     }
 
-    pub fn translate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, dx: f32, dy: f32, dz: f32) void {
-        const l = shorts >> 0x10;
-        const r = shorts & 0xFFFF;
+    pub fn translate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, counts: u32, dx: f32, dy: f32, dz: f32) void {
+        const vectors_count = counts >> 0x10;
+        const shapes_count = counts & 0xFFFF;
 
-        _LOGF(
-            self.allocator,
-            \\in scene translate
-            \\l : {d} r : {d}
-            \\idxs: {any} dx: {} dy: {} dz: {}
-            \\vecs : {any}
-        ,
-            .{
-                l,
-                r,
-                idxs_ptr[0..idxs_len],
-                dx,
-                dy,
-                dz,
-                self.vectors orelse null,
-            },
-        );
-
-        for (idxs_ptr[0..l]) |idx| {
+        for (idxs_ptr[0..vectors_count]) |idx| {
             self.vectors.?[idx * 2].coords[0] += dx;
             self.vectors.?[idx * 2].coords[1] += dy;
             self.vectors.?[idx * 2].coords[2] += dz;
         }
 
-        for (idxs_ptr[l .. l + r]) |idx| {
+        for (idxs_ptr[vectors_count .. vectors_count + shapes_count]) |idx| {
             for (self.shapes.?[idx]) |*vertex| {
                 vertex.coords[0] += dx;
                 vertex.coords[1] += dy;
@@ -398,7 +384,7 @@ pub const Scene = struct {
             }
         }
 
-        for (idxs_ptr[l + r .. idxs_len]) |idx| {
+        for (idxs_ptr[vectors_count + shapes_count .. idxs_len]) |idx| {
             self.cameras.?[idx].pos.coords[0] += dx;
             self.cameras.?[idx].pos.coords[1] += dy;
             self.cameras.?[idx].pos.coords[2] += dz;
@@ -410,22 +396,48 @@ pub const Scene = struct {
         }
     }
 
-    pub fn reflect(self: *Scene, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, coord_idx: u8, factor: f32) void {
-        const l = shorts >> 0x10;
-        const r = shorts & 0xFFFF;
+    ///TODO: pass in coords_flags instead of coord_idx as a single u8
+    pub fn reflect(self: *Scene, idxs_ptr: [*]const u32, idxs_len: usize, counts: u32, coord_flags: u8, factor: f32) void {
+        const vectors_count = counts >> 0x10;
+        const shapes_count = counts & 0xFFFF;
 
-        for (idxs_ptr[0..l]) |idx| {
+        if (coord_flags & 1 == 1) {
+            self.reflectCoord(idxs_ptr, idxs_len, vectors_count, shapes_count, 0, factor);
+        }
+
+        if (coord_flags & 2 == 2) {
+            self.reflectCoord(idxs_ptr, idxs_len, vectors_count, shapes_count, 1, factor);
+        }
+
+        if (coord_flags & 4 == 4) {
+            self.reflectCoord(idxs_ptr, idxs_len, vectors_count, shapes_count, 2, factor);
+        }
+    }
+
+    fn reflectCoord(
+        self: *Scene,
+        idxs_ptr: [*]const u32,
+        idxs_len: usize,
+        vectors_count: usize,
+        shapes_count: usize,
+        coord_idx: u8,
+        factor: f32,
+    ) void {
+        for (idxs_ptr[0..vectors_count]) |idx| {
             self.vectors.?[idx * 2].coords[coord_idx] *= factor;
         }
 
-        for (idxs_ptr[l .. l + r]) |idx| {
+        for (idxs_ptr[vectors_count .. vectors_count + shapes_count]) |idx| {
             for (self.shapes.?[idx]) |*vertex| {
                 vertex.coords[coord_idx] *= factor;
             }
         }
 
-        for (idxs_ptr[l + r .. idxs_len]) |idx| {
+        for (idxs_ptr[vectors_count + shapes_count .. idxs_len]) |idx| {
             self.cameras.?[idx].pos.coords[coord_idx] *= factor;
+            for (self.cameras.?[idx].shape) |*vertex| {
+                vertex.coords[coord_idx] *= factor;
+            }
         }
     }
 };
@@ -433,6 +445,7 @@ pub const Scene = struct {
 pub const Camera = struct {
     const Self = @This();
 
+    allocator: Allocator,
     pos: V3,
     target: V3 = .{ .coords = .{ 0.0, 0.0, 0.0 } },
     up: V3 = .{ .coords = .{ 0.0, 0.0, 1.0 } },
@@ -440,27 +453,29 @@ pub const Camera = struct {
     shape: []V3,
 
     pub fn init(allocator: Allocator, pos: V3, radius: ?f32) Self {
-        const shape = allocator.alloc(V3, 8) catch unreachable;
-        shape[0] = .{ .coords = .{ pos.coords[0] - 0.05, pos.coords[1] - 0.05, pos.coords[2] - 0.05 } };
-        shape[1] = .{ .coords = .{ pos.coords[0] - 0.05, pos.coords[1] - 0.05, pos.coords[2] + 0.05 } };
-        shape[2] = .{ .coords = .{ pos.coords[0] + 0.05, pos.coords[1] - 0.05, pos.coords[2] + 0.05 } };
-        shape[3] = .{ .coords = .{ pos.coords[0] + 0.05, pos.coords[1] - 0.05, pos.coords[2] - 0.05 } };
-        shape[4] = .{ .coords = .{ pos.coords[0] - 0.05, pos.coords[1] + 0.05, pos.coords[2] - 0.05 } };
-        shape[5] = .{ .coords = .{ pos.coords[0] - 0.05, pos.coords[1] + 0.05, pos.coords[2] + 0.05 } };
-        shape[6] = .{ .coords = .{ pos.coords[0] + 0.05, pos.coords[1] + 0.05, pos.coords[2] + 0.05 } };
-        shape[7] = .{ .coords = .{ pos.coords[0] + 0.05, pos.coords[1] + 0.05, pos.coords[2] - 0.05 } };
+        const cube = allocator.alloc(V3, 8) catch unreachable;
+        const half_edge_len = 0.05; // lines will appear if  near is set smaller than 0.1
+        cube[0] = .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] - half_edge_len } };
+        cube[1] = .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] + half_edge_len } };
+        cube[2] = .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] + half_edge_len } };
+        cube[3] = .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] - half_edge_len } };
+        cube[4] = .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] - half_edge_len } };
+        cube[5] = .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] + half_edge_len } };
+        cube[6] = .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] + half_edge_len } };
+        cube[7] = .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] - half_edge_len } };
         return .{
+            .allocator = allocator,
             .pos = pos,
             .radius = radius,
-            .shape = shape,
+            .shape = cube,
         };
     }
 
-    pub fn deinit(allocator: Allocator, self: Self) void {
-        allocator.free(self.shape);
+    pub fn deinit(self: Self) void {
+        self.allocator.free(self.shape);
     }
 
-    pub fn createViewMatrix(self: Self) [16]f32 {
+    pub fn viewMatrix(self: Self) [16]f32 {
         const z_axis = V3.normalize(V3.subtract(self.pos, self.target));
         const x_axis = V3.normalize(V3.cross(self.up, z_axis));
         const y_axis = V3.cross(z_axis, x_axis);
@@ -481,7 +496,7 @@ pub const Shape = enum(u8) {
     CONE,
 
     /// Caller must free
-    pub fn getVectors(self: Shape, allocator: Allocator, res: ?usize) []V3 {
+    pub fn create(self: Shape, allocator: Allocator, res: ?usize) []V3 {
         const resolution = res orelse 16;
         return switch (self) {
             .CUBE => {
@@ -505,14 +520,14 @@ pub const Shape = enum(u8) {
                 vectors[4] = .{ .coords = .{ -1, 1, -1 } };
                 return vectors;
             },
-            .SPHERE => Sphere.generate(allocator, resolution),
-            .CONE => Cone.generate(allocator, resolution),
+            .SPHERE => Sphere.create(allocator, resolution),
+            .CONE => Cone.create(allocator, resolution),
         };
     }
 };
 
 pub const Sphere = struct {
-    pub fn generate(allocator: Allocator, res: usize) []V3 {
+    pub fn create(allocator: Allocator, res: usize) []V3 {
         const stacks = res;
         const slices = res;
         const radius: f32 = 1.0;
@@ -539,7 +554,7 @@ pub const Sphere = struct {
 };
 
 pub const Cone = struct {
-    pub fn generate(allocator: Allocator, res: usize) []V3 {
+    pub fn create(allocator: Allocator, res: usize) []V3 {
         const slices = res;
         const radius: f32 = 1.0;
         const height: f32 = 2.0;

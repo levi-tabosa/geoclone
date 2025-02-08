@@ -34,6 +34,7 @@ const Table = struct {
     rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
     translate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
     reflect_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, u8) callconv(.C) void,
+    free_fn_ptr: *const fn (*anyopaque, [*]const u8, usize) callconv(.C) void,
 };
 
 const V3 = canvas.V3;
@@ -129,6 +130,7 @@ pub const State = struct {
             .rotate_fn_ptr = rotateFn,
             .translate_fn_ptr = translateFn,
             .reflect_fn_ptr = reflectFn,
+            .free_fn_ptr = freeFn,
         };
 
         inline for (std.meta.fields(Table)) |fn_ptr| {
@@ -353,12 +355,12 @@ fn scaleFn(
     ptr: *anyopaque,
     idxs_ptr: [*]const u32,
     idxs_len: usize,
-    shorts: u32,
+    counts: u32,
     factor: f32,
 ) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
     const scene = state.scene;
-    scene.scale(idxs_ptr, idxs_len, shorts, factor);
+    scene.scale(idxs_ptr, idxs_len, counts, factor);
     scene.updateViewMatrix();
 
     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
@@ -368,14 +370,14 @@ fn rotateFn(
     ptr: *anyopaque,
     idxs_ptr: [*]const u32,
     idxs_len: usize,
-    shorts: u32,
+    counts: u32,
     x: f32,
     y: f32,
     z: f32,
 ) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
     const scene = state.scene;
-    scene.rotate(idxs_ptr, idxs_len, shorts, x, y, z);
+    scene.rotate(idxs_ptr, idxs_len, counts, x, y, z);
     scene.updateViewMatrix();
 
     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
@@ -385,7 +387,7 @@ fn translateFn(
     ptr: *anyopaque,
     idxs_ptr: [*]const u32,
     idxs_len: usize,
-    shorts: u32,
+    counts: u32,
     dx: f32,
     dy: f32,
     dz: f32,
@@ -400,20 +402,21 @@ fn translateFn(
     const bytes = std.mem.asBytes(&struct {
         idxs_ptr: [*]const u32,
         idxs_len: usize,
-        shorts: u32,
+        counts: u32,
         dx: f32,
         dy: f32,
         dz: f32,
     }{
         .idxs_ptr = indexes.ptr,
         .idxs_len = idxs_len,
-        .shorts = shorts,
+        .counts = counts,
         .dx = dx / 25,
         .dy = dy / 25,
         .dz = dz / 25,
     });
 
     const slice = std.mem.bytesAsSlice(u8, bytes);
+    //TODO: free this through an export call in the js setTimeout callback
     const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
     std.mem.copyBackwards(u8, args, slice);
     // _LOGF(
@@ -423,10 +426,10 @@ fn translateFn(
     //     .{indexes},
     // );
 
-    _ = g.Interval.init("apply", @intFromPtr(&applyTranslateFn), args, 30, 25); //TODO: pass in ptr to free indexes
+    _ = g.Interval.init(@intFromPtr(&applyTranslateFn), args, 30, 25); //TODO:maybe pass in ptr to free indexes
 }
 
-fn applyTranslateFn( //TODO: adapt fn to accepts args as u8 slice allocated on translate
+fn applyTranslateFn(
     ptr: *anyopaque,
     args_ptr: [*]const u8,
     args_len: usize,
@@ -434,7 +437,7 @@ fn applyTranslateFn( //TODO: adapt fn to accepts args as u8 slice allocated on t
     const Args = struct {
         idxs_ptr: [*]const u32,
         idxs_len: usize,
-        shorts: u32,
+        counts: u32,
         dx: f32,
         dy: f32,
         dz: f32,
@@ -442,95 +445,66 @@ fn applyTranslateFn( //TODO: adapt fn to accepts args as u8 slice allocated on t
 
     const bytes = std.mem.sliceAsBytes(args_ptr[0..args_len]);
     const args = std.mem.bytesAsValue(Args, bytes);
+
     const state: *State = @ptrCast(@alignCast(ptr));
     const scene = state.scene;
 
-    _LOGF(
-        scene.allocator,
-        "IN applyTranslationFn : {any}",
-        .{args.idxs_ptr[0..args.idxs_len]},
-    );
-
-    scene.translate(args.idxs_ptr, args.idxs_len, args.shorts, args.dx, args.dy, args.dz);
+    scene.translate(args.idxs_ptr, args.idxs_len, args.counts, args.dx, args.dy, args.dz);
     scene.updateViewMatrix();
 
-    // if (state.vector_buffer) |buffer| {
-    //     buffer.deinit();
-    // }
-    // state.vector_buffer = g.VertexBuffer(V3).init(state.scene.vectors.?);
-
-    const idxs = scene.allocator.alloc(u32, args.idxs_len) catch unreachable;
-    defer scene.allocator.free(idxs);
+    const non_origin_idxs = scene.allocator.alloc(u32, args.idxs_len) catch unreachable;
+    defer scene.allocator.free(non_origin_idxs);
 
     for (0..args.idxs_len) |i| {
-        idxs[i] = args.idxs_ptr[i] * 2;
+        non_origin_idxs[i] = args.idxs_ptr[i] * 2;
     }
 
-    const selected = scene.allocator.alloc(V3, idxs.len * 2) catch unreachable;
+    const selected = scene.allocator.alloc(V3, non_origin_idxs.len * 2) catch unreachable;
     defer scene.allocator.free(selected);
 
-    for (0..idxs.len, idxs[0..idxs.len]) |i, index| {
+    for (0..non_origin_idxs.len, non_origin_idxs[0..non_origin_idxs.len]) |i, index| {
         selected[i * 2] = scene.vectors.?[index];
         selected[i * 2 + 1] = scene.vectors.?[index + 1];
     }
-    const data: [*c]const u8 = @ptrCast(selected.ptr);
 
-    state.vector_buffer.?.bufferSubData(idxs, data[0 .. idxs.len * @sizeOf(V3) * 2]);
+    state.vector_buffer.?.bufferSubData(args.idxs_ptr[0..args.idxs_len], selected);
     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
-
-// fn applyTranslateFn( //TODO: adapt fn to accepts args as u8 slice allocated on translate?
-//     ptr: *anyopaque,
-//     idxs_ptr: [*]const u32,
-//     idxs_len: usize,
-//     shorts: u32,
-//     dx: f32,
-//     dy: f32,
-//     dz: f32,
-// ) void {
-//     const state: *State = @ptrCast(@alignCast(ptr));
-//     const scene = state.scene;
-//     scene.translate(idxs_ptr, idxs_len, shorts, dx, dy, dz);
-//     scene.updateViewMatrix();
-
-//     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
-// }
 
 fn reflectFn(
     ptr: *anyopaque,
     idxs_ptr: [*]const u32,
     idxs_len: usize,
-    shorts: u32,
+    counts: u32,
     coord_idx: u8,
 ) callconv(.C) void {
     const scene: *Scene = @alignCast(@ptrCast(ptr));
     const Args = struct {
         idxs_ptr: [*]const u32,
         idxs_len: usize,
-        shorts: u32,
+        counts: u32,
         coord_idx: u8,
     };
     const bytes = std.mem.asBytes(&Args{
         .idxs_ptr = idxs_ptr,
         .idxs_len = idxs_len,
-        .shorts = shorts,
+        .counts = counts,
         .coord_idx = coord_idx,
     });
 
     const args = scene.allocator.alloc(u8, bytes.len) catch unreachable;
     std.mem.copyBackwards(u8, args, std.mem.bytesAsSlice(u8, bytes));
 
-    const handle = g.Interval.init("apply", @intFromPtr(&applyFn), args, 30, 25);
-    _ = handle;
+    _ = g.Interval.init(@intFromPtr(&applyReflectFn), args, 30, 25);
     // maybe call this on defer block after returning copy V3[]
 }
 
-pub fn applyFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) void {
+pub fn applyReflectFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) void { //TODO: remove
     const scene: *Scene = @ptrCast(@alignCast(ptr));
     const Args = struct {
         idxs_ptr: [*]const u32,
         idxs_len: usize,
-        shorts: u32,
+        counts: u32,
         coord_idx: u8,
     };
 
@@ -544,11 +518,11 @@ pub fn applyFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) void {
     const val = std.mem.bytesAsValue(Args, bytes);
     // _LOGF( //TODO: maybe just print val
     //     scene.allocator,
-    //     "bytesAsValue \nidxs_ptr: {} idxs_len: {} shorts: {} coord_idx: {}",
-    //     .{ @intFromPtr(val.idxs_ptr), val.idxs_len, val.shorts, val.coord_idx },
+    //     "bytesAsValue \nidxs_ptr: {} idxs_len: {} counts: {} coord_idx: {}",
+    //     .{ @intFromPtr(val.idxs_ptr), val.idxs_len, val.counts, val.coord_idx },
     // );
 
-    scene.reflect(val.idxs_ptr, val.idxs_len, val.shorts, val.coord_idx, -1.0);
+    scene.reflect(val.idxs_ptr, val.idxs_len, val.counts, val.coord_idx, -1.0);
     scene.updateViewMatrix();
 
     @as(
@@ -561,12 +535,9 @@ pub fn applyFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) void {
     );
 }
 
-pub fn applyReflectFn(ptr: *anyopaque, idxs_ptr: [*]const u32, idxs_len: usize, shorts: u32, coord_idx: u8, factor: f32) void {
+pub fn freeFn(ptr: *anyopaque, mem: [*]const u8, len: usize) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
-    const scene = state.scene;
-    scene.reflect(idxs_ptr, idxs_len, shorts, coord_idx, factor);
-    scene.updateViewMatrix();
-    state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
+    state.geoc.allocator.free(mem[0..len]);
 }
 
 pub fn main() void {

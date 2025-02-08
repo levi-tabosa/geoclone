@@ -224,6 +224,8 @@ pub const Scene = struct {
 
         if (self.cameras) |cameras| {
             std.mem.copyBackwards(Camera, new_cameras_slice, cameras);
+
+            //camera shape maybe leaking here
             self.allocator.free(self.cameras.?);
         }
         new_cameras_slice[len] = Camera.init(self.allocator, V3.init(pos_x, pos_y, pos_z), null);
@@ -231,6 +233,7 @@ pub const Scene = struct {
         self.cameras = new_cameras_slice;
     }
 
+    ///TODO: make this accept resolution as usize
     pub fn insertShape(self: *Self, shape: Shape) void {
         const len = if (self.shapes) |shapes| shapes.len else 0;
 
@@ -264,22 +267,23 @@ pub const Scene = struct {
         }
         if (self.cameras) |cameras| {
             for (cameras) |camera| {
-                self.allocator.free(camera.shape);
+                camera.deinit();
             }
             self.allocator.free(cameras);
             self.cameras = null;
         }
 
-        _LOGF(std.heap.page_allocator, "{}", .{geoc.gpa.detectLeaks()});
+        //this causes the page to freeze if button is spammed
+        _LOGF(self.allocator, "{}", .{geoc.gpa.detectLeaks()});
     }
 
     pub fn setResolution(self: *Self, res: usize) void {
-        self.allocator.free(self.grid);
-
         const j: i32 = @intCast(res / 2);
         const fixed: f32 = @floatFromInt(j);
         const upperLimit = j;
         var i: i32 = -j;
+
+        self.allocator.free(self.grid);
         self.grid = self.allocator.alloc(V3, res * 4) catch unreachable;
 
         while (i < upperLimit) : (i += 1) {
@@ -306,10 +310,12 @@ pub const Scene = struct {
         if (self.cameras) |cameras| {
             if (index < cameras.len) {
                 if (self.camera.radius != null) {
+                    self.camera.deinit();
                     self.allocator.destroy(self.camera);
                 }
                 self.camera = &cameras[index];
             } else {
+                //TODO: make radius user input
                 const r = 10;
 
                 self.camera = self.allocator.create(Camera) catch unreachable;
@@ -527,6 +533,7 @@ pub const Shape = enum(u8) {
 };
 
 pub const Sphere = struct {
+    /// Caller must free
     pub fn create(allocator: Allocator, res: usize) []V3 {
         const stacks = res;
         const slices = res;
@@ -554,6 +561,7 @@ pub const Sphere = struct {
 };
 
 pub const Cone = struct {
+    /// Caller must free
     pub fn create(allocator: Allocator, res: usize) []V3 {
         const slices = res;
         const radius: f32 = 1.0;

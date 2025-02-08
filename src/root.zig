@@ -6,6 +6,7 @@ pub const platform = switch (builtin.target.isWasm()) {
     false => @import("platform/native.zig"),
 };
 
+//used in example.zig
 pub const canvas = @import("geometry/canvas.zig");
 //TODO: remove pub acess modifier after fixing leaks
 pub var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true, .verbose_log = true }){};
@@ -112,11 +113,8 @@ pub fn VertexBuffer(comptime vertex: type) type {
             self.platform.bind();
         }
 
-        // pub fn bufferData(self: Self, data: []const vertex) void {
-        pub fn bufferSubData(self: Self, indexes: []const u32, data: []const u8) void {
-            // const aux: [*c]const u8 = @ptrCast(data.ptr);
-            // self.platform.bufferData(data[0..data.len]);
-            self.platform.bufferSubData(indexes, data);
+        pub fn bufferSubData(self: Self, indexes: []const u32, data: []const vertex) void {
+            self.platform.bufferSubData(indexes, std.mem.sliceAsBytes(data));
         }
     };
 }
@@ -126,10 +124,9 @@ pub const Interval = struct {
 
     platform: platform.Interval,
 
-    pub fn init(cb_name: []const u8, cb_fn_ptr: usize, args: []const u8, delay: u32, count: ?u32) Self {
+    pub fn init(cb_fn_ptr: usize, args: []const u8, delay: u32, count: ?u32) Self {
         return .{
             .platform = platform.Interval.init(
-                cb_name,
                 cb_fn_ptr,
                 args,
                 delay,

@@ -362,7 +362,6 @@ class SceneController {
       const buffer = new Uint32Array(wasm_memory.buffer);
       const offset = buffer.length - len;
       buffer.set(combined, offset);
-      console.log("in JS\n" + combined);
 
       this.wasm_interface.translate(offset * 4, len, shorts, dx, dy, dz);
 
@@ -905,52 +904,28 @@ const env = {
    bufferSubData(handle, idxs_ptr, idxs_len, data_ptr, data_len) {
       const vertex_buffer = buffers.get(handle);
 
-      const data = getData(data_ptr, data_len);
-      // const data_floats = new Float32Array(data.buffer, data.byteOffset, data.length / 4);
+      const data = new Float32Array(wasm_memory.buffer, data_ptr, data_len / 4);
       const idxs = new Uint32Array(wasm_memory.buffer, idxs_ptr, idxs_len);
-
-      // console.log("in JS \nbufferData : ", Array.from(data_floats), "idxs : ", Array.from(idxs));
 
       webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
 
       for (let i = 0; i < idxs_len; i++) {
          const idx = idxs[i];
-         const offset = idx * 3 * 4;
-         // the * 2 makes this work for vectors only
-         // TODO: for shapes and cameras use bufferData for individual buffers
-         webgl.bufferSubData(
-            webgl.ARRAY_BUFFER,
-            offset,
-            data.subarray(offset, offset + 3 * 4 * 2)
-         );
+         const offset = idx * 6 * 4;
+         const vertexData = data.subarray(i * 6, (i + 1) * 6);
+         webgl.bufferSubData(webgl.ARRAY_BUFFER, offset, vertexData);
       }
-      webgl.bufferSubData(
-         webgl.ARRAY_BUFFER,
-         data.length - 24,
-         data.subarray(data.length - 24)
-      );
    },
-   setInterval(cb_name_ptr, cb_name_len, fn_ptr, args_ptr, args_len, delay, timeout) {
-      // const buffer = new Uint8Array(wasm_memory.buffer);
-      // const offset = buffer.length - args_len;
-      // buffer.set(getData(args_ptr, args_len), offset);
-
-      const ptr = new Uint32Array(wasm_memory.buffer, args_ptr, 1)[0];
-
-      console.log("js\n" + getStr(args_ptr, args_len), ptr);
-
-
-      const cb_name = getStr(cb_name_ptr, cb_name_len);
-
+   setInterval(fn_ptr, args_ptr, args_len, delay, timeout) {
       const interval_handle = setInterval(() => {
-         wasm_instance.exports[cb_name](state_ptr, fn_ptr, args_ptr, args_len);
+         wasm_instance.exports.apply(state_ptr, fn_ptr, args_ptr, args_len);
       }, delay);
 
       if (timeout > 0) {
          setTimeout(() => {
             clearInterval(interval_handle);
-            // wasm_instance.exports.free(state_ptr, fn_ptr, ptr);
-         }, timeout); //call export to free indexes memory
+            wasm_instance.exports.free(state_ptr, fn_ptrs.get("free_fn_ptr"), args_ptr);
+         }, timeout);
       }
 
       return interval_handle;

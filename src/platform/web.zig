@@ -64,7 +64,7 @@ export fn dummy(ptr: *anyopaque, fn_ptr: *const fn (*anyopaque) callconv(.C) voi
 
 export fn apply(
     ptr: *anyopaque,
-    fn_ptr: *const fn (*anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, [*]const u8, usize) callconv(.C) void,
     args_ptr: [*]const u8,
     args_len: usize,
 ) void {
@@ -375,7 +375,7 @@ pub const State = struct {
         normalized: bool,
     ) void {
         const size, const gl_type = switch (@typeInfo(field.type)) {
-            .Array => |array| .{ array.len, getGLType(array.child) },
+            .array => |array| .{ array.len, getGLType(array.child) },
             else => {
                 @compileError("field must be array type");
             },

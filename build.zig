@@ -54,8 +54,8 @@ fn setupDistributionSteps(
 ) void {
     const dist_step = b.step("dist", "Makes dist");
 
-    const dist_path = std.fs.path.join(b.allocator, &.{ b.install_prefix, "/dist" }) catch unreachable;
-    const remove_out = b.addRemoveDirTree(dist_path);
+    // const dist_path = std.fs.path.join(b.allocator, &.{ b.install_prefix, "/dist" }) catch unreachable;
+    const remove_out = b.addRemoveDirTree(b.path("zig-out/dist"));
 
     if (target.result.isWasm()) {
         setupWasmDistribution(b, dist_step, remove_out, exe);
@@ -104,8 +104,8 @@ fn setupWasmFileStep(
 ) void {
     const only_wasm_step = b.step("justw", "regenerates wasm file");
 
-    const wasm_path = std.fs.path.join(b.allocator, &.{ b.install_prefix, "/dist/example.wasm" }) catch unreachable;
-    const remove_wasm = b.addRemoveDirTree(wasm_path);
+    // const wasm_path = std.fs.path.join(b.allocator, &.{ b.install_prefix, "/dist/example.wasm" }) catch unreachable;
+    const remove_wasm = b.addRemoveDirTree(b.path("zig-out/dist/example.wasm"));
 
     only_wasm_step.dependOn(&remove_wasm.step);
     only_wasm_step.dependOn(&b.addInstallArtifact(exe, .{
@@ -120,8 +120,8 @@ fn setupJSFileStep(
 ) void {
     const only_js_step = b.step("justjs", "regenerates js file");
 
-    const js_path = std.fs.path.join(b.allocator, &.{ b.install_prefix, "dist/geoc.js" }) catch unreachable;
-    const remove_js = b.addRemoveDirTree(js_path);
+    // const js_path = std.fs.path.join(b.allocator, &.{ b.install_prefix, "dist/geoc.js" }) catch unreachable;
+    const remove_js = b.addRemoveDirTree(b.path("zig-out/dist/geoc.js"));
 
     only_js_step.dependOn(&remove_js.step);
     only_js_step.dependOn(&b.addInstallFile(
@@ -135,8 +135,8 @@ fn setupCSSFileStep(
 ) void {
     const only_css_step = b.step("style", "regenerates css file");
 
-    const css_path = std.fs.path.join(b.allocator, &.{ b.install_prefix, "dist/geoc.css" }) catch unreachable;
-    const remove_css = b.addRemoveDirTree(css_path);
+    // const css_path = std.fs.path.join(b.allocator, &.{ b.install_prefix, "dist/geoc.css" }) catch unreachable;
+    const remove_css = b.addRemoveDirTree(b.path("zig-out/dist/geoc.css"));
 
     only_css_step.dependOn(&remove_css.step);
     only_css_step.dependOn(&b.addInstallFile(

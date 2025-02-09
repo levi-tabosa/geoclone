@@ -11,7 +11,7 @@ fn _LOGF(allocator: std.mem.Allocator, comptime txt: []const u8, args: anytype) 
     print(std.fmt.allocPrint(allocator, txt, args) catch unreachable);
 }
 
-pub const std_options = .{
+pub const std_options = std.Options{
     .log_level = .info,
     .logFn = g.logFn,
 };
@@ -419,12 +419,6 @@ fn translateFn(
     //TODO: free this through an export call in the js setTimeout callback
     const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
     std.mem.copyBackwards(u8, args, slice);
-    // _LOGF(
-    //     state.geoc.allocator,
-    //     \\IN translateFn\n{any}
-    // ,
-    //     .{indexes},
-    // );
 
     _ = g.Interval.init(@intFromPtr(&applyTranslateFn), args, 30, 25); //TODO:maybe pass in ptr to free indexes
 }
@@ -509,19 +503,8 @@ pub fn applyReflectFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) v
     };
 
     const bytes = std.mem.sliceAsBytes(args_ptr[0..args_len]);
-    // _LOGF(
-    //     scene.allocator,
-    //     "ON APPLY \n args as string: {s}\nargs : {any}\nargs as bytes string: {s}\nargs as bytes : {any}",
-    //     .{ args_ptr[0..args_len], args_ptr[0..args_len], bytes, bytes },
-    // );
 
     const val = std.mem.bytesAsValue(Args, bytes);
-    // _LOGF( //TODO: maybe just print val
-    //     scene.allocator,
-    //     "bytesAsValue \nidxs_ptr: {} idxs_len: {} counts: {} coord_idx: {}",
-    //     .{ @intFromPtr(val.idxs_ptr), val.idxs_len, val.counts, val.coord_idx },
-    // );
-
     scene.reflect(val.idxs_ptr, val.idxs_len, val.counts, val.coord_idx, -1.0);
     scene.updateViewMatrix();
 

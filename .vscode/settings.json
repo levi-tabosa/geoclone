@@ -2,7 +2,7 @@
    "liveServer.settings.port": 5000,
    "liveServer.settings.root": "/zig-out/dist/",
    "[javascript]": {
-    "editor.defaultFormatter": "esbenp.prettier-vscode"
+    "editor.defaultFormatter": "vscode.typescript-language-features"
   },
   "window.title": "${dirty}${activeEditorShort}${separator}${rootName}${separator}${profileName}${separator}${appName}${separator}[Branch: setInterval-Zig]",
   "cSpell.words": [

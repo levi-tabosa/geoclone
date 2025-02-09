@@ -182,7 +182,11 @@ class SceneController {
   }
 
   insertVector(x, y, z) {
-     const [xf, yf, zf] = [parseFloat(x) || 0, parseFloat(y) || 0, parseFloat(z) || 0];
+     const [xf, yf, zf] = [
+        parseFloat(x) || 0,
+        parseFloat(y) || 0,
+        parseFloat(z) || 0,
+     ];
      if ([xf, yf, zf].some(isNaN)) return;
 
      this.wasm_interface.insertVector(xf, yf, zf);
@@ -224,7 +228,8 @@ class SceneController {
      const combined = this.concatAndGetSelected();
      const len = combined.length;
 
-     const shorts = (this.selected_vectors.length << 16) + this.selected_shapes.length;
+     const shorts =
+        (this.selected_vectors.length << 16) + this.selected_shapes.length;
 
      if (len === 0) return;
 
@@ -256,9 +261,9 @@ class SceneController {
   }
 
   rotate(
-     /** @type {String} */ angle_x,
-     /** @type {String} */ angle_y,
-     /** @type {String} */ angle_z
+   /** @type {String} */ angle_x,
+   /** @type {String} */ angle_y,
+   /** @type {String} */ angle_z
   ) {
      const combined = this.concatAndGetSelected();
      const len = combined.length;
@@ -272,7 +277,8 @@ class SceneController {
         return;
      }
 
-     const shorts = (this.selected_vectors.length << 16) + this.selected_shapes.length;
+     const shorts =
+        (this.selected_vectors.length << 16) + this.selected_shapes.length;
 
      const rotation_step = {
         x: angle_x / FRAMES,
@@ -357,7 +363,8 @@ class SceneController {
      const len = combined.length;
      if (len === 0 || [dx, dy, dz].some(isNaN)) return;
 
-     const shorts = (this.selected_vectors.length << 16) + this.selected_shapes.length;
+     const shorts =
+        (this.selected_vectors.length << 16) + this.selected_shapes.length;
 
      const buffer = new Uint32Array(wasm_memory.buffer);
      const offset = buffer.length - len;
@@ -381,7 +388,8 @@ class SceneController {
      const len = combined.length;
      if (len === 0) return;
 
-     const shorts = (this.selected_vectors.length << 16) + this.selected_shapes.length;
+     const shorts =
+        (this.selected_vectors.length << 16) + this.selected_shapes.length;
      const coord_idx = (() => {
         switch (axis) {
            case "X":
@@ -453,9 +461,9 @@ class SceneController {
   }
 
   addColumnItem(
-     /** @type {HTMLElement} */ column,
-     /** @type {String} */ item_class_name,
-     /** @type {String} */ text
+   /** @type {HTMLElement} */ column,
+   /** @type {String} */ item_class_name,
+   /** @type {String} */ text
   ) {
      const item = document.createElement("div");
      item.textContent = text;
@@ -501,7 +509,9 @@ class SceneController {
      if (this.is_rotating) {
         clearInterval(this.rotation_interval);
         this.is_rotating = false;
-     } else if (document.querySelectorAll(".vector-item.selected").length === 0) {
+     } else if (
+        document.querySelectorAll(".vector-item.selected").length === 0
+     ) {
         this.is_rotating = true;
         let y_angle = 0;
 
@@ -547,11 +557,18 @@ class WasmInterface {
   }
 
   setZoom(zoom_delta) {
-     this.wasm_exports.setZoom(state_ptr, fn_ptrs.get("set_zoom_fn_ptr"), zoom_delta);
+     this.wasm_exports.setZoom(
+        state_ptr,
+        fn_ptrs.get("set_zoom_fn_ptr"),
+        zoom_delta
+     );
   }
 
   getPitch() {
-     return this.wasm_exports.getPitch(state_ptr, fn_ptrs.get("get_pitch_fn_ptr"));
+     return this.wasm_exports.getPitch(
+        state_ptr,
+        fn_ptrs.get("get_pitch_fn_ptr")
+     );
   }
 
   insertVector(x, y, z) {
@@ -593,7 +610,11 @@ class WasmInterface {
   }
 
   setCamera(index) {
-     this.wasm_exports.setCamera(state_ptr, fn_ptrs.get("set_camera_fn_ptr"), index);
+     this.wasm_exports.setCamera(
+        state_ptr,
+        fn_ptrs.get("set_camera_fn_ptr"),
+        index
+     );
   }
 
   rotate(indexes_ptr, indexes_len, shorts, x, y, z) {
@@ -676,9 +697,9 @@ function setAspectRatioUniform(/** @type { number} */ aspect_ratio) {
 }
 
 function setPerspectiveUniforms(
-  /** @type { number} */ fov,
-  /** @type { number} */ near,
-  /** @type { number} */ far
+ /** @type { number} */ fov,
+ /** @type { number} */ near,
+ /** @type { number} */ far
 ) {
   for (let i = 0; i < next_program; i++) {
      const program = programs.get(i);
@@ -753,7 +774,6 @@ const env = {
   run(ptr, fnPtr) {
      function frame() {
         call(ptr, fnPtr);
-        // console.log("js ptr : " + ptr.toString(16));
         // setTimeout(() => requestAnimationFrame(frame), 1500);
         // setTimeout(() => requestAnimationFrame(frame), 1000 / FPS);
         requestAnimationFrame(frame);
@@ -785,7 +805,9 @@ const env = {
      webgl.compileShader(shader);
 
      if (!webgl.getShaderParameter(shader, webgl.COMPILE_STATUS)) {
-        throw new Error(`Failed to compile shader ${webgl.getShaderInfoLog(shader)}`);
+        throw new Error(
+           `Failed to compile shader ${webgl.getShaderInfoLog(shader)}`
+        );
      }
 
      const handle = next_shader++;
@@ -809,10 +831,15 @@ const env = {
      webgl.linkProgram(program);
 
      if (!webgl.getProgramParameter(program, webgl.LINK_STATUS)) {
-        throw new Error(`Failed to link program: ${webgl.getProgramInfoLog(program)}`);
+        throw new Error(
+           `Failed to link program: ${webgl.getProgramInfoLog(program)}`
+        );
      }
 
-     const attribute_count = webgl.getProgramParameter(program, webgl.ACTIVE_ATTRIBUTES);
+     const attribute_count = webgl.getProgramParameter(
+        program,
+        webgl.ACTIVE_ATTRIBUTES
+     );
      const attributes = new Map();
 
      for (let i = 0; i < attribute_count; i++) {
@@ -822,7 +849,10 @@ const env = {
         }
      }
 
-     const uniform_count = webgl.getProgramParameter(program, webgl.ACTIVE_UNIFORMS);
+     const uniform_count = webgl.getProgramParameter(
+        program,
+        webgl.ACTIVE_UNIFORMS
+     );
      const uniforms = new Map();
 
      for (let i = 0; i < uniform_count; i++) {
@@ -863,7 +893,10 @@ const env = {
   },
   initVertexBuffer(data_ptr, data_len) {
      console.log(
-        "Initialized buffer\nhandle: " + next_buffer + "\tdata_len : " + data_len / 12
+        "Initialized buffer\nhandle: " +
+        next_buffer +
+        "\tdata_len : " +
+        data_len / 12
      );
      const vertex_buffer = webgl.createBuffer();
 
@@ -883,23 +916,17 @@ const env = {
      if (buffers.delete(handle)) {
         webgl.deleteBuffer(buffer);
         next_buffer--;
-        console.log(
-           "Deleted buffer\nhandle : " + handle,
-           "new next_buffer : " + next_buffer
-        );
      } else {
-        console.error(
-           "Failed to delete buffer\nhandle : " + handle,
-           "next_buffer : " + next_buffer
-        );
+        console.error("Failed to delete buffer\nhandle : " + handle);
      }
   },
   bindVertexBuffer(handle) {
      const vertex_buffer = buffers.get(handle);
      if (vertex_buffer) {
         webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
-        // console.log("Bound buffer : " + handle);
-     } else console.error("Failed to bind handle : " + handle);
+     } else {
+        console.error("Failed to bind handle : " + handle);
+     }
   },
   bufferSubData(handle, idxs_ptr, idxs_len, data_ptr, data_len) {
      const vertex_buffer = buffers.get(handle);
@@ -917,18 +944,23 @@ const env = {
      }
   },
   setInterval(fn_ptr, args_ptr, args_len, delay, timeout) {
-     const interval_handle = setInterval(() => {
+     console.log(fn_ptr);
+     const handle = setInterval(() => {
         wasm_instance.exports.apply(state_ptr, fn_ptr, args_ptr, args_len);
      }, delay);
 
      if (timeout > 0) {
         setTimeout(() => {
-           clearInterval(interval_handle);
-           wasm_instance.exports.free(state_ptr, fn_ptrs.get("free_fn_ptr"), args_ptr);
+           clearInterval(handle);
+           wasm_instance.exports.free(
+              state_ptr,
+              fn_ptrs.get("free_fn_ptr"),
+              args_ptr
+           );
         }, timeout);
      }
 
-     return interval_handle;
+     return handle;
   },
   clearInterval(handle) {
      clearInterval(handle);
@@ -1018,7 +1050,7 @@ function createButtonListeners(/** @type { SceneController } */ scene_handler) {
         input1.value = "";
      },
      () => scene_handler.insertShape("Pyramid"),
-     () => {},
+     () => { },
      () => {
         scene_handler.translate(input1.value, input2.value, input3.value);
         input1.value = input2.value = input3.value = "";
@@ -1067,7 +1099,11 @@ function createButtonGrid() {
   ];
 
   labels.forEach((label, index) => {
-     const btn = createButton(`grid-btn-${index + 1}`, label, btn_listeners[index]);
+     const btn = createButton(
+        `grid-btn-${index + 1}`,
+        label,
+        btn_listeners[index]
+     );
      btn.className = "floating-button";
      grid.appendChild(btn);
   });

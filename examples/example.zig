@@ -511,10 +511,7 @@ fn applyTranslateFn(
 
         state.vector_buffer.?.bufferSubData(args.idxs_ptr[0..vectors_count], selected);
     }
-    errdefer {
-        // state.vector_buffer.?.bufferData(scene.vectors.?);
-        g.platform.log("Error on applyTranslateFn");
-    }
+
     if (shapes_count > 0) {
         const selected = scene.allocator.alloc([]V3, shapes_count) catch unreachable;
         // defer scene.allocator.free(selected);

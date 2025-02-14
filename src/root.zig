@@ -8,7 +8,7 @@ pub const platform = switch (builtin.target.isWasm()) {
 
 //used in example.zig
 pub const canvas = @import("geometry/canvas.zig");
-//TODO: remove pub acess modifier after fixing leaks
+//TODO: remove pub acess modifier after fixing leaks :)
 pub var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true, .verbose_log = true }){};
 // used in example.zig, prevents build error if gpa is used
 pub fn logFn(

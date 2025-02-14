@@ -163,7 +163,7 @@ pub const Scene = struct {
 
         if (self.cameras) |cameras| {
             for (cameras) |camera| {
-                self.allocator.free(camera.shape);
+                camera.deinit();
             }
             self.allocator.free(cameras);
         }
@@ -226,6 +226,9 @@ pub const Scene = struct {
             std.mem.copyBackwards(Camera, new_cameras_slice, cameras);
 
             //camera shape maybe leaking here
+            for (cameras) |cam| {
+                cam.deinit();
+            }
             self.allocator.free(self.cameras.?);
         }
         new_cameras_slice[len] = Camera.init(self.allocator, V3.init(pos_x, pos_y, pos_z), null);

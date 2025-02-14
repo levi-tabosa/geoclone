@@ -828,7 +828,6 @@ const env = {
    },
    deinitShader(handle) {
       webgl.deleteShader(shaders.get(handle) ?? null);
-      next_shader--;
    },
    initProgram(shader1_handle, shader2_handle) {
       const program = webgl.createProgram();
@@ -900,16 +899,9 @@ const env = {
       if (program) {
          programs.delete(handle);
          webgl.deleteProgram(program.gl);
-         next_program--;
       }
    },
    initVertexBuffer(data_ptr, data_len) {
-      console.log(
-         "Initialized buffer\nhandle: " +
-         next_buffer +
-         "\tdata_len : " +
-         data_len / 12
-      );
       const vertex_buffer = webgl.createBuffer();
 
       webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
@@ -927,7 +919,6 @@ const env = {
       const buffer = buffers.get(handle);
       if (buffers.delete(handle)) {
          webgl.deleteBuffer(buffer);
-         next_buffer--;
       } else {
          console.error("Failed to delete buffer\nhandle : " + handle);
       }

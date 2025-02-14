@@ -944,7 +944,6 @@ const env = {
       }
    },
    setInterval(fn_ptr, args_ptr, args_len, delay, timeout) {
-      console.log(fn_ptr);
       const handle = setInterval(() => {
          wasm_instance.exports.apply(state_ptr, fn_ptr, args_ptr, args_len);
       }, delay);
@@ -955,7 +954,8 @@ const env = {
             wasm_instance.exports.free(
                state_ptr,
                fn_ptrs.get("free_fn_ptr"),
-               args_ptr
+               args_ptr,
+               args_len
             );
          }, timeout);
       }

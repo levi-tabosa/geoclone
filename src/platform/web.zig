@@ -58,10 +58,6 @@ export fn draw(
     drawFn(ptr);
 }
 
-export fn dummy(ptr: *anyopaque, fn_ptr: *const fn (*anyopaque) callconv(.C) void) void { //TODO:MAYBE REMOVE
-    fn_ptr(ptr);
-}
-
 export fn apply(
     ptr: *anyopaque,
     fn_ptr: *const fn (*anyopaque, [*]const u8, usize) callconv(.C) void,
@@ -303,14 +299,14 @@ pub const Interval = struct {
 
     js_handle: i32,
 
-    pub fn init(cb_fn_ptr: usize, args: []const u8, delay: u32, count: ?u32) Self {
+    pub fn init(fn_ptr: usize, args: []const u8, delay: u32, count: u32) Self {
         return .{
             .js_handle = js.setInterval(
-                cb_fn_ptr,
+                fn_ptr,
                 args.ptr,
                 args.len,
                 delay,
-                delay * (count orelse 0),
+                delay * count,
             ),
         };
     }

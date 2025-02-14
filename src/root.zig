@@ -122,10 +122,10 @@ pub const Interval = struct {
 
     platform: platform.Interval,
 
-    pub fn init(cb_fn_ptr: usize, args: []const u8, delay: u32, count: ?u32) Self {
+    pub fn init(fn_ptr: usize, args: []const u8, delay: u32, count: u32) Self {
         return .{
             .platform = platform.Interval.init(
-                cb_fn_ptr,
+                fn_ptr,
                 args,
                 delay,
                 count,

@@ -275,6 +275,7 @@ pub const Scene = struct {
 
         //this causes the page to freeze if button is spammed
         _LOGF(self.allocator, "{}", .{geoc.gpa.detectLeaks()});
+        // _ = geoc.gpa.deinit();
     }
 
     pub fn setResolution(self: *Self, res: usize) void {

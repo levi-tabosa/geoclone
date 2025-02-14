@@ -187,8 +187,20 @@ class SceneController {
          parseFloat(y) || 0,
          parseFloat(z) || 0,
       ];
-      if ([xf, yf, zf].some(isNaN)) return;
-
+      if (x == y == z == 0) { //TODO: remove
+         for (let i = 0; i < 50; i++) {
+            const randomX = Math.random() * 20 - 10;
+            const randomY = Math.random() * 20 - 10;
+            const randomZ = Math.random() * 20 - 10;
+            this.wasm_interface.insertVector(randomX, randomY, randomZ);
+            this.vectors.push({ x: randomX, y: randomY, z: randomZ });
+         }
+         this.updateUI();
+         return;
+      };
+      if ([xf, yf, zf].some((isNaN))) {
+         return;
+      }
       this.wasm_interface.insertVector(xf, yf, zf);
       this.vectors.push({ x: xf, y: yf, z: zf });
       this.updateUI();
@@ -936,12 +948,22 @@ const env = {
 
       webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
 
+      //manage two vertex at a time for each vector line
       for (let i = 0; i < idxs_len; i++) {
          const idx = idxs[i];
          const offset = idx * 6 * 4;
          const vertexData = data.subarray(i * 6, (i + 1) * 6);
          webgl.bufferSubData(webgl.ARRAY_BUFFER, offset, vertexData);
       }
+   },
+   bufferData(handle, data_ptr, data_len) {
+      const vertex_buffer = buffers.get(handle);
+      webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
+      webgl.bufferData(
+         webgl.ARRAY_BUFFER,
+         getData(data_ptr, data_len),
+         webgl.STATIC_DRAW
+      );
    },
    setInterval(fn_ptr, args_ptr, args_len, delay, timeout) {
       const handle = setInterval(() => {

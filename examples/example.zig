@@ -490,22 +490,40 @@ fn applyTranslateFn(
     scene.translate(args.idxs_ptr, args.idxs_len, args.counts, args.dx, args.dy, args.dz);
     scene.updateViewMatrix();
 
-    const non_origin_idxs = scene.allocator.alloc(u32, args.idxs_len) catch unreachable;
-    defer scene.allocator.free(non_origin_idxs);
+    const vectors_count = args.counts >> 0x10;
+    const shapes_count = args.counts & 0xFFFF;
 
-    for (0..args.idxs_len) |i| {
-        non_origin_idxs[i] = args.idxs_ptr[i] * 2;
+    if (vectors_count > 0) {
+        const non_origin_idxs = scene.allocator.alloc(u32, vectors_count) catch unreachable;
+        defer scene.allocator.free(non_origin_idxs);
+
+        for (0..vectors_count) |i| {
+            non_origin_idxs[i] = args.idxs_ptr[i] * 2;
+        }
+
+        const selected = scene.allocator.alloc(V3, non_origin_idxs.len * 2) catch unreachable;
+        defer scene.allocator.free(selected);
+
+        for (0..non_origin_idxs.len, non_origin_idxs[0..]) |i, index| {
+            selected[i * 2] = scene.vectors.?[index];
+            selected[i * 2 + 1] = scene.vectors.?[index + 1];
+        }
+
+        state.vector_buffer.?.bufferSubData(args.idxs_ptr[0..vectors_count], selected);
     }
-
-    const selected = scene.allocator.alloc(V3, non_origin_idxs.len * 2) catch unreachable;
-    defer scene.allocator.free(selected);
-
-    for (0..non_origin_idxs.len, non_origin_idxs[0..non_origin_idxs.len]) |i, index| {
-        selected[i * 2] = scene.vectors.?[index];
-        selected[i * 2 + 1] = scene.vectors.?[index + 1];
+    errdefer {
+        // state.vector_buffer.?.bufferData(scene.vectors.?);
+        g.platform.log("Error on applyTranslateFn");
     }
+    if (shapes_count > 0) {
+        const selected = scene.allocator.alloc([]V3, shapes_count) catch unreachable;
+        // defer scene.allocator.free(selected);
 
-    state.vector_buffer.?.bufferSubData(args.idxs_ptr[0..args.idxs_len], selected);
+        for (vectors_count..vectors_count + shapes_count) |i| {
+            selected[i - vectors_count] = scene.shapes.?[args.idxs_ptr[i]];
+            state.shape_buffers.?[args_ptr[i]].bufferData(selected[i - vectors_count]);
+        }
+    }
     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
 
@@ -564,6 +582,12 @@ fn applyReflectFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) void 
 
 fn freeFn(ptr: *anyopaque, mem: [*]const u8, len: usize) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
+    const Slice = struct {
+        ptr: [*]const u32,
+        len: usize,
+    };
+    const idxs = std.mem.bytesAsValue(Slice, mem[0..len]);
+    state.geoc.allocator.free(idxs.ptr[0..idxs.len]);
     state.geoc.allocator.free(mem[0..len]);
 }
 

@@ -111,6 +111,10 @@ pub fn VertexBuffer(comptime vertex: type) type {
             self.platform.bind();
         }
 
+        pub fn bufferData(self: Self, data: []const vertex) void {
+            self.platform.bufferData(std.mem.sliceAsBytes(data));
+        }
+
         pub fn bufferSubData(self: Self, indexes: []const u32, data: []const vertex) void {
             self.platform.bufferSubData(indexes, std.mem.sliceAsBytes(data));
         }

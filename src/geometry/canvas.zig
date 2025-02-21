@@ -209,12 +209,27 @@ pub const Scene = struct {
 
         if (self.vectors) |vectors| {
             std.mem.copyBackwards(V3, new_vector_slice, vectors);
-            self.allocator.free(self.vectors.?);
+            self.allocator.free(vectors);
         }
         new_vector_slice[len] = V3.init(x, y, z);
         new_vector_slice[len + 1] = V3.init(0.0, 0.0, 0.0);
 
         self.vectors = new_vector_slice;
+    }
+
+    pub fn insertShape(self: *Self, shape: Shape) void {
+        const len = if (self.shapes) |shapes| shapes.len else 0;
+
+        var new_shapes = self.allocator.alloc([]V3, len + 1) catch unreachable;
+
+        if (self.shapes) |shapes| {
+            std.mem.copyBackwards([]V3, new_shapes, shapes);
+            self.allocator.free(shapes);
+        }
+
+        new_shapes[len] = shape.create(self.allocator, null);
+
+        self.shapes = new_shapes;
     }
 
     pub fn insertCamera(self: *Self, pos_x: f32, pos_y: f32, pos_z: f32) void {
@@ -236,26 +251,8 @@ pub const Scene = struct {
         self.cameras = new_cameras_slice;
     }
 
-    ///TODO: make this accept resolution as usize
-    pub fn insertShape(self: *Self, shape: Shape) void {
-        const len = if (self.shapes) |shapes| shapes.len else 0;
-
-        var new_shapes = self.allocator.alloc([]V3, len + 1) catch unreachable;
-
-        if (self.shapes) |shapes| {
-            std.mem.copyBackwards([]V3, new_shapes, shapes);
-            self.allocator.free(shapes);
-        }
-
-        new_shapes[len] = shape.create(self.allocator, null);
-
-        self.shapes = new_shapes;
-    }
-
-    /// TODO: change to gpa.deinit to procure actual leaks
-    /// this may show memory in use as leaked
+    /// TODO:fix crash when calling this while a fps cam is active
     /// Shows increasing number of leaks after each call
-    /// fix crash when calling this while a fps cam is active
     pub fn clear(self: *Self) void {
         if (self.vectors) |vectors| {
             self.allocator.free(vectors);
@@ -275,10 +272,6 @@ pub const Scene = struct {
             self.allocator.free(cameras);
             self.cameras = null;
         }
-
-        //this causes the page to freeze if button is spammed
-        _LOGF(self.allocator, "{}", .{geoc.gpa.detectLeaks()});
-        // _ = geoc.gpa.deinit();
     }
 
     pub fn setResolution(self: *Self, res: usize) void {

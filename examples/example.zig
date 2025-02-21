@@ -34,7 +34,7 @@ const Table = struct {
     rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
     translate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
     reflect_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, u8) callconv(.C) void,
-    free_fn_ptr: *const fn (*anyopaque, [*]const u8, usize) callconv(.C) void,
+    free_args_fn_ptr: *const fn (*anyopaque, [*]const u8, usize) callconv(.C) void,
 };
 
 const V3 = canvas.V3;
@@ -130,7 +130,7 @@ pub const State = struct {
             .rotate_fn_ptr = rotateFn,
             .translate_fn_ptr = translateFn,
             .reflect_fn_ptr = reflectFn,
-            .free_fn_ptr = freeFn,
+            .free_args_fn_ptr = freeArgsFn,
         };
 
         inline for (std.meta.fields(Table)) |field| {
@@ -334,14 +334,19 @@ fn clearFn(ptr: *anyopaque) callconv(.C) void {
         for (buffers) |buff| {
             buff.deinit();
         }
+        state.geoc.allocator.free(buffers);
         state.shape_buffers = null;
     }
     if (state.camera_buffers) |buffers| {
         for (buffers) |buff| {
             buff.deinit();
         }
+        state.geoc.allocator.free(buffers);
         state.camera_buffers = null;
     }
+
+    _LOGF(state.geoc.allocator, "{}", .{g.gpa.detectLeaks()});
+    _ = g.gpa.deinit();
 }
 
 fn setCameraFn(ptr: *anyopaque, index: usize) callconv(.C) void {
@@ -514,11 +519,21 @@ fn applyTranslateFn(
 
     if (shapes_count > 0) {
         const selected = scene.allocator.alloc([]V3, shapes_count) catch unreachable;
-        // defer scene.allocator.free(selected);
+        defer scene.allocator.free(selected);
 
-        for (vectors_count..vectors_count + shapes_count) |i| {
-            selected[i - vectors_count] = scene.shapes.?[args.idxs_ptr[i]];
-            state.shape_buffers.?[args_ptr[i]].bufferData(selected[i - vectors_count]);
+        for (vectors_count..vectors_count + shapes_count, args.idxs_ptr[vectors_count..]) |i, index| {
+            selected[i - vectors_count] = scene.shapes.?[index];
+            state.shape_buffers.?[args.idxs_ptr[i]].bufferData(selected[i - vectors_count]);
+        }
+    }
+
+    if (args.idxs_len - vectors_count + shapes_count > 0) {
+        const selected = scene.allocator.alloc([]V3, args.idxs_len - vectors_count + shapes_count) catch unreachable;
+        defer scene.allocator.free(selected);
+
+        for (vectors_count + shapes_count..args.idxs_len, args.idxs_ptr[vectors_count + shapes_count ..]) |i, index| {
+            selected[i - vectors_count + shapes_count] = scene.cameras.?[index].shape;
+            state.camera_buffers.?[args.idxs_ptr[i]].bufferData(selected[i - vectors_count + shapes_count]);
         }
     }
     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
@@ -577,15 +592,17 @@ fn applyReflectFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) void 
     );
 }
 
-fn freeFn(ptr: *anyopaque, mem: [*]const u8, len: usize) callconv(.C) void {
+fn freeArgsFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
     const Slice = struct {
         ptr: [*]const u32,
         len: usize,
     };
-    const idxs = std.mem.bytesAsValue(Slice, mem[0..len]);
+    const idxs = std.mem.bytesAsValue(Slice, args_ptr[0..]);
+    _LOGF(state.geoc.allocator, "{any}", .{args_ptr[0..args_len]});
+    _LOGF(state.geoc.allocator, "{any}", .{idxs.ptr[0..idxs.len]});
     state.geoc.allocator.free(idxs.ptr[0..idxs.len]);
-    state.geoc.allocator.free(mem[0..len]);
+    state.geoc.allocator.free(args_ptr[0..args_len]);
 }
 
 pub fn main() void {

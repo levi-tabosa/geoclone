@@ -966,7 +966,7 @@ const env = {
             clearInterval(handle);
             wasm_instance.exports.free(
                state_ptr,
-               fn_ptrs.get("free_fn_ptr"),
+               fn_ptrs.get("free_args_fn_ptr"),
                args_ptr,
                args_len
             );

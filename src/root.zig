@@ -8,8 +8,8 @@ pub const platform = switch (builtin.target.isWasm()) {
 
 //used in example.zig
 pub const canvas = @import("geometry/canvas.zig");
-//TODO: remove pub acess modifier after fixing leaks :)
-pub var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true, .verbose_log = true }){};
+//TODO: remove pub acess modifier after fixing leaks
+pub var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true, .verbose_log = true, .stack_trace_frames = 32 }){};
 // used in example.zig, prevents build error if gpa is used
 pub fn logFn(
     comptime level: std.log.Level,
@@ -69,9 +69,9 @@ pub const Program = struct {
 
     platform: platform.Program,
 
-    pub fn init(geoc_instance: Geoc, shaders: []const Shader) Self {
-        const platform_shaders = geoc_instance.allocator.alloc(platform.Shader, shaders.len) catch unreachable;
-        defer geoc_instance.allocator.free(platform_shaders);
+    pub fn init(instance: Geoc, shaders: []const Shader) Self {
+        const platform_shaders = instance.allocator.alloc(platform.Shader, shaders.len) catch unreachable;
+        defer instance.allocator.free(platform_shaders);
         for (0..shaders.len) |i| {
             platform_shaders[i] = shaders[i].platform;
         }

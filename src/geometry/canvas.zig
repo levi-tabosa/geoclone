@@ -124,7 +124,6 @@ pub const Scene = struct {
         const radius = 10.0;
         const camera = allocator.create(Camera) catch unreachable;
         camera.* = Camera.init(
-            allocator,
             .{
                 .coords = .{
                     radius * @cos(yaw) * @cos(pitch),
@@ -162,9 +161,6 @@ pub const Scene = struct {
         }
 
         if (self.cameras) |cameras| {
-            for (cameras) |camera| {
-                camera.deinit();
-            }
             self.allocator.free(cameras);
         }
     }
@@ -209,6 +205,7 @@ pub const Scene = struct {
 
         if (self.vectors) |vectors| {
             std.mem.copyBackwards(V3, new_vector_slice, vectors);
+            _LOGF(self.allocator, "free vectors ptr : {*}", .{vectors.ptr});
             self.allocator.free(vectors);
         }
         new_vector_slice[len] = V3.init(x, y, z);
@@ -224,6 +221,7 @@ pub const Scene = struct {
 
         if (self.shapes) |shapes| {
             std.mem.copyBackwards([]V3, new_shapes, shapes);
+            _LOGF(self.allocator, "free shapes ptr : {*}", .{shapes.ptr});
             self.allocator.free(shapes);
         }
 
@@ -239,14 +237,10 @@ pub const Scene = struct {
 
         if (self.cameras) |cameras| {
             std.mem.copyBackwards(Camera, new_cameras_slice, cameras);
-
-            //camera shape maybe leaking here
-            for (cameras) |cam| {
-                cam.deinit();
-            }
-            self.allocator.free(self.cameras.?);
+            _LOGF(self.allocator, "free cameras ptr : {*}", .{cameras.ptr});
+            self.allocator.free(cameras);
         }
-        new_cameras_slice[len] = Camera.init(self.allocator, V3.init(pos_x, pos_y, pos_z), null);
+        new_cameras_slice[len] = Camera.init(V3.init(pos_x, pos_y, pos_z), null);
 
         self.cameras = new_cameras_slice;
     }
@@ -255,20 +249,20 @@ pub const Scene = struct {
     /// Shows increasing number of leaks after each call
     pub fn clear(self: *Self) void {
         if (self.vectors) |vectors| {
+            _LOGF(self.allocator, "scene (CLEAR) free vectors ptr : {*}", .{vectors.ptr});
             self.allocator.free(vectors);
             self.vectors = null;
         }
         if (self.shapes) |shapes| {
             for (shapes) |shape| {
+                _LOGF(self.allocator, "scene (CLEAR) free shapes ptr : {*}", .{shapes.ptr});
                 self.allocator.free(shape);
             }
             self.allocator.free(shapes);
             self.shapes = null;
         }
         if (self.cameras) |cameras| {
-            for (cameras) |camera| {
-                camera.deinit();
-            }
+            _LOGF(self.allocator, "scene (CLEAR) free cameras ptr : {*}", .{cameras.ptr});
             self.allocator.free(cameras);
             self.cameras = null;
         }
@@ -281,6 +275,7 @@ pub const Scene = struct {
         var i: i32 = -j;
 
         self.allocator.free(self.grid);
+        _LOGF(self.allocator, "free grid ptr : {*}", .{self.grid.ptr});
         self.grid = self.allocator.alloc(V3, res * 4) catch unreachable;
 
         while (i < upperLimit) : (i += 1) {
@@ -307,17 +302,15 @@ pub const Scene = struct {
         if (self.cameras) |cameras| {
             if (index < cameras.len) {
                 if (self.camera.radius != null) {
-                    self.camera.deinit();
+                    _LOGF(self.allocator, "free camera ptr : {*}", .{self.camera});
                     self.allocator.destroy(self.camera);
                 }
                 self.camera = &cameras[index];
             } else {
-                //TODO: make radius user input
                 const r = 10;
 
                 self.camera = self.allocator.create(Camera) catch unreachable;
                 self.camera.* = Camera.init(
-                    self.allocator,
                     .{ .coords = .{ r, r, r } },
                     r,
                 );
@@ -391,7 +384,7 @@ pub const Scene = struct {
             self.cameras.?[idx].pos.coords[0] += dx;
             self.cameras.?[idx].pos.coords[1] += dy;
             self.cameras.?[idx].pos.coords[2] += dz;
-            for (self.cameras.?[idx].shape) |*vertex| {
+            for (&self.cameras.?[idx].shape) |*vertex| {
                 vertex.coords[0] += dx;
                 vertex.coords[1] += dy;
                 vertex.coords[2] += dz;
@@ -438,7 +431,7 @@ pub const Scene = struct {
 
         for (idxs_ptr[vectors_count + shapes_count .. idxs_len]) |idx| {
             self.cameras.?[idx].pos.coords[coord_idx] *= factor;
-            for (self.cameras.?[idx].shape) |*vertex| {
+            for (&self.cameras.?[idx].shape) |*vertex| {
                 vertex.coords[coord_idx] *= factor;
             }
         }
@@ -448,34 +441,29 @@ pub const Scene = struct {
 pub const Camera = struct {
     const Self = @This();
 
-    allocator: Allocator,
     pos: V3,
     target: V3 = .{ .coords = .{ 0.0, 0.0, 0.0 } },
     up: V3 = .{ .coords = .{ 0.0, 0.0, 1.0 } },
     radius: ?f32 = null,
-    shape: []V3,
+    shape: [8]V3,
 
-    pub fn init(allocator: Allocator, pos: V3, radius: ?f32) Self {
-        const cube = allocator.alloc(V3, 8) catch unreachable;
+    pub fn init(pos: V3, radius: ?f32) Self {
         const half_edge_len = 0.05; // lines will appear if  near is set smaller than 0.1
-        cube[0] = .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] - half_edge_len } };
-        cube[1] = .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] + half_edge_len } };
-        cube[2] = .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] + half_edge_len } };
-        cube[3] = .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] - half_edge_len } };
-        cube[4] = .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] - half_edge_len } };
-        cube[5] = .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] + half_edge_len } };
-        cube[6] = .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] + half_edge_len } };
-        cube[7] = .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] - half_edge_len } };
+        const cube: [8]V3 = .{
+            .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] - half_edge_len } },
+            .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] + half_edge_len } },
+            .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] + half_edge_len } },
+            .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] - half_edge_len } },
+            .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] - half_edge_len } },
+            .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] + half_edge_len } },
+            .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] + half_edge_len } },
+            .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] - half_edge_len } },
+        };
         return .{
-            .allocator = allocator,
             .pos = pos,
             .radius = radius,
             .shape = cube,
         };
-    }
-
-    pub fn deinit(self: Self) void {
-        self.allocator.free(self.shape);
     }
 
     pub fn viewMatrix(self: Self) [16]f32 {
@@ -529,7 +517,7 @@ pub const Shape = enum(u8) {
     }
 };
 
-pub const Sphere = struct {
+const Sphere = struct {
     /// Caller must free
     pub fn create(allocator: Allocator, res: usize) []V3 {
         const stacks = res;
@@ -557,7 +545,7 @@ pub const Sphere = struct {
     }
 };
 
-pub const Cone = struct {
+const Cone = struct {
     /// Caller must free
     pub fn create(allocator: Allocator, res: usize) []V3 {
         const slices = res;

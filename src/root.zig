@@ -9,7 +9,13 @@ pub const platform = switch (builtin.target.isWasm()) {
 //used in example.zig
 pub const canvas = @import("geometry/canvas.zig");
 //TODO: remove pub acess modifier after fixing leaks
-pub var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true, .verbose_log = true, .stack_trace_frames = 32 }){};
+pub var gpa = std.heap.GeneralPurposeAllocator(.{
+    .safety = true,
+    .verbose_log = true,
+    // .never_unmap = true,
+    // .retain_metadata = true,
+    // .stack_trace_frames = 32,
+}){};
 // used in example.zig, prevents build error if gpa is used
 pub fn logFn(
     comptime level: std.log.Level,

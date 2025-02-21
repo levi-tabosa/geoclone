@@ -240,9 +240,7 @@ pub const Shader = struct {
 
     js_handle: i32,
 
-    pub fn init(geoc_instance: geoc.Geoc, @"type": geoc.ShaderType, source: []const u8) Self {
-        _ = geoc_instance;
-
+    pub fn init(_: geoc.Geoc, @"type": geoc.ShaderType, source: []const u8) Self {
         return .{
             .js_handle = js.initShader(@intFromEnum(@"type"), source.ptr, source.len),
         };

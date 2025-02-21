@@ -284,9 +284,10 @@ fn insertCameraFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
 
     if (state.camera_buffers) |buffers| {
         std.mem.copyBackwards(g.VertexBuffer(V3), new_buffers, buffers);
+        _LOGF(state.scene.allocator, "free camera buffer : {*}", .{buffers});
         state.geoc.allocator.free(buffers);
     }
-    new_buffers[len] = g.VertexBuffer(V3).init(state.scene.cameras.?[len].shape);
+    new_buffers[len] = g.VertexBuffer(V3).init(&state.scene.cameras.?[len].shape);
 
     state.camera_buffers = new_buffers;
 }
@@ -300,6 +301,7 @@ fn insertShapeFn(ptr: *anyopaque, shape: canvas.Shape) void {
 
     if (state.shape_buffers) |buffers| {
         std.mem.copyBackwards(g.VertexBuffer(V3), new_buffers, buffers);
+        _LOGF(state.scene.allocator, "free shape buffer : {*}", .{buffers});
         state.geoc.allocator.free(buffers);
     }
     new_buffers[len] = g.VertexBuffer(V3).init(state.scene.shapes.?[len]);
@@ -335,6 +337,7 @@ fn clearFn(ptr: *anyopaque) callconv(.C) void {
             buff.deinit();
         }
         state.geoc.allocator.free(buffers);
+        _LOGF(state.scene.allocator, "(CLEAR) free shape buffer : {*}", .{buffers});
         state.shape_buffers = null;
     }
     if (state.camera_buffers) |buffers| {
@@ -342,11 +345,11 @@ fn clearFn(ptr: *anyopaque) callconv(.C) void {
             buff.deinit();
         }
         state.geoc.allocator.free(buffers);
+        _LOGF(state.scene.allocator, "(CLEAR) free camera buffer : {*}", .{buffers});
         state.camera_buffers = null;
     }
 
-    _LOGF(state.geoc.allocator, "{}", .{g.gpa.detectLeaks()});
-    _ = g.gpa.deinit();
+    // _LOGF(state.geoc.allocator, "{}", .{g.gpa.detectLeaks()});
 }
 
 fn setCameraFn(ptr: *anyopaque, index: usize) callconv(.C) void {
@@ -445,7 +448,6 @@ fn translateFn(
     const state: *State = @ptrCast(@alignCast(ptr));
 
     const indexes = state.geoc.allocator.alloc(u32, idxs_len) catch unreachable;
-
     std.mem.copyBackwards(u32, indexes, idxs_ptr[0..idxs_len]);
 
     const bytes = std.mem.asBytes(&struct {
@@ -500,6 +502,7 @@ fn applyTranslateFn(
 
     if (vectors_count > 0) {
         const non_origin_idxs = scene.allocator.alloc(u32, vectors_count) catch unreachable;
+        _LOGF(scene.allocator, "(apply) free non origin idxs : {*}", .{non_origin_idxs.ptr});
         defer scene.allocator.free(non_origin_idxs);
 
         for (0..vectors_count) |i| {
@@ -507,6 +510,7 @@ fn applyTranslateFn(
         }
 
         const selected = scene.allocator.alloc(V3, non_origin_idxs.len * 2) catch unreachable;
+        _LOGF(scene.allocator, "(apply) free selected vectors: {*}", .{selected.ptr});
         defer scene.allocator.free(selected);
 
         for (0..non_origin_idxs.len, non_origin_idxs[0..]) |i, index| {
@@ -519,6 +523,7 @@ fn applyTranslateFn(
 
     if (shapes_count > 0) {
         const selected = scene.allocator.alloc([]V3, shapes_count) catch unreachable;
+        _LOGF(scene.allocator, "(apply) free selected shapes: {*}", .{selected.ptr});
         defer scene.allocator.free(selected);
 
         for (vectors_count..vectors_count + shapes_count, args.idxs_ptr[vectors_count..]) |i, index| {
@@ -529,10 +534,11 @@ fn applyTranslateFn(
 
     if (args.idxs_len - vectors_count + shapes_count > 0) {
         const selected = scene.allocator.alloc([]V3, args.idxs_len - vectors_count + shapes_count) catch unreachable;
+        _LOGF(scene.allocator, "(apply) free selected cameras: {*}", .{selected.ptr});
         defer scene.allocator.free(selected);
 
         for (vectors_count + shapes_count..args.idxs_len, args.idxs_ptr[vectors_count + shapes_count ..]) |i, index| {
-            selected[i - vectors_count + shapes_count] = scene.cameras.?[index].shape;
+            selected[i - vectors_count + shapes_count] = &scene.cameras.?[index].shape;
             state.camera_buffers.?[args.idxs_ptr[i]].bufferData(selected[i - vectors_count + shapes_count]);
         }
     }
@@ -598,10 +604,12 @@ fn freeArgsFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(
         ptr: [*]const u32,
         len: usize,
     };
+
     const idxs = std.mem.bytesAsValue(Slice, args_ptr[0..]);
-    _LOGF(state.geoc.allocator, "{any}", .{args_ptr[0..args_len]});
-    _LOGF(state.geoc.allocator, "{any}", .{idxs.ptr[0..idxs.len]});
+
+    _LOGF(state.geoc.allocator, "free idxs ptr : {*}", .{idxs.ptr});
     state.geoc.allocator.free(idxs.ptr[0..idxs.len]);
+    _LOGF(state.geoc.allocator, "free args ptr : {*}", .{args_ptr});
     state.geoc.allocator.free(args_ptr[0..args_len]);
 }
 

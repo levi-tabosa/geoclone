@@ -939,7 +939,7 @@ const env = {
 
       webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
 
-      //manage two vertex at a time for each vector line
+      //manage two vertex at a time for each line
       for (let i = 0; i < idxs_len; i++) {
          const idx = idxs[i];
          const offset = idx * 6 * 4;

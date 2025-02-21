@@ -8,7 +8,7 @@ pub fn build(b: *std.Build) void {
         },
     });
     const optimize = b.standardOptimizeOption(.{
-        .preferred_optimize_mode = .ReleaseFast,
+        .preferred_optimize_mode = .ReleaseSafe,
     });
 
     const exe = createExecutable(b, target, optimize);

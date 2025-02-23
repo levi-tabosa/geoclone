@@ -3,13 +3,7 @@ const std = @import("std");
 const canvas = g.canvas;
 const Scene = canvas.Scene;
 
-fn print(txt: []const u8) void { //TODO: erase
-    g.platform.log(txt);
-}
-
-fn _LOGF(allocator: std.mem.Allocator, comptime txt: []const u8, args: anytype) void { //TODO: erase
-    print(std.fmt.allocPrint(allocator, txt, args) catch unreachable);
-}
+const _LOGF = canvas._LOGF;
 
 pub const std_options = std.Options{
     .log_level = .info,
@@ -209,6 +203,45 @@ pub const State = struct {
         }
     }
 
+    fn updateVectors(self: *Self, scene: *Scene, idxs_ptr: [*]const u32, vectors_count: usize) void {
+        const non_origin_idxs = scene.allocator.alloc(u32, vectors_count) catch unreachable;
+        defer scene.allocator.free(non_origin_idxs);
+
+        for (0..vectors_count) |i| {
+            non_origin_idxs[i] = idxs_ptr[i] * 2;
+        }
+
+        const selected = scene.allocator.alloc(V3, non_origin_idxs.len * 2) catch unreachable;
+        defer scene.allocator.free(selected);
+
+        for (0..non_origin_idxs.len, non_origin_idxs[0..]) |i, index| {
+            selected[i * 2] = scene.vectors.?[index];
+            selected[i * 2 + 1] = scene.vectors.?[index + 1];
+        }
+
+        self.vector_buffer.?.bufferSubData(idxs_ptr[0..vectors_count], selected);
+    }
+
+    fn updateShapes(self: *Self, scene: *Scene, idxs_ptr: [*]const u32, vectors_count: usize, shapes_count: usize) void {
+        const selected = scene.allocator.alloc([]V3, shapes_count) catch unreachable;
+        defer scene.allocator.free(selected);
+
+        for (vectors_count..vectors_count + shapes_count, idxs_ptr[vectors_count..]) |i, index| {
+            selected[i - vectors_count] = scene.shapes.?[index];
+            self.shape_buffers.?[idxs_ptr[i]].bufferData(selected[i - vectors_count]);
+        }
+    }
+
+    fn updateCameras(self: *Self, scene: *Scene, idxs_ptr: [*]const u32, vectors_count: usize, shapes_count: usize, idxs_len: usize) void {
+        const selected = scene.allocator.alloc([]V3, idxs_len - vectors_count + shapes_count) catch unreachable;
+        defer scene.allocator.free(selected);
+
+        for (vectors_count + shapes_count..idxs_len, idxs_ptr[vectors_count + shapes_count ..]) |i, index| {
+            selected[i - vectors_count + shapes_count] = &scene.cameras.?[index].shape;
+            self.camera_buffers.?[idxs_ptr[i]].bufferData(selected[i - vectors_count + shapes_count]);
+        }
+    }
+
     pub fn run(self: Self, state: g.State) void {
         self.geoc.run(state);
     }
@@ -284,7 +317,6 @@ fn insertCameraFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
 
     if (state.camera_buffers) |buffers| {
         std.mem.copyBackwards(g.VertexBuffer(V3), new_buffers, buffers);
-        _LOGF(state.scene.allocator, "free camera buffer : {*}", .{buffers});
         state.geoc.allocator.free(buffers);
     }
     new_buffers[len] = g.VertexBuffer(V3).init(&state.scene.cameras.?[len].shape);
@@ -301,7 +333,6 @@ fn insertShapeFn(ptr: *anyopaque, shape: canvas.Shape) void {
 
     if (state.shape_buffers) |buffers| {
         std.mem.copyBackwards(g.VertexBuffer(V3), new_buffers, buffers);
-        _LOGF(state.scene.allocator, "free shape buffer : {*}", .{buffers});
         state.geoc.allocator.free(buffers);
     }
     new_buffers[len] = g.VertexBuffer(V3).init(state.scene.shapes.?[len]);
@@ -337,7 +368,6 @@ fn clearFn(ptr: *anyopaque) callconv(.C) void {
             buff.deinit();
         }
         state.geoc.allocator.free(buffers);
-        _LOGF(state.scene.allocator, "(CLEAR) free shape buffer : {*}", .{buffers});
         state.shape_buffers = null;
     }
     if (state.camera_buffers) |buffers| {
@@ -345,11 +375,9 @@ fn clearFn(ptr: *anyopaque) callconv(.C) void {
             buff.deinit();
         }
         state.geoc.allocator.free(buffers);
-        _LOGF(state.scene.allocator, "(CLEAR) free camera buffer : {*}", .{buffers});
         state.camera_buffers = null;
     }
-
-    // _LOGF(state.geoc.allocator, "{}", .{g.gpa.detectLeaks()});
+    _LOGF(state.geoc.allocator, "{}", .{g.gpa.detectLeaks()});
 }
 
 fn setCameraFn(ptr: *anyopaque, index: usize) callconv(.C) void {
@@ -368,9 +396,59 @@ fn scaleFn(
     factor: f32,
 ) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
+
+    const indexes = state.geoc.allocator.alloc(u32, idxs_len) catch unreachable;
+    std.mem.copyBackwards(u32, indexes, idxs_ptr[0..idxs_len]);
+
+    const bytes = std.mem.asBytes(&struct {
+        idxs_ptr: [*]const u32,
+        idxs_len: usize,
+        counts: u32,
+        factor: f32,
+    }{
+        .idxs_ptr = indexes.ptr,
+        .idxs_len = idxs_len,
+        .counts = counts,
+        .factor = std.math.pow(f32, factor, 1.0 / 25.0),
+    });
+    const slice = std.mem.bytesAsSlice(u8, bytes);
+    const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
+    std.mem.copyBackwards(u8, args, slice);
+
+    _ = g.Interval.init(@intFromPtr(&applyScaleFn), args, 30, 25);
+}
+
+fn applyScaleFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void {
+    const Args = struct {
+        idxs_ptr: [*]const u32,
+        idxs_len: usize,
+        counts: u32,
+        factor: f32,
+    };
+
+    const bytes = std.mem.sliceAsBytes(args_ptr[0..args_len]);
+    const args = std.mem.bytesAsValue(Args, bytes);
+
+    const state: *State = @ptrCast(@alignCast(ptr));
     const scene = state.scene;
-    scene.scale(idxs_ptr, idxs_len, counts, factor);
+
+    scene.scale(args.idxs_ptr, args.idxs_len, args.counts, args.factor);
     scene.updateViewMatrix();
+
+    const vectors_count = args.counts >> 0x10;
+    const shapes_count = args.counts & 0xFFFF;
+
+    if (vectors_count > 0) {
+        state.updateVectors(scene, args.idxs_ptr, vectors_count);
+    }
+
+    if (shapes_count > 0) {
+        state.updateShapes(scene, args.idxs_ptr, vectors_count, shapes_count);
+    }
+
+    if (args.idxs_len - vectors_count + shapes_count > 0) {
+        state.updateCameras(scene, args.idxs_ptr, vectors_count, shapes_count, args.idxs_len);
+    }
 
     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
@@ -411,7 +489,7 @@ fn rotateFn(
     _ = g.Interval.init(@intFromPtr(&applyRotateFn), args, 30, 25);
 }
 
-fn applyRotateFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) void {
+fn applyRotateFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void {
     const Args = struct {
         idxs_ptr: [*]const u32,
         idxs_len: usize,
@@ -420,7 +498,6 @@ fn applyRotateFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) void {
         y: f32,
         z: f32,
     };
-
     const bytes = std.mem.sliceAsBytes(args_ptr[0..args_len]);
     const args = std.mem.bytesAsValue(Args, bytes);
 
@@ -430,8 +507,20 @@ fn applyRotateFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) void {
     scene.rotate(args.idxs_ptr, args.idxs_len, args.counts, args.x, args.y, args.z);
     scene.updateViewMatrix();
 
-    const selected = scene.allocator.alloc(V3, args.idxs_len) catch unreachable;
-    defer scene.allocator.free(selected);
+    const vectors_count = args.counts >> 0x10;
+    const shapes_count = args.counts & 0xFFFF;
+
+    if (vectors_count > 0) {
+        state.updateVectors(scene, args.idxs_ptr, vectors_count);
+    }
+
+    if (shapes_count > 0) {
+        state.updateShapes(scene, args.idxs_ptr, vectors_count, shapes_count);
+    }
+
+    if (args.idxs_len - vectors_count + shapes_count > 0) {
+        state.updateCameras(scene, args.idxs_ptr, vectors_count, shapes_count, args.idxs_len);
+    }
 
     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
@@ -446,7 +535,6 @@ fn translateFn(
     dz: f32,
 ) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
-
     const indexes = state.geoc.allocator.alloc(u32, idxs_len) catch unreachable;
     std.mem.copyBackwards(u32, indexes, idxs_ptr[0..idxs_len]);
 
@@ -465,7 +553,6 @@ fn translateFn(
         .dy = dy / 25,
         .dz = dz / 25,
     });
-
     const slice = std.mem.bytesAsSlice(u8, bytes);
     const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
     std.mem.copyBackwards(u8, args, slice);
@@ -501,47 +588,17 @@ fn applyTranslateFn(
     const shapes_count = args.counts & 0xFFFF;
 
     if (vectors_count > 0) {
-        const non_origin_idxs = scene.allocator.alloc(u32, vectors_count) catch unreachable;
-        _LOGF(scene.allocator, "(apply) free non origin idxs : {*}", .{non_origin_idxs.ptr});
-        defer scene.allocator.free(non_origin_idxs);
-
-        for (0..vectors_count) |i| {
-            non_origin_idxs[i] = args.idxs_ptr[i] * 2;
-        }
-
-        const selected = scene.allocator.alloc(V3, non_origin_idxs.len * 2) catch unreachable;
-        _LOGF(scene.allocator, "(apply) free selected vectors: {*}", .{selected.ptr});
-        defer scene.allocator.free(selected);
-
-        for (0..non_origin_idxs.len, non_origin_idxs[0..]) |i, index| {
-            selected[i * 2] = scene.vectors.?[index];
-            selected[i * 2 + 1] = scene.vectors.?[index + 1];
-        }
-
-        state.vector_buffer.?.bufferSubData(args.idxs_ptr[0..vectors_count], selected);
+        state.updateVectors(scene, args.idxs_ptr, vectors_count);
     }
 
     if (shapes_count > 0) {
-        const selected = scene.allocator.alloc([]V3, shapes_count) catch unreachable;
-        _LOGF(scene.allocator, "(apply) free selected shapes: {*}", .{selected.ptr});
-        defer scene.allocator.free(selected);
-
-        for (vectors_count..vectors_count + shapes_count, args.idxs_ptr[vectors_count..]) |i, index| {
-            selected[i - vectors_count] = scene.shapes.?[index];
-            state.shape_buffers.?[args.idxs_ptr[i]].bufferData(selected[i - vectors_count]);
-        }
+        state.updateShapes(scene, args.idxs_ptr, vectors_count, shapes_count);
     }
 
     if (args.idxs_len - vectors_count + shapes_count > 0) {
-        const selected = scene.allocator.alloc([]V3, args.idxs_len - vectors_count + shapes_count) catch unreachable;
-        _LOGF(scene.allocator, "(apply) free selected cameras: {*}", .{selected.ptr});
-        defer scene.allocator.free(selected);
-
-        for (vectors_count + shapes_count..args.idxs_len, args.idxs_ptr[vectors_count + shapes_count ..]) |i, index| {
-            selected[i - vectors_count + shapes_count] = &scene.cameras.?[index].shape;
-            state.camera_buffers.?[args.idxs_ptr[i]].bufferData(selected[i - vectors_count + shapes_count]);
-        }
+        state.updateCameras(scene, args.idxs_ptr, vectors_count, shapes_count, args.idxs_len);
     }
+
     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
 
@@ -552,7 +609,10 @@ fn reflectFn(
     counts: u32,
     coord_idx: u8,
 ) callconv(.C) void {
-    const scene: *Scene = @alignCast(@ptrCast(ptr));
+    const state: *State = @alignCast(@ptrCast(ptr));
+    const indexes = state.geoc.allocator.alloc(u32, idxs_len) catch unreachable;
+    std.mem.copyBackwards(u32, indexes, idxs_ptr[0..idxs_len]);
+
     const Args = struct {
         idxs_ptr: [*]const u32,
         idxs_len: usize,
@@ -560,21 +620,21 @@ fn reflectFn(
         coord_idx: u8,
     };
     const bytes = std.mem.asBytes(&Args{
-        .idxs_ptr = idxs_ptr,
+        .idxs_ptr = indexes.ptr,
         .idxs_len = idxs_len,
         .counts = counts,
         .coord_idx = coord_idx,
     });
 
-    const args = scene.allocator.alloc(u8, bytes.len) catch unreachable;
-    std.mem.copyBackwards(u8, args, std.mem.bytesAsSlice(u8, bytes));
+    const slice = std.mem.bytesAsSlice(u8, bytes);
+    const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
+    std.mem.copyBackwards(u8, args, slice);
 
     _ = g.Interval.init(@intFromPtr(&applyReflectFn), args, 30, 25);
-    // maybe call this on defer block after returning copy V3[]
+    // defer _ = g.Interval.init(@intFromPtr(&applyReflectFn), args, 30, 25);
 }
 
-fn applyReflectFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) void { //TODO: remove
-    const scene: *Scene = @ptrCast(@alignCast(ptr));
+fn applyReflectFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void { //TODO: remove
     const Args = struct {
         idxs_ptr: [*]const u32,
         idxs_len: usize,
@@ -583,19 +643,30 @@ fn applyReflectFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) void 
     };
 
     const bytes = std.mem.sliceAsBytes(args_ptr[0..args_len]);
+    const args = std.mem.bytesAsValue(Args, bytes);
 
-    const val = std.mem.bytesAsValue(Args, bytes);
-    scene.reflect(val.idxs_ptr, val.idxs_len, val.counts, val.coord_idx, -1.0);
+    const state: *State = @ptrCast(@alignCast(ptr));
+    const scene = state.scene;
+
+    scene.reflect(args.idxs_ptr, args.idxs_len, args.counts, args.coord_idx);
     scene.updateViewMatrix();
 
-    @as(
-        *State,
-        @fieldParentPtr("scene", @constCast(&scene)),
-    ).geoc.uniformMatrix4fv(
-        "view_matrix",
-        false,
-        &scene.view_matrix,
-    );
+    const vectors_count = args.counts >> 0x10;
+    const shapes_count = args.counts & 0xFFFF;
+
+    if (vectors_count > 0) {
+        state.updateVectors(scene, args.idxs_ptr, vectors_count);
+    }
+
+    if (shapes_count > 0) {
+        state.updateShapes(scene, args.idxs_ptr, vectors_count, shapes_count);
+    }
+
+    if (args.idxs_len - vectors_count + shapes_count > 0) {
+        state.updateCameras(scene, args.idxs_ptr, vectors_count, shapes_count, args.idxs_len);
+    }
+
+    state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
 
 fn freeArgsFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void {
@@ -607,9 +678,7 @@ fn freeArgsFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(
 
     const idxs = std.mem.bytesAsValue(Slice, args_ptr[0..]);
 
-    _LOGF(state.geoc.allocator, "free idxs ptr : {*}", .{idxs.ptr});
     state.geoc.allocator.free(idxs.ptr[0..idxs.len]);
-    _LOGF(state.geoc.allocator, "free args ptr : {*}", .{args_ptr});
     state.geoc.allocator.free(args_ptr[0..args_len]);
 }
 

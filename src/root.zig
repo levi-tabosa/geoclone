@@ -1,21 +1,19 @@
 const std = @import("std");
 const builtin = @import("builtin");
+//used in example.zig
+pub const canvas = @import("geometry/canvas.zig");
 
 pub const platform = switch (builtin.target.isWasm()) {
     true => @import("platform/web.zig"),
     false => @import("platform/native.zig"),
 };
-
-//used in example.zig
-pub const canvas = @import("geometry/canvas.zig");
-//TODO: remove pub acess modifier after fixing leaks
+//TODO:
 pub var gpa = std.heap.GeneralPurposeAllocator(.{
     .safety = true,
     .verbose_log = true,
-    // .never_unmap = true,
-    // .retain_metadata = true,
-    // .stack_trace_frames = 32,
-}){};
+}){
+    .backing_allocator = if (builtin.target.isWasm()) std.heap.wasm_allocator else std.heap.page_allocator,
+};
 // used in example.zig, prevents build error if gpa is used
 pub fn logFn(
     comptime level: std.log.Level,

@@ -204,19 +204,12 @@ pub const State = struct {
     }
 
     fn updateVectors(self: *Self, scene: *Scene, idxs_ptr: [*]const u32, vectors_count: usize) void {
-        const non_origin_idxs = scene.allocator.alloc(u32, vectors_count) catch unreachable;
-        defer scene.allocator.free(non_origin_idxs);
-
-        for (0..vectors_count) |i| {
-            non_origin_idxs[i] = idxs_ptr[i] * 2;
-        }
-
-        const selected = scene.allocator.alloc(V3, non_origin_idxs.len * 2) catch unreachable;
+        const selected = scene.allocator.alloc(V3, vectors_count * 2) catch unreachable;
         defer scene.allocator.free(selected);
 
-        for (0..non_origin_idxs.len, non_origin_idxs[0..]) |i, index| {
-            selected[i * 2] = scene.vectors.?[index];
-            selected[i * 2 + 1] = scene.vectors.?[index + 1];
+        for (0..vectors_count, idxs_ptr[0..]) |i, line_idx| {
+            selected[i * 2] = scene.vectors.?[line_idx * 2];
+            selected[i * 2 + 1] = scene.vectors.?[line_idx * 2 + 1];
         }
 
         self.vector_buffer.?.bufferSubData(idxs_ptr[0..vectors_count], selected);
@@ -409,7 +402,7 @@ fn scaleFn(
         .idxs_ptr = indexes.ptr,
         .idxs_len = idxs_len,
         .counts = counts,
-        .factor = std.math.pow(f32, factor, 1.0 / 25.0),
+        .factor = std.math.pow(f32, factor, 1 / 25),
     });
     const slice = std.mem.bytesAsSlice(u8, bytes);
     const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;

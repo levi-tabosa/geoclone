@@ -184,11 +184,11 @@ class SceneController {
    insertVector(x, y, z) {
       const [xf, yf, zf] = [
          parseFloat(x) || 0,
-         parseFloat(z) || 0,
          parseFloat(y) || 0,
+         parseFloat(z) || 0,
       ];
       if (xf === 0 && yf === 0 && zf === 0) {
-         for (let i = 0; i < 250; i++) {
+         for (let i = 0; i < 30; i++) {
             const randomX = Math.random() * 20 - 10;
             const randomY = Math.random() * 20 - 10;
             const randomZ = Math.random() * 20 - 10;

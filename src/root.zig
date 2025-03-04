@@ -52,6 +52,12 @@ pub const DrawMode = enum(u32) {
     TriangleFan = 6,
 };
 
+pub const VertexUsage = enum(u32) {
+    StaticDraw = 0,
+    DynamicDraw = 1,
+    StreamDraw = 2,
+};
+
 pub const Shader = struct {
     const Self = @This();
 
@@ -100,9 +106,9 @@ pub fn VertexBuffer(comptime vertex: type) type {
         platform: platform.VertexBuffer,
         count: usize,
 
-        pub fn init(data: []const vertex) Self {
+        pub fn init(data: []const vertex, usage: VertexUsage) Self {
             return .{
-                .platform = platform.VertexBuffer.init(std.mem.sliceAsBytes(data)),
+                .platform = platform.VertexBuffer.init(std.mem.sliceAsBytes(data), usage),
                 .count = data.len,
             };
         }
@@ -115,8 +121,8 @@ pub fn VertexBuffer(comptime vertex: type) type {
             self.platform.bind();
         }
 
-        pub fn bufferData(self: Self, data: []const vertex) void {
-            self.platform.bufferData(std.mem.sliceAsBytes(data));
+        pub fn bufferData(self: Self, data: []const vertex, usage: VertexUsage) void {
+            self.platform.bufferData(std.mem.sliceAsBytes(data), usage);
         }
 
         pub fn bufferSubData(self: Self, indexes: []const u32, data: []const vertex) void {
@@ -130,7 +136,7 @@ pub const Interval = struct {
 
     platform: platform.Interval,
 
-    pub fn init(fn_ptr: usize, args: []const u8, delay: u32, count: u32) Self {
+    pub fn init(fn_ptr: i32, args: []const u8, delay: u32, count: u32) Self {
         return .{
             .platform = platform.Interval.init(
                 fn_ptr,

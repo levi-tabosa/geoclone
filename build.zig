@@ -7,9 +7,7 @@ pub fn build(b: *std.Build) void {
             .os_tag = .freestanding,
         },
     });
-    const optimize = b.standardOptimizeOption(.{
-        .preferred_optimize_mode = .ReleaseSmall,
-    });
+    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseSmall });
 
     const exe = createExecutable(b, target, optimize);
 
@@ -41,6 +39,14 @@ fn createExecutable(
         .target = target,
         .optimize = optimize,
     });
+
+    const animations = b.addModule("animations", .{
+        .root_source_file = b.path("src/animations/animations.zig"),
+        .target = target,
+        .optimize = optimize,
+    });
+
+    exe.root_module.addImport("animations", animations);
 
     exe.root_module.addImport("geoc", geoc);
 

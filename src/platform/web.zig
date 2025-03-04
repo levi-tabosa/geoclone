@@ -12,13 +12,14 @@ const js = struct { //TODO remove all unused fn
     extern fn initProgram(shader1_handle: i32, shader2_handle: i32) i32;
     extern fn deinitProgram(js_handle: i32) void;
     extern fn useProgram(js_handle: i32) void;
-    extern fn initVertexBuffer(data_ptr: [*]const u8, data_len: usize) i32;
+    extern fn initVertexBuffer(data_ptr: [*]const u8, data_len: usize, geoc.VertexUsage) i32;
     extern fn deinitVertexBuffer(js_handle: i32) void;
     extern fn bindVertexBuffer(js_handle: i32) void;
     extern fn bufferData(
         js_handle: i32,
         data_ptr: [*]const u8,
         data_len: usize,
+        usage: geoc.VertexUsage,
     ) void;
     extern fn bufferSubData(
         js_handle: i32,
@@ -28,7 +29,7 @@ const js = struct { //TODO remove all unused fn
         data_len: usize,
     ) void;
     extern fn setInterval(
-        fn_ptr: usize,
+        fn_ptr: i32,
         args_ptr: [*]const u8,
         args_len: usize,
         delay: u32,
@@ -280,8 +281,8 @@ pub const VertexBuffer = struct {
 
     js_handle: i32,
 
-    pub fn init(data: []const u8) Self {
-        return .{ .js_handle = js.initVertexBuffer(data.ptr, data.len) };
+    pub fn init(data: []const u8, usage: geoc.VertexUsage) Self {
+        return .{ .js_handle = js.initVertexBuffer(data.ptr, data.len, usage) };
     }
 
     pub fn deinit(self: Self) void {
@@ -292,8 +293,8 @@ pub const VertexBuffer = struct {
         js.bindVertexBuffer(self.js_handle);
     }
 
-    pub fn bufferData(self: Self, data: []const u8) void {
-        js.bufferData(self.js_handle, data.ptr, data.len);
+    pub fn bufferData(self: Self, data: []const u8, usage: geoc.VertexUsage) void {
+        js.bufferData(self.js_handle, data.ptr, data.len, usage);
     }
 
     pub fn bufferSubData(self: Self, indexes: []const u32, data: []const u8) void {
@@ -306,7 +307,7 @@ pub const Interval = struct {
 
     js_handle: i32,
 
-    pub fn init(fn_ptr: usize, args: []const u8, delay: u32, count: u32) Self {
+    pub fn init(fn_ptr: i32, args: []const u8, delay: u32, count: u32) Self {
         return .{
             .js_handle = js.setInterval(
                 fn_ptr,

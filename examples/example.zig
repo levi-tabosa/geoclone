@@ -1,9 +1,11 @@
 const g = @import("geoc");
 const std = @import("std");
-const canvas = g.canvas;
-const Scene = canvas.Scene;
+const animations = @import("animations");
+const Scene = g.canvas.Scene;
+const Usage = g.VertexUsage;
+const Animation = animations.Animation;
 
-const _LOGF = canvas._LOGF;
+const _LOGF = g.canvas._LOGF; //TODO: remove
 
 pub const std_options = std.Options{
     .log_level = .info,
@@ -31,7 +33,7 @@ const Table = struct {
     free_args_fn_ptr: *const fn (*anyopaque, [*]const u8, usize) callconv(.C) void,
 };
 
-const V3 = canvas.V3;
+const V3 = g.canvas.V3;
 
 pub const State = struct {
     const Self = @This();
@@ -46,6 +48,7 @@ pub const State = struct {
     vectors_program: g.Program,
     shapes_program: g.Program,
     cameras_program: g.Program,
+    animation_program: g.Program,
     geoc: g.Geoc,
     scene: *Scene,
 
@@ -133,8 +136,8 @@ pub const State = struct {
         }
 
         return .{
-            .axis_buffer = g.VertexBuffer(V3).init(&scene.axis),
-            .grid_buffer = g.VertexBuffer(V3).init(scene.grid),
+            .axis_buffer = g.VertexBuffer(V3).init(&scene.axis, Usage.StaticDraw),
+            .grid_buffer = g.VertexBuffer(V3).init(scene.grid, Usage.StaticDraw),
             .vector_buffer = null,
             .shape_buffers = null,
             .camera_buffers = null,
@@ -143,6 +146,7 @@ pub const State = struct {
             .vectors_program = g.Program.init(geoc, &.{ vertex_shader, v_fragment_shader }),
             .shapes_program = g.Program.init(geoc, &.{ vertex_shader, s_fragment_shader }),
             .cameras_program = g.Program.init(geoc, &.{ vertex_shader, c_fragment_shader }),
+            .animation_program = g.Program.init(geoc, &.{ vertex_shader, a_fragment_shader }),
             .geoc = geoc,
             .scene = scene,
         };
@@ -221,7 +225,7 @@ pub const State = struct {
 
         for (vectors_count..vectors_count + shapes_count, idxs_ptr[vectors_count..]) |i, index| {
             selected[i - vectors_count] = scene.shapes.?[index];
-            self.shape_buffers.?[idxs_ptr[i]].bufferData(selected[i - vectors_count]);
+            self.shape_buffers.?[idxs_ptr[i]].bufferData(selected[i - vectors_count], Usage.StaticDraw);
         }
     }
 
@@ -231,7 +235,7 @@ pub const State = struct {
 
         for (vectors_count + shapes_count..idxs_len, idxs_ptr[vectors_count + shapes_count ..]) |i, index| {
             selected[i - vectors_count + shapes_count] = &scene.cameras.?[index].shape;
-            self.camera_buffers.?[idxs_ptr[i]].bufferData(selected[i - vectors_count + shapes_count]);
+            self.camera_buffers.?[idxs_ptr[i]].bufferData(selected[i - vectors_count + shapes_count], Usage.StaticDraw);
         }
     }
 
@@ -252,8 +256,8 @@ pub const State = struct {
 
         self.scene.setResolution(res);
 
-        self.axis_buffer = g.VertexBuffer(V3).init(&self.scene.axis);
-        self.grid_buffer = g.VertexBuffer(V3).init(self.scene.grid);
+        self.axis_buffer = g.VertexBuffer(V3).init(&self.scene.axis, Usage.StaticDraw);
+        self.grid_buffer = g.VertexBuffer(V3).init(self.scene.grid, Usage.StaticDraw);
     }
 };
 
@@ -297,7 +301,7 @@ fn insertVectorFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
     if (state.vector_buffer) |buffer| {
         buffer.deinit();
     }
-    state.vector_buffer = g.VertexBuffer(V3).init(state.scene.vectors.?);
+    state.vector_buffer = g.VertexBuffer(V3).init(state.scene.vectors.?, Usage.StaticDraw);
 }
 
 //TODO: fix crash browser tab after clearFn call on fp camera
@@ -312,12 +316,12 @@ fn insertCameraFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
         std.mem.copyBackwards(g.VertexBuffer(V3), new_buffers, buffers);
         state.geoc.allocator.free(buffers);
     }
-    new_buffers[len] = g.VertexBuffer(V3).init(&state.scene.cameras.?[len].shape);
+    new_buffers[len] = g.VertexBuffer(V3).init(&state.scene.cameras.?[len].shape, Usage.StaticDraw);
 
     state.camera_buffers = new_buffers;
 }
 
-fn insertShapeFn(ptr: *anyopaque, shape: canvas.Shape) void {
+fn insertShapeFn(ptr: *anyopaque, shape: g.canvas.Shape) void {
     const state: *State = @ptrCast(@alignCast(ptr));
     const len = if (state.shape_buffers) |b| b.len else 0;
 
@@ -328,25 +332,25 @@ fn insertShapeFn(ptr: *anyopaque, shape: canvas.Shape) void {
         std.mem.copyBackwards(g.VertexBuffer(V3), new_buffers, buffers);
         state.geoc.allocator.free(buffers);
     }
-    new_buffers[len] = g.VertexBuffer(V3).init(state.scene.shapes.?[len]);
+    new_buffers[len] = g.VertexBuffer(V3).init(state.scene.shapes.?[len], Usage.StaticDraw);
 
     state.shape_buffers = new_buffers;
 }
 
 fn insertCubeFn(ptr: *anyopaque) callconv(.C) void {
-    insertShapeFn(ptr, canvas.Shape.CUBE);
+    insertShapeFn(ptr, g.canvas.Shape.CUBE);
 }
 
 fn insertPyramidFn(ptr: *anyopaque) callconv(.C) void {
-    insertShapeFn(ptr, canvas.Shape.PYRAMID);
+    insertShapeFn(ptr, g.canvas.Shape.PYRAMID);
 }
 
 fn insertSphereFn(ptr: *anyopaque) callconv(.C) void {
-    insertShapeFn(ptr, canvas.Shape.SPHERE);
+    insertShapeFn(ptr, g.canvas.Shape.SPHERE);
 }
 
 fn insertConeFn(ptr: *anyopaque) callconv(.C) void {
-    insertShapeFn(ptr, canvas.Shape.CONE);
+    insertShapeFn(ptr, g.canvas.Shape.CONE);
 }
 
 fn clearFn(ptr: *anyopaque) callconv(.C) void {
@@ -390,6 +394,8 @@ fn scaleFn(
 ) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
 
+    // _ = Animation.init(extractVec3s(scene: *Scene, idxs_ptr: [*]const u32, idxs_len: usize, dest: []V3));
+
     const indexes = state.geoc.allocator.alloc(u32, idxs_len) catch unreachable;
     std.mem.copyBackwards(u32, indexes, idxs_ptr[0..idxs_len]);
 
@@ -408,7 +414,7 @@ fn scaleFn(
     const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
     std.mem.copyBackwards(u8, args, slice);
 
-    _ = g.Interval.init(@intFromPtr(&applyScaleFn), args, 30, 25);
+    _ = g.Interval.init(@intCast(@intFromPtr(&applyScaleFn)), args, 30, 25);
 }
 
 fn applyScaleFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void {
@@ -479,7 +485,7 @@ fn rotateFn(
     const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
     std.mem.copyBackwards(u8, args, slice);
 
-    _ = g.Interval.init(@intFromPtr(&applyRotateFn), args, 30, 25);
+    _ = g.Interval.init(@intCast(@intFromPtr(&applyRotateFn)), args, 30, 25);
 }
 
 fn applyRotateFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void {
@@ -550,7 +556,7 @@ fn translateFn(
     const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
     std.mem.copyBackwards(u8, args, slice);
 
-    _ = g.Interval.init(@intFromPtr(&applyTranslateFn), args, 30, 25);
+    _ = g.Interval.init(@intCast(@intFromPtr(&applyTranslateFn)), args, 30, 25);
 }
 
 //TODO: refactor
@@ -623,7 +629,7 @@ fn reflectFn(
     const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
     std.mem.copyBackwards(u8, args, slice);
 
-    _ = g.Interval.init(@intFromPtr(&applyReflectFn), args, 30, 25);
+    _ = g.Interval.init(@intCast(@intFromPtr(&applyReflectFn)), args, 30, 25);
     // defer _ = g.Interval.init(@intFromPtr(&applyReflectFn), args, 30, 25);
 }
 
@@ -660,6 +666,13 @@ fn applyReflectFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callc
     }
 
     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
+}
+
+fn extractVec3s(scene: *Scene, idxs_ptr: [*]const u32, idxs_len: usize, dest: []V3) []V3 {
+    for (idxs_len, idxs_ptr[0..]) |i, index| {
+        dest[i] = scene.vectors.?[index];
+    }
+    return dest;
 }
 
 fn freeArgsFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void {

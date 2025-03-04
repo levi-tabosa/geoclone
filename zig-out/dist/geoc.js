@@ -834,14 +834,19 @@ const env = {
          webgl.deleteProgram(program.gl);
       }
    },
-   initVertexBuffer(data_ptr, data_len) {
+   initVertexBuffer(data_ptr, data_len, usage) {
+      const gl_usage = [
+         webgl.STATIC_DRAW,
+         webgl.DYNAMIC_DRAW,
+         webgl.STREAM_DRAW,
+      ][usage];
       const vertex_buffer = webgl.createBuffer();
 
       webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
       webgl.bufferData(
          webgl.ARRAY_BUFFER,
          getData(data_ptr, data_len),
-         webgl.STATIC_DRAW
+         gl_usage
       );
 
       const handle = next_buffer++;
@@ -880,13 +885,18 @@ const env = {
          webgl.bufferSubData(webgl.ARRAY_BUFFER, offset, vertexData);
       }
    },
-   bufferData(handle, data_ptr, data_len) {
+   bufferData(handle, data_ptr, data_len, usage) {
+      const gl_usage = [
+         webgl.STATIC_DRAW,
+         webgl.DYNAMIC_DRAW,
+         webgl.STREAM_DRAW,
+      ][usage];
       const vertex_buffer = buffers.get(handle);
       webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
       webgl.bufferData(
          webgl.ARRAY_BUFFER,
          getData(data_ptr, data_len),
-         webgl.STATIC_DRAW
+         gl_usage
       );
    },
    setInterval(fn_ptr, args_ptr, args_len, delay, timeout) {

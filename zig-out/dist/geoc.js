@@ -900,9 +900,9 @@ const env = {
       );
    },
    setInterval(fn_ptr, args_ptr, args_len, delay, timeout) {
-      console.log("Set interval", getStr(args_ptr, args_len));
+      // console.log("Set interval", getStr(args_ptr, args_len));
       const handle = setInterval(() => {
-         console.log("Tick", getStr(args_ptr, args_len));
+         // console.log("Tick", getStr(args_ptr, args_len));
          wasm_instance.exports.apply(state_ptr, fn_ptr, args_ptr, args_len);
       }, delay);
 

@@ -394,8 +394,6 @@ fn scaleFn(
 ) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
 
-    // _ = Animation.init(extractVec3s(scene: *Scene, idxs_ptr: [*]const u32, idxs_len: usize, dest: []V3));
-
     const indexes = state.geoc.allocator.alloc(u32, idxs_len) catch unreachable;
     std.mem.copyBackwards(u32, indexes, idxs_ptr[0..idxs_len]);
 
@@ -414,7 +412,8 @@ fn scaleFn(
     const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
     std.mem.copyBackwards(u8, args, slice);
 
-    _ = g.Interval.init(@intCast(@intFromPtr(&applyScaleFn)), args, 30, 25);
+    _ = Animation.init(selected, @intCast(@intFromPtr(&applyScaleFn)), args, 30, 25);
+    // _ = g.Interval.init(@intCast(@intFromPtr(&applyScaleFn)), args, 30, 25);
 }
 
 fn applyScaleFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void {
@@ -666,13 +665,6 @@ fn applyReflectFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callc
     }
 
     state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
-}
-
-fn extractVec3s(scene: *Scene, idxs_ptr: [*]const u32, idxs_len: usize, dest: []V3) []V3 {
-    for (idxs_len, idxs_ptr[0..]) |i, index| {
-        dest[i] = scene.vectors.?[index];
-    }
-    return dest;
 }
 
 fn freeArgsFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void {

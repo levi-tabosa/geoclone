@@ -11,10 +11,17 @@ const Animation = struct {
     buffer: g.VertexBuffer(V3),
 
     pub fn init(
-        selected: []const V3,
+        scene: canvas.Scene,
+        fn_ptr: i32,
+        args: []const u8,
+        delay: u32,
+        count: u32, //TODO: maybe remove
+        interval_handle: i32,
     ) Self {
+        const selected = 
         return Animation{
             .buffer = g.VertexBuffer(V3).init(selected, g.VertexUsage.DynamicDraw),
+            .interval_handle = g.Interval.init(fn_ptr, args: []const u8, delay: u32, count: u32)
         };
     }
 

@@ -12,14 +12,14 @@ const js = struct { //TODO remove all unused fn
     extern fn initProgram(shader1_handle: i32, shader2_handle: i32) i32;
     extern fn deinitProgram(js_handle: i32) void;
     extern fn useProgram(js_handle: i32) void;
-    extern fn initVertexBuffer(data_ptr: [*]const u8, data_len: usize, geoc.VertexUsage) i32;
+    extern fn initVertexBuffer(data_ptr: [*]const u8, data_len: usize, geoc.BufferUsage) i32;
     extern fn deinitVertexBuffer(js_handle: i32) void;
     extern fn bindVertexBuffer(js_handle: i32) void;
     extern fn bufferData(
         js_handle: i32,
         data_ptr: [*]const u8,
         data_len: usize,
-        usage: geoc.VertexUsage,
+        usage: geoc.BufferUsage,
     ) void;
     extern fn bufferSubData(
         js_handle: i32,
@@ -281,7 +281,7 @@ pub const VertexBuffer = struct {
 
     js_handle: i32,
 
-    pub fn init(data: []const u8, usage: geoc.VertexUsage) Self {
+    pub fn init(data: []const u8, usage: geoc.BufferUsage) Self {
         return .{ .js_handle = js.initVertexBuffer(data.ptr, data.len, usage) };
     }
 
@@ -293,7 +293,7 @@ pub const VertexBuffer = struct {
         js.bindVertexBuffer(self.js_handle);
     }
 
-    pub fn bufferData(self: Self, data: []const u8, usage: geoc.VertexUsage) void {
+    pub fn bufferData(self: Self, data: []const u8, usage: geoc.BufferUsage) void {
         js.bufferData(self.js_handle, data.ptr, data.len, usage);
     }
 

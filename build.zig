@@ -40,13 +40,13 @@ fn createExecutable(
         .optimize = optimize,
     });
 
-    const animations = b.addModule("animations", .{
-        .root_source_file = b.path("src/animations/animations.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    // const animations = b.addModule("animations", .{
+    //     .root_source_file = b.path("src/animations/animations.zig"),
+    //     .target = target,
+    //     .optimize = optimize,
+    // });
 
-    exe.root_module.addImport("animations", animations);
+    // exe.root_module.addImport("animations", animations);
 
     exe.root_module.addImport("geoc", geoc);
 

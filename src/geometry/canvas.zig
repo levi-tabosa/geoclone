@@ -1,15 +1,14 @@
 const std = @import("std");
-const geoc = @import("../root.zig"); //TODO: erase
-
 const Allocator = std.mem.Allocator;
+// const geoc = @import("../root.zig"); //TODO: erase
 
-fn _log(txt: []const u8) void { //TODO: erase
-    geoc.platform.log(txt);
-}
+// fn _log(txt: []const u8) void { //TODO: erase
+//     geoc.platform.log(txt);
+// }
 
-pub fn _LOGF(allocator: Allocator, comptime txt: []const u8, args: anytype) void { //TODO: erase
-    _log(std.fmt.allocPrint(allocator, txt, args) catch unreachable);
-}
+// pub fn _LOGF(allocator: Allocator, comptime txt: []const u8, args: anytype) void { //TODO: erase
+//     _log(std.fmt.allocPrint(allocator, txt, args) catch unreachable);
+// }
 
 fn rotXZ(u: [3]f32, angle_x: f32, angle_y: f32, zoom: f32) [3]f32 {
     return .{

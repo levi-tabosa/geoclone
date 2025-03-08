@@ -1,11 +1,14 @@
 const g = @import("geoc");
 const std = @import("std");
-const animations = @import("animations");
+const animations = g.animations;
 const Scene = g.canvas.Scene;
-const Usage = g.VertexUsage;
+const Usage = g.BufferUsage;
 const Animation = animations.Animation;
+const AnimationManager = animations.AnimationManager;
 
-const _LOGF = g.canvas._LOGF; //TODO: remove
+fn _LOGF(allocator: std.mem.Allocator, comptime fmt: []const u8, args: anytype) void {
+    g.platform.log(std.fmt.allocPrint(allocator, fmt, args) catch unreachable);
+}
 
 pub const std_options = std.Options{
     .log_level = .info,
@@ -51,6 +54,7 @@ pub const State = struct {
     animation_program: g.Program,
     geoc: g.Geoc,
     scene: *Scene,
+    animation_manager: AnimationManager(V3),
 
     pub fn init(geoc: g.Geoc, scene: *Scene) Self {
         const vertex_shader_source =
@@ -149,6 +153,7 @@ pub const State = struct {
             .animation_program = g.Program.init(geoc, &.{ vertex_shader, a_fragment_shader }),
             .geoc = geoc,
             .scene = scene,
+            .animation_manager = AnimationManager(V3).init(geoc.allocator, 30, 25),
         };
     }
 
@@ -174,6 +179,8 @@ pub const State = struct {
                 buff.deinit();
             }
         }
+
+        self.animation_manager.deinit();
     }
 
     pub fn draw(self: Self) void {
@@ -412,8 +419,21 @@ fn scaleFn(
     const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
     std.mem.copyBackwards(u8, args, slice);
 
-    _ = Animation.init(selected, @intCast(@intFromPtr(&applyScaleFn)), args, 30, 25);
-    // _ = g.Interval.init(@intCast(@intFromPtr(&applyScaleFn)), args, 30, 25);
+    // _LOGF(state.geoc.allocator, "vec is {s}", .{if (state.scene.vectors != null) "" else "not"});
+    // var selected = state.geoc.allocator.alloc(V3, indexes.len) catch unreachable;
+    // for (indexes, 0..indexes.len) |idx, i| {
+    //     selected[i] = state.scene.vectors.?[idx];
+    // }
+
+    // _ = animations.Animat(V3).init(
+    //     selected,
+    //     @intCast(@intFromPtr(&applyScaleFn)),
+    //     args,
+    //     30,
+    //     25,
+    // );
+
+    _ = g.Interval.init(@intCast(@intFromPtr(&applyScaleFn)), args, 30, 25);
 }
 
 fn applyScaleFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void {
@@ -555,7 +575,28 @@ fn translateFn(
     const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
     std.mem.copyBackwards(u8, args, slice);
 
-    _ = g.Interval.init(@intCast(@intFromPtr(&applyTranslateFn)), args, 30, 25);
+    _LOGF(state.geoc.allocator, "vec is {s}", .{if (state.scene.vectors != null) "" else "not"});
+    var selected = state.geoc.allocator.alloc([]V3, indexes.len) catch unreachable;
+    for (indexes, 0..indexes.len) |idx, i| {
+        selected[0][i] = state.scene.vectors.?[idx];
+    }
+
+    state.animation_manager.add(
+        selected,
+        @intCast(@intFromPtr(&applyScaleFn)),
+        args,
+    );
+
+    // _ = Animation(V3).init(
+    //     selected,
+    //     state.animation_program,
+    //     @intCast(@intFromPtr(&applyScaleFn)),
+    //     args,
+    //     30,
+    //     25,
+    // );
+
+    // _ = g.Interval.init(@intCast(@intFromPtr(&applyTranslateFn)), args, 30, 25);
 }
 
 //TODO: refactor

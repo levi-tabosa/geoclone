@@ -2,6 +2,7 @@ const std = @import("std");
 const builtin = @import("builtin");
 //used in example.zig
 pub const canvas = @import("geometry/canvas.zig");
+pub const animations = @import("animations/animations.zig");
 
 pub const platform = switch (builtin.target.isWasm()) {
     true => @import("platform/web.zig"),
@@ -52,7 +53,7 @@ pub const DrawMode = enum(u32) {
     TriangleFan = 6,
 };
 
-pub const VertexUsage = enum(u32) {
+pub const BufferUsage = enum(u32) {
     StaticDraw = 0,
     DynamicDraw = 1,
     StreamDraw = 2,
@@ -106,7 +107,7 @@ pub fn VertexBuffer(comptime vertex: type) type {
         platform: platform.VertexBuffer,
         count: usize,
 
-        pub fn init(data: []const vertex, usage: VertexUsage) Self {
+        pub fn init(data: []const vertex, usage: BufferUsage) Self {
             return .{
                 .platform = platform.VertexBuffer.init(std.mem.sliceAsBytes(data), usage),
                 .count = data.len,
@@ -121,7 +122,7 @@ pub fn VertexBuffer(comptime vertex: type) type {
             self.platform.bind();
         }
 
-        pub fn bufferData(self: Self, data: []const vertex, usage: VertexUsage) void {
+        pub fn bufferData(self: Self, data: []const vertex, usage: BufferUsage) void {
             self.platform.bufferData(std.mem.sliceAsBytes(data), usage);
         }
 

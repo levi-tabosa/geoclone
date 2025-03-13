@@ -73,6 +73,13 @@ export fn apply(
     fn_ptr(ptr, args_ptr, args_len);
 }
 
+export fn animate(
+    ptr: *anyopaque,
+    fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+) callconv(.C) void {
+    fn_ptr(ptr);
+}
+
 export fn free(
     ptr: *anyopaque,
     fn_ptr: *const fn (*anyopaque, [*]const u8, usize) callconv(.C) void,
@@ -84,120 +91,120 @@ export fn free(
 
 export fn setAngles(
     ptr: *anyopaque,
-    set_angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
     p_angle: f32,
     y_angle: f32,
 ) void {
-    set_angles_fn_ptr(ptr, p_angle, y_angle);
+    fn_ptr(ptr, p_angle, y_angle);
 }
 
 export fn getPitch(
     ptr: *anyopaque,
-    get_pitch_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
+    fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
 ) f32 {
-    return get_pitch_fn_ptr(ptr);
+    return fn_ptr(ptr);
 }
 
 export fn getYaw(
     ptr: *anyopaque,
-    get_yaw_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
+    fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
 ) f32 {
-    return get_yaw_fn_ptr(ptr);
+    return fn_ptr(ptr);
 }
 
 export fn insertVector(
     ptr: *anyopaque,
-    insert_vector_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
     x: f32,
     y: f32,
     z: f32,
 ) void {
-    insert_vector_fn_ptr(ptr, x, y, z);
+    fn_ptr(ptr, x, y, z);
 }
 
 export fn setZoom(
     ptr: *anyopaque,
-    zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
     zoom: f32,
 ) void {
-    zoom_fn_ptr(ptr, zoom);
+    fn_ptr(ptr, zoom);
 }
 
 export fn insertCamera(
     ptr: *anyopaque,
-    insert_camera_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
     x: f32,
     y: f32,
     z: f32,
 ) void {
-    insert_camera_fn_ptr(ptr, x, y, z);
+    fn_ptr(ptr, x, y, z);
 }
 
 export fn insertCube(
     ptr: *anyopaque,
-    cube_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque) callconv(.C) void,
 ) void {
-    cube_fn_ptr(ptr);
+    fn_ptr(ptr);
 }
 
 export fn insertPyramid(
     ptr: *anyopaque,
-    pyramid_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque) callconv(.C) void,
 ) void {
-    pyramid_fn_ptr(ptr);
+    fn_ptr(ptr);
 }
 
 export fn insertSphere(
     ptr: *anyopaque,
-    sphere_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque) callconv(.C) void,
 ) void {
-    sphere_fn_ptr(ptr);
+    fn_ptr(ptr);
 }
 
 export fn insertCone(
     ptr: *anyopaque,
-    cone_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque) callconv(.C) void,
 ) void {
-    cone_fn_ptr(ptr);
+    fn_ptr(ptr);
 }
 
 export fn clear(
     ptr: *anyopaque,
-    clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque) callconv(.C) void,
 ) void {
-    clear_fn_ptr(ptr);
+    fn_ptr(ptr);
 }
 
 export fn setResolution(
     ptr: *anyopaque,
-    set_resolution_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
     res: usize,
 ) void {
-    set_resolution_fn_ptr(ptr, res);
+    fn_ptr(ptr, res);
 }
 
 export fn setCamera(
     ptr: *anyopaque,
-    set_camera_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
     index: usize,
 ) void {
-    set_camera_fn_ptr(ptr, index);
+    fn_ptr(ptr, index);
 }
 
 export fn scale(
     ptr: *anyopaque,
-    scale_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32) callconv(.C) void,
     indexes_ptr: [*]const u32,
     indexes_len: usize,
     shorts: u32,
     factor: f32,
 ) void {
-    scale_fn_ptr(ptr, indexes_ptr, indexes_len, shorts, factor);
+    fn_ptr(ptr, indexes_ptr, indexes_len, shorts, factor);
 }
 
 export fn rotate(
     ptr: *anyopaque,
-    rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
     indexes_ptr: [*]const u32,
     indexes_len: usize,
     shorts: u32,
@@ -205,12 +212,12 @@ export fn rotate(
     y: f32,
     z: f32,
 ) void {
-    rotate_fn_ptr(ptr, indexes_ptr, indexes_len, shorts, x, y, z);
+    fn_ptr(ptr, indexes_ptr, indexes_len, shorts, x, y, z);
 }
 
 export fn translate(
     ptr: *anyopaque,
-    translate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
     indexes_ptr: [*]const u32,
     indexes_len: usize,
     shorts: u32,
@@ -218,18 +225,18 @@ export fn translate(
     dy: f32,
     dz: f32,
 ) void {
-    translate_fn_ptr(ptr, indexes_ptr, indexes_len, shorts, dx, dy, dz);
+    fn_ptr(ptr, indexes_ptr, indexes_len, shorts, dx, dy, dz);
 }
 
 export fn reflect(
     ptr: *anyopaque,
-    reflect_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, u8) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, u8) callconv(.C) void,
     indexes_ptr: [*]const u32,
     indexes_len: usize,
     shorts: u32,
     coord_idx: u8,
 ) void {
-    reflect_fn_ptr(ptr, indexes_ptr, indexes_len, shorts, coord_idx);
+    fn_ptr(ptr, indexes_ptr, indexes_len, shorts, coord_idx);
 }
 
 pub fn log(message: []const u8) void {

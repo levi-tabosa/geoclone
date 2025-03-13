@@ -51,7 +51,6 @@ pub const State = struct {
     vectors_program: g.Program,
     shapes_program: g.Program,
     cameras_program: g.Program,
-    animation_program: g.Program,
     geoc: g.Geoc,
     scene: *Scene,
     animation_manager: AnimationManager(V3),
@@ -139,6 +138,8 @@ pub const State = struct {
             geoc.setFnPtr(field.name, @intFromPtr(@field(table, field.name)));
         }
 
+        const animation_program = g.Program.init(geoc, &.{ vertex_shader, a_fragment_shader });
+
         return .{
             .axis_buffer = g.VertexBuffer(V3).init(&scene.axis, Usage.StaticDraw),
             .grid_buffer = g.VertexBuffer(V3).init(scene.grid, Usage.StaticDraw),
@@ -150,10 +151,9 @@ pub const State = struct {
             .vectors_program = g.Program.init(geoc, &.{ vertex_shader, v_fragment_shader }),
             .shapes_program = g.Program.init(geoc, &.{ vertex_shader, s_fragment_shader }),
             .cameras_program = g.Program.init(geoc, &.{ vertex_shader, c_fragment_shader }),
-            .animation_program = g.Program.init(geoc, &.{ vertex_shader, a_fragment_shader }),
             .geoc = geoc,
             .scene = scene,
-            .animation_manager = AnimationManager(V3).init(geoc.allocator, 30, 25),
+            .animation_manager = AnimationManager(V3).init(geoc.allocator, animation_program),
         };
     }
 
@@ -553,92 +553,75 @@ fn translateFn(
     dz: f32,
 ) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
-    const indexes = state.geoc.allocator.alloc(u32, idxs_len) catch unreachable;
-    std.mem.copyBackwards(u32, indexes, idxs_ptr[0..idxs_len]);
 
-    const bytes = std.mem.asBytes(&struct {
-        idxs_ptr: [*]const u32,
-        idxs_len: usize,
-        counts: u32,
+    const Args = struct {
+        animation_ctx: animations.Ctx(V3),
         dx: f32,
         dy: f32,
         dz: f32,
-    }{
-        .idxs_ptr = indexes.ptr,
-        .idxs_len = idxs_len,
-        .counts = counts,
-        .dx = dx / 25,
-        .dy = dy / 25,
-        .dz = dz / 25,
+    };
+
+    const animation_ctx = AnimationManager(V3).newContext(
+        state.geoc.allocator,
+        idxs_ptr[0..idxs_len],
+        counts,
+        .{
+            state.scene.vectors,
+            state.scene.shapes,
+            @as(*?[]struct { V3 }, @alignCast(@ptrCast(&state.scene.cameras))).*,
+        },
+    );
+
+    const bytes = std.mem.asBytes(&Args{
+        .animation_ctx = animation_ctx,
+        .dx = dx,
+        .dy = dy,
+        .dz = dz,
     });
+
     const slice = std.mem.bytesAsSlice(u8, bytes);
     const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
     std.mem.copyBackwards(u8, args, slice);
 
-    _LOGF(state.geoc.allocator, "vec is {s}", .{if (state.scene.vectors != null) "" else "not"});
-    var selected = state.geoc.allocator.alloc([]V3, indexes.len) catch unreachable;
-    for (indexes, 0..indexes.len) |idx, i| {
-        selected[0][i] = state.scene.vectors.?[idx];
-    }
-
-    state.animation_manager.add(
-        selected,
-        @intCast(@intFromPtr(&applyScaleFn)),
-        args,
-    );
-
-    // _ = Animation(V3).init(
-    //     selected,
-    //     state.animation_program,
-    //     @intCast(@intFromPtr(&applyScaleFn)),
-    //     args,
-    //     30,
-    //     25,
-    // );
-
-    // _ = g.Interval.init(@intCast(@intFromPtr(&applyTranslateFn)), args, 30, 25);
+    AnimationManager(V3).start(@intFromPtr(&applyTranslateFn), args);
 }
 
-//TODO: refactor
 fn applyTranslateFn(
-    ptr: *anyopaque,
+    ptr: *animations.Ctx(V3),
     args_ptr: [*]const u8,
     args_len: usize,
 ) callconv(.C) void {
     const Args = struct {
-        idxs_ptr: [*]const u32,
-        idxs_len: usize,
-        counts: u32,
+        animation_ctx: animations.Ctx(V3),
         dx: f32,
         dy: f32,
         dz: f32,
     };
 
     const bytes = std.mem.sliceAsBytes(args_ptr[0..args_len]);
-    const args = std.mem.bytesAsValue(Args, bytes);
+    const args: *align(1) const Args = std.mem.bytesAsValue(Args, bytes);
 
     const state: *State = @ptrCast(@alignCast(ptr));
     const scene = state.scene;
 
-    scene.translate(args.idxs_ptr, args.idxs_len, args.counts, args.dx, args.dy, args.dz);
-    scene.updateViewMatrix();
+    _LOGF(scene.allocator, "{any}", .{args.*});
 
-    const vectors_count = args.counts >> 0x10;
-    const shapes_count = args.counts & 0xFFFF;
+    // const vectors_count = args.counts >> 0x10;
+    // const shapes_count = args.counts & 0xFFFF;
 
-    if (vectors_count > 0) {
-        state.updateVectors(scene, args.idxs_ptr, vectors_count);
-    }
+    // if (vectors_count > 0) {
+    //     state.updateVectors(scene, args.idxs_ptr, vectors_count);
+    // }
 
-    if (shapes_count > 0) {
-        state.updateShapes(scene, args.idxs_ptr, vectors_count, shapes_count);
-    }
+    // if (shapes_count > 0) {
+    //     state.updateShapes(scene, args.idxs_ptr, vectors_count, shapes_count);
+    // }
 
-    if (args.idxs_len - vectors_count + shapes_count > 0) {
-        state.updateCameras(scene, args.idxs_ptr, vectors_count, shapes_count, args.idxs_len);
-    }
+    // if (args.idxs_len - vectors_count + shapes_count > 0) {
+    //     state.updateCameras(scene, args.idxs_ptr, vectors_count, shapes_count, args.idxs_len);
+    // }
 
-    state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
+    // state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
 
 fn reflectFn(
@@ -710,14 +693,13 @@ fn applyReflectFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callc
 
 fn freeArgsFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
-    const Slice = struct {
-        ptr: [*]const u32,
-        len: usize,
+    const Ctx = struct {
+        ctx: animations.Ctx(V3),
     };
 
-    const idxs = std.mem.bytesAsValue(Slice, args_ptr[0..]);
+    const val = std.mem.bytesAsValue(Ctx, args_ptr[0..]);
 
-    state.geoc.allocator.free(idxs.ptr[0..idxs.len]);
+    val.ctx.free(state.geoc.allocator);
     state.geoc.allocator.free(args_ptr[0..args_len]);
 }
 

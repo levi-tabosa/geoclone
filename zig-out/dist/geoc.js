@@ -994,7 +994,7 @@ function createButtonListeners(/** @type { SceneController } */ scene_handler) {
    return [
       () => {
          scene_handler.insertVector(input1.value, input2.value, input3.value);
-         input1.value = input2.value = input3.value = "";
+         // input1.value = input2.value = input3.value = "";
       },
       () => scene_handler.clear(),
       () => {
@@ -1038,7 +1038,7 @@ const btn_listeners = [];
 function createButtonGrid() {
    const grid = document.createElement("div");
    grid.id = "button-grid";
-   grid.classList.toggle("hidden");
+   // grid.classList.toggle("hidden");
 
    const labels = [
       "Insert",
@@ -1083,7 +1083,7 @@ function createToggleButtonGrid() {
 function createFloatingTable() {
    const table = document.createElement("div");
    table.id = "floating-table";
-   table.classList.toggle("hidden");
+   // table.classList.toggle("hidden");
 
    const header = document.createElement("div");
    header.className = "table-header";

@@ -1,28 +1,21 @@
 const std = @import("std");
 const g = @import("../root.zig");
+const scene = g.canvas;
 
 fn _LOGF(allocator: std.mem.Allocator, comptime fmt: []const u8, args: anytype) void { //TODO: remove
     g.platform.log(std.fmt.allocPrint(allocator, fmt, args) catch unreachable);
 }
 
-fn Slices(comptime vertex: type) type {
-    return struct {
-        ?[]vertex,
-        ?[][]vertex,
-        ?[]struct { vertex },
-    };
-}
-
 pub fn AnimationManager(comptime vertex: type) type {
     return struct {
         const Self = @This();
-        const animation = Animation(vertex);
+        const Context = Ctx(vertex);
         const delay = 30;
         const frames = 25;
 
         program: g.Program,
-        pool: Pool(animation),
-        ctx: ?Ctx(vertex) = null,
+        pool: Pool(Context),
+        ctx: ?Context = null,
         next: usize = 0,
 
         pub fn init(
@@ -30,7 +23,7 @@ pub fn AnimationManager(comptime vertex: type) type {
             program: g.Program,
         ) Self {
             return .{
-                .pool = Pool(animation).init(allocator),
+                .pool = Pool(Context).init(allocator),
                 .program = program,
             };
         }
@@ -39,11 +32,11 @@ pub fn AnimationManager(comptime vertex: type) type {
             self.pool.deinit();
         }
 
-        pub fn newContext(
+        pub fn context(
             allocator: std.mem.Allocator,
             idxs: []const u32,
             counts: u32,
-            slices: Slices(vertex),
+            slices: SliceTuple(vertex),
         ) Ctx(vertex) {
             return Ctx(vertex).init(
                 allocator,
@@ -55,71 +48,59 @@ pub fn AnimationManager(comptime vertex: type) type {
         }
 
         pub fn start(
-            // _: *Self,
+            _: *Self,
             fn_ptr: usize,
             args: []const u8,
         ) void {
             _ = g.Interval.init(@intCast(fn_ptr), args, delay, frames);
         }
 
-        pub fn set(
-            self: *Self,
-            idxs: []const u32,
-            counts: u32,
-            args: []const f32,
-            fn_ptr: usize,
-            vectors_ptr: ?[*]vertex,
-            shapes_ptr: ?[*][]vertex,
-            cameras_ptr: ?[*]vertex,
-        ) void {
-            _ = args;
-            // const bytes = std.mem.sliceAsBytes(args);
-            const vector_count = counts >> 0x10;
-            const shape_count = counts & 0xFFFF;
+        pub fn animate(self: *Self, geoc: g.Geoc, ctx: Ctx(vertex), args: anytype, transform: Trasform) void {
+            switch (transform) {
+                Trasform.Translate => {
+                    // g.platform.log("switch translate");
+                    const stepx = args[0] / frames;
+                    const stepy = args[1] / frames;
+                    const stepz = args[2] / frames;
+                    if (ctx.copied.@"0") |vecs| {
+                        var i: usize = 0;
+                        while (i < vecs.len) : (i += 2) {
+                            _LOGF(geoc.allocator, "steps: {} {} {}\n {} \n{any}", .{ stepx, stepy, stepz, self.next, vecs[i] });
+                            vecs[i].coords[0] += stepx;
+                            vecs[i].coords[1] += stepy;
+                            vecs[i].coords[2] += stepz;
+                        }
+                    }
 
-            const selected_vector_ptrs = self.pool.arena.allocator().alloc(*vertex, vector_count) catch unreachable;
-            const selected_shape_ptrs = self.pool.arena.allocator().alloc([]*vertex, shape_count) catch unreachable;
-            const selected_camera_pos_ptrs = self.pool.arena.allocator().alloc(*vertex, idxs.len - vector_count + shape_count) catch unreachable;
-
-            for (idxs[0..vector_count], 0..) |idx, i| {
-                selected_vector_ptrs[i] = &vectors_ptr.?[idx];
-                _LOGF(self.pool.arena.allocator(), "{d} {any}", .{ i, vectors_ptr.?[idx] });
+                    // self.translate(geoc, ctx, args);
+                },
+                Trasform.Rotate => {
+                    // self.rotate(geoc, ctx, args);
+                },
+                Trasform.Scale => {
+                    // self.scale(geoc, ctx, args);
+                },
             }
+            ctx.updateBuffers();
 
-            for (idxs[vector_count .. vector_count + shape_count], 0..) |idx, i| {
-                for (0..shapes_ptr.?[idx].len) |j| {
-                    selected_shape_ptrs[i][j] = &shapes_ptr.?[idx][j];
-                }
-                _LOGF(self.pool.arena.allocator(), "{d} {any}", .{ i, shapes_ptr.?[idx] });
+            self.program.use();
+
+            if (ctx.buffers.@"0") |buff| {
+                geoc.draw(vertex, self.program, buff, g.DrawMode.LineLoop);
             }
-
-            for (idxs[vector_count + shape_count .. idxs.len], 0..) |idx, i| {
-                selected_camera_pos_ptrs[i] = &cameras_ptr.?[idx];
-                _LOGF(self.pool.arena.allocator(), "{d} {any}", .{ i, cameras_ptr.?[idx] });
+            if (ctx.buffers.@"1") |buff| {
+                geoc.draw(vertex, self.program, buff, g.DrawMode.TriangleFan);
             }
+            if (ctx.buffers.@"2") |buff| {
+                geoc.draw(vertex, self.program, buff, g.DrawMode.LineLoop);
+            }
+            g.platform.log("draw");
 
-            // for (selected_vector_ptrs[0]) |value| {
-            //     @as(*struct { [3]f32 }, @alignCast(@ptrCast(value)))[0] = .{ 9, 9, 9 };
-            // }
-
-            const animations: [3]*animation = .{ self.pool.new(), self.pool.new(), self.pool.new() };
-
-            self.ctx = Ctx(vertex).init(animations, selected_vector_ptrs, selected_shape_ptrs, selected_camera_pos_ptrs, fn_ptr);
+            self.next += 1;
         }
 
-        pub fn animate(self: *Self, geoc: g.Geoc) void {
-            for (self.ctx.?.animations) |a| {
-                a.animate(geoc, self.program);
-            }
-        }
-
-        pub fn remove(
-            self: *Self,
-            anim: *animation,
-        ) void {
-            anim.deinit();
-            self.pool.delete(anim);
-            self.count -= 1;
+        pub fn remove(self: *Self, vec: vertex) void {
+            self.pool.delete(vec);
         }
 
         pub fn clear(self: *Self) void {
@@ -127,54 +108,136 @@ pub fn AnimationManager(comptime vertex: type) type {
                 node.data.deinit();
                 self.pool.delete(&node.data);
             }
-            self.count = 0;
+            self.ctx.?.free(self.pool.arena.allocator());
+            self.ctx = null;
+            self.next = 0;
         }
     };
 }
 
-pub fn Animation(comptime vertex: type) type {
+fn SliceTuple(comptime vertex: type) type {
+    return struct {
+        ?[]vertex,
+        ?[][]vertex,
+        ?[]struct { vertex },
+    };
+}
+
+pub fn Ctx(comptime vertex: type) type {
+    const OriginalSlicesTuple = SliceTuple(vertex);
+    const CopiedSlicesTuple = struct { ?[]vertex, ?[]vertex, ?[]vertex };
+    const AnimationBufferTuple = struct { ?g.VertexBuffer(vertex), ?g.VertexBuffer(vertex), ?g.VertexBuffer(vertex) };
     return struct {
         const Self = @This();
 
-        buffer: g.VertexBuffer(vertex),
-        mode: g.DrawMode,
+        buffers: AnimationBufferTuple,
+        copied: CopiedSlicesTuple,
+        slices: OriginalSlicesTuple,
+        idxs: []const u32,
 
         pub fn init(
-            selected: []*vertex,
-            mode: g.DrawMode,
+            allocator: std.mem.Allocator,
+            idxs: []const u32,
+            vector_count: usize,
+            shape_count: usize,
+            slices: OriginalSlicesTuple,
         ) Self {
-            const vertexes: [selected.len]vertex = undefined;
-            for (selected, 0..) |value, i| {
-                vertexes[i] = value.*;
+            var copied = CopiedSlicesTuple{
+                allocator.alloc(vertex, vector_count * 2) catch unreachable,
+                null,
+                null,
+                // allocator.alloc(struct { vertex }, idxs.len - vector_count - shape_count) catch unreachable,
+            };
+
+            for (0..vector_count) |i| {
+                copied.@"0".?[i * 2] = slices.@"0".?[idxs[i]];
+                copied.@"0".?[i * 2 + 1] = slices.@"0".?[idxs[i] + 1];
             }
+
+            var shapes_copy = allocator.alloc([]vertex, shape_count) catch unreachable;
+            defer {
+                for (shapes_copy) |shape| {
+                    allocator.free(shape);
+                }
+                allocator.free(shapes_copy);
+            }
+
+            for (vector_count..vector_count + shape_count) |i| {
+                shapes_copy[i - vector_count] = allocator.alloc(vertex, slices.@"1".?[idxs[i]].len) catch unreachable;
+                for (slices.@"1".?[idxs[i]], 0..) |vector, j| {
+                    shapes_copy[i - vector_count][j] = vector;
+                }
+            }
+
+            // copied.@"1" = std.mem.concat(allocator, vertex, shapes_copy) catch unreachable;
+
+            // for (vector_count + shape_count..idxs.len) |i| {
+            //     copied.@"2".?[i - vector_count - shape_count] = slices.@"2".?[idxs[i]];
+            // }
+
+            const buffers = .{
+                if (copied.@"0") |vectors| g.VertexBuffer(vertex).init(
+                    vectors,
+                    g.BufferUsage.DynamicDraw,
+                ) else null,
+                if (copied.@"1") |shapes| g.VertexBuffer(vertex).init(
+                    shapes,
+                    g.BufferUsage.DynamicDraw,
+                ) else null,
+                null,
+            };
+
             return .{
-                .buffer = g.VertexBuffer(vertex).init(selected, g.BufferUsage.DynamicDraw),
-                .mode = mode,
+                .copied = copied,
+                .slices = slices,
+                .buffers = buffers,
+                .idxs = idxs,
             };
         }
 
-        pub fn deinit(
-            self: *Self,
-        ) void {
-            self.buffer.deinit();
+        pub fn deinit(self: *align(1) const Self, allocator: std.mem.Allocator) void {
+            self.buffers.@"0".?.deinit();
+            self.buffers.@"1".?.deinit();
+            self.buffers.@"2".?.deinit();
+            self.free(allocator);
         }
 
-        pub fn animate(
-            self: *Self,
-            geoc_instance: g.Geoc,
-            program: g.Program,
-        ) void {
-            program.use();
-            self.buffer.bind();
-
-            inline for (std.meta.fields(vertex)) |field| {
-                geoc_instance.platform.vertexAttributePointer(program.platform, vertex, field, false);
+        pub fn updateBuffers(self: *const Self) void {
+            if (self.copied.@"0") |vecs| {
+                self.buffers.@"0".?.bufferData(vecs, g.BufferUsage.DynamicDraw);
+                // _LOGF(std.heap.page_allocator, "COPIED: {any}", .{.{vecs[0]}});
             }
+            if (self.copied.@"1") |shapes| {
+                self.buffers.@"1".?.bufferData(shapes, g.BufferUsage.DynamicDraw);
+            }
+            if (self.copied.@"2") |camera_pos| {
+                self.buffers.@"2".?.bufferData(camera_pos, g.BufferUsage.DynamicDraw);
+            }
+        }
 
-            geoc_instance.platform.drawArrays(self.mode, 0, self.buffer.count);
+        pub fn updateStaticVertexData(self: *align(1) const Self) void {
+            if (self.slices.@"0") |vecs| {
+                for (self.idxs, 0..) |idx, i| {
+                    vecs[idx] = self.copied.@"0".?[i * 2];
+                    vecs[idx + 1] = self.copied.@"0".?[i * 2 + 1];
+                }
+            }
+        }
+
+        pub fn free(self: *align(1) const Self, allocator: std.mem.Allocator) void {
+            _LOGF(allocator, "FREE\n{}", .{self.*});
+            if (self.copied.@"0") |vecs| allocator.free(vecs);
+            if (self.copied.@"1") |shapes| allocator.free(shapes);
+            if (self.copied.@"2") |camera_pos| allocator.free(camera_pos);
         }
     };
 }
+
+pub const Trasform = enum(u8) {
+    Translate,
+    Rotate,
+    Scale,
+};
 
 pub fn Pool(comptime T: type) type {
     return struct {
@@ -213,112 +276,3 @@ pub fn Pool(comptime T: type) type {
         }
     };
 }
-
-pub fn Ctx(comptime vertex: type) type {
-    return struct {
-        const Self = @This();
-        const animation = Animation(vertex);
-
-        copied: Slices(vertex),
-        slices: Slices(vertex),
-
-        pub fn init(
-            allocator: std.mem.Allocator,
-            idxs: []const u32,
-            vector_count: usize,
-            shape_count: usize,
-            slices: Slices(vertex),
-        ) Self {
-            var copied = Slices(vertex){
-                allocator.alloc(vertex, vector_count) catch unreachable,
-                allocator.alloc([]vertex, shape_count) catch unreachable,
-                allocator.alloc(struct { vertex }, idxs.len - vector_count + shape_count) catch unreachable,
-            };
-
-            _LOGF(allocator,
-                \\idxs {any}
-                \\idxs len {d}
-                \\vec count {d}
-                \\shape count {d}
-                \\cam count {d}
-                \\slices {}
-            , .{
-                idxs,
-                idxs.len,
-                vector_count,
-                shape_count,
-                idxs.len - vector_count - shape_count,
-                slices,
-            });
-
-            for (0..vector_count) |i| {
-                copied.@"0".?[i] = slices.@"0".?[idxs[i]];
-            }
-
-            for (vector_count..vector_count + shape_count) |i| {
-                copied.@"1".?[i - vector_count] = allocator.alloc(vertex, slices.@"1".?[idxs[i]].len) catch unreachable;
-                for (slices.@"1".?[idxs[i]], 0..) |v, j| {
-                    copied.@"1".?[i - vector_count][j] = v;
-                }
-            }
-
-            _LOGF(allocator, "aaaa", .{});
-
-            for (vector_count + shape_count..idxs.len) |i| {
-                copied.@"2".?[i - vector_count - shape_count] = slices.@"2".?[idxs[i]];
-            }
-
-            return .{
-                .copied = copied,
-                .slices = slices,
-            };
-        }
-
-        ///TODO:change this to accept *Self
-        pub fn free(self: *align(1) const Self, allocator: std.mem.Allocator) void {
-            _LOGF(allocator, "{}", .{self.*});
-            if (self.copied.@"0") |vecs| allocator.free(vecs);
-            if (self.copied.@"1") |shapes| {
-                for (shapes) |shape| {
-                    allocator.free(shape);
-                }
-            }
-            if (self.copied.@"2") |camera_pos| allocator.free(camera_pos);
-        }
-    };
-}
-
-pub const AnimationType = enum(u8) {
-    const Self = @This();
-
-    Translate,
-    Rotate,
-    Scale,
-
-    pub fn getArgsType(self: Self) type {
-        return switch (self) {
-            .Translate => comptime struct {
-                idxs_ptr: [*]const u32,
-                idxs_len: usize,
-                counts: u32,
-                x: f32,
-                y: f32,
-                z: f32,
-            },
-            .Rotate => struct {
-                idxs_ptr: [*]const u32,
-                idxs_len: usize,
-                counts: u32,
-                x: f32,
-                y: f32,
-                z: f32,
-            },
-            .Scale => struct {
-                idxs_ptr: [*]const u32,
-                idxs_len: usize,
-                counts: u32,
-                factor: f32,
-            },
-        };
-    }
-};

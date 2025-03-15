@@ -1,10 +1,10 @@
-const g = @import("geoc");
 const std = @import("std");
+const g = @import("geoc");
 const animations = g.animations;
 const Scene = g.canvas.Scene;
 const Usage = g.BufferUsage;
-const Animation = animations.Animation;
-const AnimationManager = animations.AnimationManager;
+const V3 = g.canvas.V3;
+const AnimationManager = animations.AnimationManager(V3);
 
 fn _LOGF(allocator: std.mem.Allocator, comptime fmt: []const u8, args: anytype) void {
     g.platform.log(std.fmt.allocPrint(allocator, fmt, args) catch unreachable);
@@ -36,8 +36,6 @@ const Table = struct {
     free_args_fn_ptr: *const fn (*anyopaque, [*]const u8, usize) callconv(.C) void,
 };
 
-const V3 = g.canvas.V3;
-
 pub const State = struct {
     const Self = @This();
 
@@ -53,7 +51,7 @@ pub const State = struct {
     cameras_program: g.Program,
     geoc: g.Geoc,
     scene: *Scene,
-    animation_manager: AnimationManager(V3),
+    animation_manager: AnimationManager,
 
     pub fn init(geoc: g.Geoc, scene: *Scene) Self {
         const vertex_shader_source =
@@ -96,6 +94,13 @@ pub const State = struct {
             \\    gl_FragColor = vec4(0.8, 0.0, 1.0, 1.0);
             \\}
         ;
+
+        const anm_fragment_shader_source =
+            \\uniform vec4 color;
+            \\void main() {
+            \\    gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+            \\}
+        ;
         const vertex_shader = g.Shader.init(geoc, g.ShaderType.Vertex, vertex_shader_source);
         defer vertex_shader.deinit();
 
@@ -109,6 +114,8 @@ pub const State = struct {
         defer s_fragment_shader.deinit();
         const c_fragment_shader = g.Shader.init(geoc, g.ShaderType.Fragment, c_fragment_shader_source);
         defer c_fragment_shader.deinit();
+        const anm_fragment_shader = g.Shader.init(geoc, g.ShaderType.Fragment, anm_fragment_shader_source);
+        defer anm_fragment_shader.deinit();
 
         defer geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 
@@ -138,7 +145,7 @@ pub const State = struct {
             geoc.setFnPtr(field.name, @intFromPtr(@field(table, field.name)));
         }
 
-        const animation_program = g.Program.init(geoc, &.{ vertex_shader, a_fragment_shader });
+        const animation_program = g.Program.init(geoc, &.{ vertex_shader, anm_fragment_shader });
 
         return .{
             .axis_buffer = g.VertexBuffer(V3).init(&scene.axis, Usage.StaticDraw),
@@ -153,7 +160,7 @@ pub const State = struct {
             .cameras_program = g.Program.init(geoc, &.{ vertex_shader, c_fragment_shader }),
             .geoc = geoc,
             .scene = scene,
-            .animation_manager = AnimationManager(V3).init(geoc.allocator, animation_program),
+            .animation_manager = AnimationManager.init(geoc.allocator, animation_program),
         };
     }
 
@@ -218,9 +225,9 @@ pub const State = struct {
         const selected = scene.allocator.alloc(V3, vectors_count * 2) catch unreachable;
         defer scene.allocator.free(selected);
 
-        for (0..vectors_count, idxs_ptr[0..]) |i, line_idx| {
-            selected[i * 2] = scene.vectors.?[line_idx * 2];
-            selected[i * 2 + 1] = scene.vectors.?[line_idx * 2 + 1];
+        for (0..vectors_count, idxs_ptr[0..]) |i, idx| {
+            selected[i * 2] = scene.vectors.?[idx * 2];
+            selected[i * 2 + 1] = scene.vectors.?[idx * 2 + 1];
         }
 
         self.vector_buffer.?.bufferSubData(idxs_ptr[0..vectors_count], selected);
@@ -561,7 +568,7 @@ fn translateFn(
         dz: f32,
     };
 
-    const animation_ctx = AnimationManager(V3).newContext(
+    const animation_ctx = AnimationManager.context(
         state.geoc.allocator,
         idxs_ptr[0..idxs_len],
         counts,
@@ -583,11 +590,11 @@ fn translateFn(
     const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
     std.mem.copyBackwards(u8, args, slice);
 
-    AnimationManager(V3).start(@intFromPtr(&applyTranslateFn), args);
+    state.animation_manager.start(@intFromPtr(&applyTranslateFn), args);
 }
 
 fn applyTranslateFn(
-    ptr: *animations.Ctx(V3),
+    ptr: *anyopaque,
     args_ptr: [*]const u8,
     args_len: usize,
 ) callconv(.C) void {
@@ -606,21 +613,16 @@ fn applyTranslateFn(
 
     _LOGF(scene.allocator, "{any}", .{args.*});
 
-    // const vectors_count = args.counts >> 0x10;
-    // const shapes_count = args.counts & 0xFFFF;
-
-    // if (vectors_count > 0) {
-    //     state.updateVectors(scene, args.idxs_ptr, vectors_count);
-    // }
-
-    // if (shapes_count > 0) {
-    //     state.updateShapes(scene, args.idxs_ptr, vectors_count, shapes_count);
-    // }
-
-    // if (args.idxs_len - vectors_count + shapes_count > 0) {
-    //     state.updateCameras(scene, args.idxs_ptr, vectors_count, shapes_count, args.idxs_len);
-    // }
-
+    state.animation_manager.animate(
+        state.geoc,
+        args.animation_ctx,
+        .{
+            args.dx,
+            args.dy,
+            args.dz,
+        },
+        animations.Trasform.Translate,
+    );
     // state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
 
@@ -697,9 +699,12 @@ fn freeArgsFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(
         ctx: animations.Ctx(V3),
     };
 
-    const val = std.mem.bytesAsValue(Ctx, args_ptr[0..]);
+    const val: *align(1) const Ctx = std.mem.bytesAsValue(Ctx, args_ptr[0..]);
 
-    val.ctx.free(state.geoc.allocator);
+    val.ctx.updateStaticVertexData();
+    state.vector_buffer.?.bufferData(state.scene.vectors.?, Usage.StaticDraw);
+    val.ctx.deinit(state.geoc.allocator);
+    _LOGF(state.geoc.allocator, "VECS : {any}", .{state.scene.vectors});
     state.geoc.allocator.free(args_ptr[0..args_len]);
 }
 

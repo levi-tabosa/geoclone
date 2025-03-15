@@ -42,8 +42,8 @@ pub const State = struct {
     axis_buffer: g.VertexBuffer(V3),
     grid_buffer: g.VertexBuffer(V3),
     vector_buffer: ?g.VertexBuffer(V3),
-    shape_buffers: ?[]g.VertexBuffer(V3),
-    camera_buffers: ?[]g.VertexBuffer(V3),
+    shape_buffers: std.ArrayList(g.VertexBuffer(V3)),
+    camera_buffers: std.ArrayList(g.VertexBuffer(V3)),
     axis_program: g.Program,
     grid_program: g.Program,
     vectors_program: g.Program,
@@ -151,8 +151,8 @@ pub const State = struct {
             .axis_buffer = g.VertexBuffer(V3).init(&scene.axis, Usage.StaticDraw),
             .grid_buffer = g.VertexBuffer(V3).init(scene.grid, Usage.StaticDraw),
             .vector_buffer = null,
-            .shape_buffers = null,
-            .camera_buffers = null,
+            .shape_buffers = std.ArrayList(g.VertexBuffer(V3)).init(geoc.allocator),
+            .camera_buffers = std.ArrayList(g.VertexBuffer(V3)).init(geoc.allocator),
             .axis_program = g.Program.init(geoc, &.{ vertex_shader, a_fragment_shader }),
             .grid_program = g.Program.init(geoc, &.{ vertex_shader, g_fragment_shader }),
             .vectors_program = g.Program.init(geoc, &.{ vertex_shader, v_fragment_shader }),
@@ -173,19 +173,15 @@ pub const State = struct {
         self.axis_buffer.deinit();
         self.grid_buffer.deinit();
 
-        if (self.vector_buffer) |buffer| {
+        if (self.vector_buffer) |buffer| buffer.deinit();
+        for (self.shape_buffers.items) |buffer| {
             buffer.deinit();
         }
-        if (self.shape_buffers) |buffers| {
-            for (buffers) |buff| {
-                buff.deinit();
-            }
+        self.shape_buffers.deinit();
+        for (self.camera_buffers.items) |buffer| {
+            buffer.deinit();
         }
-        if (self.camera_buffers) |buffers| {
-            for (buffers) |buff| {
-                buff.deinit();
-            }
-        }
+        self.camera_buffers.deinit();
 
         self.animation_manager.deinit();
     }
@@ -206,18 +202,15 @@ pub const State = struct {
     }
 
     fn drawShapes(self: Self) void {
-        if (self.shape_buffers) |buffers| {
-            for (buffers) |buffer| {
-                self.geoc.draw(V3, self.shapes_program, buffer, g.DrawMode.TriangleFan);
-            }
+        for (self.shape_buffers.items) |buffer| {
+            self.geoc.draw(V3, self.shapes_program, buffer, g.DrawMode.TriangleFan);
         }
     }
 
     fn drawCameras(self: Self) void {
-        if (self.camera_buffers) |buffers| {
-            for (buffers) |buffer| {
-                self.geoc.draw(V3, self.cameras_program, buffer, g.DrawMode.LineLoop);
-            }
+        for (self.camera_buffers.items) |buffer| {
+            _LOGF(self.geoc.allocator, "{any}", .{buffer});
+            self.geoc.draw(V3, self.shapes_program, buffer, g.DrawMode.TriangleFan);
         }
     }
 
@@ -226,8 +219,8 @@ pub const State = struct {
         defer scene.allocator.free(selected);
 
         for (0..vectors_count, idxs_ptr[0..]) |i, idx| {
-            selected[i * 2] = scene.vectors.?[idx * 2];
-            selected[i * 2 + 1] = scene.vectors.?[idx * 2 + 1];
+            selected[i * 2] = scene.vectors.items[idx * 2];
+            selected[i * 2 + 1] = scene.vectors.items[idx * 2 + 1];
         }
 
         self.vector_buffer.?.bufferSubData(idxs_ptr[0..vectors_count], selected);
@@ -238,8 +231,8 @@ pub const State = struct {
         defer scene.allocator.free(selected);
 
         for (vectors_count..vectors_count + shapes_count, idxs_ptr[vectors_count..]) |i, index| {
-            selected[i - vectors_count] = scene.shapes.?[index];
-            self.shape_buffers.?[idxs_ptr[i]].bufferData(selected[i - vectors_count], Usage.StaticDraw);
+            selected[i - vectors_count] = scene.shapes.items[index];
+            self.shape_buffers.items[idxs_ptr[i]].bufferData(selected[i - vectors_count], Usage.StaticDraw);
         }
     }
 
@@ -248,8 +241,8 @@ pub const State = struct {
         defer scene.allocator.free(selected);
 
         for (vectors_count + shapes_count..idxs_len, idxs_ptr[vectors_count + shapes_count ..]) |i, index| {
-            selected[i - vectors_count + shapes_count] = &scene.cameras.?[index].shape;
-            self.camera_buffers.?[idxs_ptr[i]].bufferData(selected[i - vectors_count + shapes_count], Usage.StaticDraw);
+            selected[i - vectors_count + shapes_count] = &scene.cameras.items[index].shape;
+            self.camera_buffers.items[idxs_ptr[i]].bufferData(selected[i - vectors_count + shapes_count], Usage.StaticDraw);
         }
     }
 
@@ -315,42 +308,22 @@ fn insertVectorFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
     if (state.vector_buffer) |buffer| {
         buffer.deinit();
     }
-    state.vector_buffer = g.VertexBuffer(V3).init(state.scene.vectors.?, Usage.StaticDraw);
+    state.vector_buffer = g.VertexBuffer(V3).init(state.scene.vectors.items, Usage.StaticDraw);
 }
 
 //TODO: fix crash browser tab after clearFn call on fp camera
 fn insertCameraFn(ptr: *anyopaque, x: f32, y: f32, z: f32) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
-    const len = if (state.camera_buffers) |b| b.len else 0;
-
-    var new_buffers = state.geoc.allocator.alloc(g.VertexBuffer(V3), len + 1) catch unreachable;
     state.scene.insertCamera(x, y, z);
-
-    if (state.camera_buffers) |buffers| {
-        std.mem.copyBackwards(g.VertexBuffer(V3), new_buffers, buffers);
-        state.geoc.allocator.free(buffers);
-    }
-    new_buffers[len] = g.VertexBuffer(V3).init(&state.scene.cameras.?[len].shape, Usage.StaticDraw);
-
-    state.camera_buffers = new_buffers;
+    const vertex_data = &state.scene.cameras.getLast().shape;
+    state.camera_buffers.append(g.VertexBuffer(V3).init(vertex_data, Usage.StaticDraw)) catch unreachable;
 }
 
 fn insertShapeFn(ptr: *anyopaque, shape: g.canvas.Shape) void {
     const state: *State = @ptrCast(@alignCast(ptr));
-    const len = if (state.shape_buffers) |b| b.len else 0;
-
-    var new_buffers = state.geoc.allocator.alloc(g.VertexBuffer(V3), len + 1) catch unreachable;
-    state.scene.insertShape(shape);
-
-    if (state.shape_buffers) |buffers| {
-        std.mem.copyBackwards(g.VertexBuffer(V3), new_buffers, buffers);
-        state.geoc.allocator.free(buffers);
-    }
-    new_buffers[len] = g.VertexBuffer(V3).init(state.scene.shapes.?[len], Usage.StaticDraw);
-
-    state.shape_buffers = new_buffers;
+    const vertex_data = state.scene.insertShape(shape);
+    state.shape_buffers.append(g.VertexBuffer(V3).init(vertex_data, Usage.StaticDraw)) catch unreachable;
 }
-
 fn insertCubeFn(ptr: *anyopaque) callconv(.C) void {
     insertShapeFn(ptr, g.canvas.Shape.CUBE);
 }
@@ -374,20 +347,14 @@ fn clearFn(ptr: *anyopaque) callconv(.C) void {
         buffer.deinit();
         state.vector_buffer = null;
     }
-    if (state.shape_buffers) |buffers| {
-        for (buffers) |buff| {
-            buff.deinit();
-        }
-        state.geoc.allocator.free(buffers);
-        state.shape_buffers = null;
+    for (state.shape_buffers.items) |buff| {
+        buff.deinit();
     }
-    if (state.camera_buffers) |buffers| {
-        for (buffers) |buff| {
-            buff.deinit();
-        }
-        state.geoc.allocator.free(buffers);
-        state.camera_buffers = null;
+    state.shape_buffers.deinit();
+    for (state.camera_buffers.items) |buff| {
+        buff.deinit();
     }
+    state.camera_buffers.deinit();
     _LOGF(state.geoc.allocator, "{}", .{g.gpa.detectLeaks()});
 }
 
@@ -573,9 +540,9 @@ fn translateFn(
         idxs_ptr[0..idxs_len],
         counts,
         .{
-            state.scene.vectors,
-            state.scene.shapes,
-            @as(*?[]struct { V3 }, @alignCast(@ptrCast(&state.scene.cameras))).*,
+            state.scene.vectors.items,
+            state.scene.shapes.items,
+            @as(*?[]struct { V3 }, @alignCast(@ptrCast(&state.scene.cameras.items))).*,
         },
     );
 
@@ -702,7 +669,7 @@ fn freeArgsFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(
     const val: *align(1) const Ctx = std.mem.bytesAsValue(Ctx, args_ptr[0..]);
 
     val.ctx.updateStaticVertexData();
-    state.vector_buffer.?.bufferData(state.scene.vectors.?, Usage.StaticDraw);
+    state.vector_buffer.?.bufferData(state.scene.vectors.items, Usage.StaticDraw);
     val.ctx.deinit(state.geoc.allocator);
     _LOGF(state.geoc.allocator, "VECS : {any}", .{state.scene.vectors});
     state.geoc.allocator.free(args_ptr[0..args_len]);

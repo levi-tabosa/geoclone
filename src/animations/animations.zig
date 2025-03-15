@@ -16,7 +16,7 @@ pub fn AnimationManager(comptime vertex: type) type {
         program: g.Program,
         pool: Pool(Context),
         ctx: ?Context = null,
-        next: usize = 0,
+        count: usize = 0,
 
         pub fn init(
             allocator: std.mem.Allocator,
@@ -56,19 +56,30 @@ pub fn AnimationManager(comptime vertex: type) type {
         }
 
         pub fn animate(self: *Self, geoc: g.Geoc, ctx: Ctx(vertex), args: anytype, transform: Trasform) void {
+            const applied = struct { ?[]vertex, ?[]vertex, ?[]vertex }{
+                if (ctx.copied.@"0") |vecs| geoc.allocator.alloc(vertex, vecs.len) catch unreachable else null,
+                if (ctx.copied.@"1") |shapes| geoc.allocator.alloc(vertex, shapes.len) catch unreachable else null,
+                if (ctx.copied.@"2") |cams| geoc.allocator.alloc(vertex, cams.len) catch unreachable else null,
+            };
+            defer {
+                if (applied.@"0") |vecs| geoc.allocator.free(vecs);
+                if (applied.@"1") |shapes| geoc.allocator.free(shapes);
+                if (applied.@"2") |cams| geoc.allocator.free(cams);
+            }
             switch (transform) {
                 Trasform.Translate => {
-                    // g.platform.log("switch translate");
-                    const stepx = args[0] / frames;
-                    const stepy = args[1] / frames;
-                    const stepz = args[2] / frames;
+                    const stepx = args[0] / frames * @as(f32, @floatFromInt(self.count));
+                    const stepy = args[1] / frames * @as(f32, @floatFromInt(self.count));
+                    const stepz = args[2] / frames * @as(f32, @floatFromInt(self.count));
                     if (ctx.copied.@"0") |vecs| {
                         var i: usize = 0;
+                        _LOGF(geoc.allocator, "steps: {} {} {}", .{ stepx, stepy, stepz });
                         while (i < vecs.len) : (i += 2) {
-                            _LOGF(geoc.allocator, "steps: {} {} {}\n {} \n{any}", .{ stepx, stepy, stepz, self.next, vecs[i] });
-                            vecs[i].coords[0] += stepx;
-                            vecs[i].coords[1] += stepy;
-                            vecs[i].coords[2] += stepz;
+                            _LOGF(geoc.allocator, "i : {d}", .{i});
+
+                            applied.@"0".?[i].coords[0] = vecs[i].coords[0] + stepx;
+                            applied.@"0".?[i].coords[1] = vecs[i].coords[1] + stepy;
+                            applied.@"0".?[i].coords[2] = vecs[i].coords[2] + stepz;
                         }
                     }
 
@@ -81,7 +92,7 @@ pub fn AnimationManager(comptime vertex: type) type {
                     // self.scale(geoc, ctx, args);
                 },
             }
-            ctx.updateBuffers();
+            ctx.updateBuffers(applied);
 
             self.program.use();
 
@@ -96,7 +107,7 @@ pub fn AnimationManager(comptime vertex: type) type {
             }
             g.platform.log("draw");
 
-            self.next += 1;
+            self.count += 1;
         }
 
         pub fn remove(self: *Self, vec: vertex) void {
@@ -110,7 +121,7 @@ pub fn AnimationManager(comptime vertex: type) type {
             }
             self.ctx.?.free(self.pool.arena.allocator());
             self.ctx = null;
-            self.next = 0;
+            self.count = 0;
         }
     };
 }
@@ -151,23 +162,24 @@ pub fn Ctx(comptime vertex: type) type {
 
             for (0..vector_count) |i| {
                 copied.@"0".?[i * 2] = slices.@"0".?[idxs[i]];
-                copied.@"0".?[i * 2 + 1] = slices.@"0".?[idxs[i] + 1];
             }
 
-            var shapes_copy = allocator.alloc([]vertex, shape_count) catch unreachable;
-            defer {
-                for (shapes_copy) |shape| {
-                    allocator.free(shape);
-                }
-                allocator.free(shapes_copy);
-            }
+            _ = shape_count;
 
-            for (vector_count..vector_count + shape_count) |i| {
-                shapes_copy[i - vector_count] = allocator.alloc(vertex, slices.@"1".?[idxs[i]].len) catch unreachable;
-                for (slices.@"1".?[idxs[i]], 0..) |vector, j| {
-                    shapes_copy[i - vector_count][j] = vector;
-                }
-            }
+            // var shapes_copy = allocator.alloc([]vertex, shape_count) catch unreachable;
+            // defer {
+            //     for (shapes_copy) |shape| {
+            //         allocator.free(shape);
+            //     }
+            //     allocator.free(shapes_copy);
+            // }
+
+            // for (vector_count..vector_count + shape_count) |i| {
+            //     shapes_copy[i - vector_count] = allocator.alloc(vertex, slices.@"1".?[idxs[i]].len) catch unreachable;
+            //     for (slices.@"1".?[idxs[i]], 0..) |vector, j| {
+            //         shapes_copy[i - vector_count][j] = vector;
+            //     }
+            // }
 
             // copied.@"1" = std.mem.concat(allocator, vertex, shapes_copy) catch unreachable;
 
@@ -180,10 +192,7 @@ pub fn Ctx(comptime vertex: type) type {
                     vectors,
                     g.BufferUsage.DynamicDraw,
                 ) else null,
-                if (copied.@"1") |shapes| g.VertexBuffer(vertex).init(
-                    shapes,
-                    g.BufferUsage.DynamicDraw,
-                ) else null,
+                null,
                 null,
             };
 
@@ -196,21 +205,21 @@ pub fn Ctx(comptime vertex: type) type {
         }
 
         pub fn deinit(self: *align(1) const Self, allocator: std.mem.Allocator) void {
-            self.buffers.@"0".?.deinit();
-            self.buffers.@"1".?.deinit();
-            self.buffers.@"2".?.deinit();
+            if (self.buffers.@"0") |buffer| buffer.deinit();
+            if (self.buffers.@"1") |buffer| buffer.deinit();
+            if (self.buffers.@"2") |buffer| buffer.deinit();
             self.free(allocator);
         }
 
-        pub fn updateBuffers(self: *const Self) void {
-            if (self.copied.@"0") |vecs| {
+        pub fn updateBuffers(self: *const Self, data: CopiedSlicesTuple) void {
+            if (data.@"0") |vecs| {
                 self.buffers.@"0".?.bufferData(vecs, g.BufferUsage.DynamicDraw);
                 // _LOGF(std.heap.page_allocator, "COPIED: {any}", .{.{vecs[0]}});
             }
-            if (self.copied.@"1") |shapes| {
+            if (data.@"1") |shapes| {
                 self.buffers.@"1".?.bufferData(shapes, g.BufferUsage.DynamicDraw);
             }
-            if (self.copied.@"2") |camera_pos| {
+            if (data.@"2") |camera_pos| {
                 self.buffers.@"2".?.bufferData(camera_pos, g.BufferUsage.DynamicDraw);
             }
         }
@@ -219,7 +228,6 @@ pub fn Ctx(comptime vertex: type) type {
             if (self.slices.@"0") |vecs| {
                 for (self.idxs, 0..) |idx, i| {
                     vecs[idx] = self.copied.@"0".?[i * 2];
-                    vecs[idx + 1] = self.copied.@"0".?[i * 2 + 1];
                 }
             }
         }

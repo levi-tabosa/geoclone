@@ -7,9 +7,7 @@ pub fn build(b: *std.Build) void {
             .os_tag = .freestanding,
         },
     });
-    const optimize = b.standardOptimizeOption(.{
-        .preferred_optimize_mode = .ReleaseFast,
-    });
+    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseSafe });
 
     const exe = createExecutable(b, target, optimize);
 

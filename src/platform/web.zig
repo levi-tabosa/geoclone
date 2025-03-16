@@ -12,13 +12,14 @@ const js = struct { //TODO remove all unused fn
     extern fn initProgram(shader1_handle: i32, shader2_handle: i32) i32;
     extern fn deinitProgram(js_handle: i32) void;
     extern fn useProgram(js_handle: i32) void;
-    extern fn initVertexBuffer(data_ptr: [*]const u8, data_len: usize) i32;
+    extern fn initVertexBuffer(data_ptr: [*]const u8, data_len: usize, geoc.BufferUsage) i32;
     extern fn deinitVertexBuffer(js_handle: i32) void;
     extern fn bindVertexBuffer(js_handle: i32) void;
     extern fn bufferData(
         js_handle: i32,
         data_ptr: [*]const u8,
         data_len: usize,
+        usage: geoc.BufferUsage,
     ) void;
     extern fn bufferSubData(
         js_handle: i32,
@@ -28,7 +29,7 @@ const js = struct { //TODO remove all unused fn
         data_len: usize,
     ) void;
     extern fn setInterval(
-        fn_ptr: usize,
+        fn_ptr: i32,
         args_ptr: [*]const u8,
         args_len: usize,
         delay: u32,
@@ -72,6 +73,13 @@ export fn apply(
     fn_ptr(ptr, args_ptr, args_len);
 }
 
+export fn animate(
+    ptr: *anyopaque,
+    fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+) callconv(.C) void {
+    fn_ptr(ptr);
+}
+
 export fn free(
     ptr: *anyopaque,
     fn_ptr: *const fn (*anyopaque, [*]const u8, usize) callconv(.C) void,
@@ -83,120 +91,120 @@ export fn free(
 
 export fn setAngles(
     ptr: *anyopaque,
-    set_angles_fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, f32, f32) callconv(.C) void,
     p_angle: f32,
     y_angle: f32,
 ) void {
-    set_angles_fn_ptr(ptr, p_angle, y_angle);
+    fn_ptr(ptr, p_angle, y_angle);
 }
 
 export fn getPitch(
     ptr: *anyopaque,
-    get_pitch_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
+    fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
 ) f32 {
-    return get_pitch_fn_ptr(ptr);
+    return fn_ptr(ptr);
 }
 
 export fn getYaw(
     ptr: *anyopaque,
-    get_yaw_fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
+    fn_ptr: *const fn (*anyopaque) callconv(.C) f32,
 ) f32 {
-    return get_yaw_fn_ptr(ptr);
+    return fn_ptr(ptr);
 }
 
 export fn insertVector(
     ptr: *anyopaque,
-    insert_vector_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
     x: f32,
     y: f32,
     z: f32,
 ) void {
-    insert_vector_fn_ptr(ptr, x, y, z);
+    fn_ptr(ptr, x, y, z);
 }
 
 export fn setZoom(
     ptr: *anyopaque,
-    zoom_fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, f32) callconv(.C) void,
     zoom: f32,
 ) void {
-    zoom_fn_ptr(ptr, zoom);
+    fn_ptr(ptr, zoom);
 }
 
 export fn insertCamera(
     ptr: *anyopaque,
-    insert_camera_fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, f32, f32, f32) callconv(.C) void,
     x: f32,
     y: f32,
     z: f32,
 ) void {
-    insert_camera_fn_ptr(ptr, x, y, z);
+    fn_ptr(ptr, x, y, z);
 }
 
 export fn insertCube(
     ptr: *anyopaque,
-    cube_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque) callconv(.C) void,
 ) void {
-    cube_fn_ptr(ptr);
+    fn_ptr(ptr);
 }
 
 export fn insertPyramid(
     ptr: *anyopaque,
-    pyramid_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque) callconv(.C) void,
 ) void {
-    pyramid_fn_ptr(ptr);
+    fn_ptr(ptr);
 }
 
 export fn insertSphere(
     ptr: *anyopaque,
-    sphere_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque) callconv(.C) void,
 ) void {
-    sphere_fn_ptr(ptr);
+    fn_ptr(ptr);
 }
 
 export fn insertCone(
     ptr: *anyopaque,
-    cone_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque) callconv(.C) void,
 ) void {
-    cone_fn_ptr(ptr);
+    fn_ptr(ptr);
 }
 
 export fn clear(
     ptr: *anyopaque,
-    clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque) callconv(.C) void,
 ) void {
-    clear_fn_ptr(ptr);
+    fn_ptr(ptr);
 }
 
 export fn setResolution(
     ptr: *anyopaque,
-    set_resolution_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
     res: usize,
 ) void {
-    set_resolution_fn_ptr(ptr, res);
+    fn_ptr(ptr, res);
 }
 
 export fn setCamera(
     ptr: *anyopaque,
-    set_camera_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
     index: usize,
 ) void {
-    set_camera_fn_ptr(ptr, index);
+    fn_ptr(ptr, index);
 }
 
 export fn scale(
     ptr: *anyopaque,
-    scale_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32) callconv(.C) void,
     indexes_ptr: [*]const u32,
     indexes_len: usize,
     shorts: u32,
     factor: f32,
 ) void {
-    scale_fn_ptr(ptr, indexes_ptr, indexes_len, shorts, factor);
+    fn_ptr(ptr, indexes_ptr, indexes_len, shorts, factor);
 }
 
 export fn rotate(
     ptr: *anyopaque,
-    rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
     indexes_ptr: [*]const u32,
     indexes_len: usize,
     shorts: u32,
@@ -204,12 +212,12 @@ export fn rotate(
     y: f32,
     z: f32,
 ) void {
-    rotate_fn_ptr(ptr, indexes_ptr, indexes_len, shorts, x, y, z);
+    fn_ptr(ptr, indexes_ptr, indexes_len, shorts, x, y, z);
 }
 
 export fn translate(
     ptr: *anyopaque,
-    translate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
     indexes_ptr: [*]const u32,
     indexes_len: usize,
     shorts: u32,
@@ -217,18 +225,18 @@ export fn translate(
     dy: f32,
     dz: f32,
 ) void {
-    translate_fn_ptr(ptr, indexes_ptr, indexes_len, shorts, dx, dy, dz);
+    fn_ptr(ptr, indexes_ptr, indexes_len, shorts, dx, dy, dz);
 }
 
 export fn reflect(
     ptr: *anyopaque,
-    reflect_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, u8) callconv(.C) void,
+    fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, u8) callconv(.C) void,
     indexes_ptr: [*]const u32,
     indexes_len: usize,
     shorts: u32,
     coord_idx: u8,
 ) void {
-    reflect_fn_ptr(ptr, indexes_ptr, indexes_len, shorts, coord_idx);
+    fn_ptr(ptr, indexes_ptr, indexes_len, shorts, coord_idx);
 }
 
 pub fn log(message: []const u8) void {
@@ -240,9 +248,7 @@ pub const Shader = struct {
 
     js_handle: i32,
 
-    pub fn init(geoc_instance: geoc.Geoc, @"type": geoc.ShaderType, source: []const u8) Self {
-        _ = geoc_instance;
-
+    pub fn init(_: geoc.Geoc, @"type": geoc.ShaderType, source: []const u8) Self {
         return .{
             .js_handle = js.initShader(@intFromEnum(@"type"), source.ptr, source.len),
         };
@@ -282,8 +288,8 @@ pub const VertexBuffer = struct {
 
     js_handle: i32,
 
-    pub fn init(data: []const u8) Self {
-        return .{ .js_handle = js.initVertexBuffer(data.ptr, data.len) };
+    pub fn init(data: []const u8, usage: geoc.BufferUsage) Self {
+        return .{ .js_handle = js.initVertexBuffer(data.ptr, data.len, usage) };
     }
 
     pub fn deinit(self: Self) void {
@@ -294,8 +300,8 @@ pub const VertexBuffer = struct {
         js.bindVertexBuffer(self.js_handle);
     }
 
-    pub fn bufferData(self: Self, data: []const u8) void {
-        js.bufferData(self.js_handle, data.ptr, data.len);
+    pub fn bufferData(self: Self, data: []const u8, usage: geoc.BufferUsage) void {
+        js.bufferData(self.js_handle, data.ptr, data.len, usage);
     }
 
     pub fn bufferSubData(self: Self, indexes: []const u32, data: []const u8) void {
@@ -308,7 +314,7 @@ pub const Interval = struct {
 
     js_handle: i32,
 
-    pub fn init(fn_ptr: usize, args: []const u8, delay: u32, count: u32) Self {
+    pub fn init(fn_ptr: i32, args: []const u8, delay: u32, count: u32) Self {
         return .{
             .js_handle = js.setInterval(
                 fn_ptr,

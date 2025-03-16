@@ -1,15 +1,20 @@
 const std = @import("std");
 const builtin = @import("builtin");
+//used in example.zig
+pub const canvas = @import("geometry/canvas.zig");
+pub const animations = @import("animations/animations.zig");
 
 pub const platform = switch (builtin.target.isWasm()) {
     true => @import("platform/web.zig"),
     false => @import("platform/native.zig"),
 };
-
-//used in example.zig
-pub const canvas = @import("geometry/canvas.zig");
-//TODO: remove pub acess modifier after fixing leaks
-pub var gpa = std.heap.GeneralPurposeAllocator(.{ .safety = true, .verbose_log = true, .stack_trace_frames = 32 }){};
+//TODO:
+pub var gpa = std.heap.GeneralPurposeAllocator(.{
+    .safety = true,
+    .verbose_log = true,
+}){
+    .backing_allocator = if (builtin.target.isWasm()) std.heap.wasm_allocator else std.heap.page_allocator,
+};
 // used in example.zig, prevents build error if gpa is used
 pub fn logFn(
     comptime level: std.log.Level,
@@ -46,6 +51,12 @@ pub const DrawMode = enum(u32) {
     Triangles = 4,
     TriangleString = 5,
     TriangleFan = 6,
+};
+
+pub const BufferUsage = enum(u32) {
+    StaticDraw = 0,
+    DynamicDraw = 1,
+    StreamDraw = 2,
 };
 
 pub const Shader = struct {
@@ -96,9 +107,9 @@ pub fn VertexBuffer(comptime vertex: type) type {
         platform: platform.VertexBuffer,
         count: usize,
 
-        pub fn init(data: []const vertex) Self {
+        pub fn init(data: []const vertex, usage: BufferUsage) Self {
             return .{
-                .platform = platform.VertexBuffer.init(std.mem.sliceAsBytes(data)),
+                .platform = platform.VertexBuffer.init(std.mem.sliceAsBytes(data), usage),
                 .count = data.len,
             };
         }
@@ -111,8 +122,8 @@ pub fn VertexBuffer(comptime vertex: type) type {
             self.platform.bind();
         }
 
-        pub fn bufferData(self: Self, data: []const vertex) void {
-            self.platform.bufferData(std.mem.sliceAsBytes(data));
+        pub fn bufferData(self: Self, data: []const vertex, usage: BufferUsage) void {
+            self.platform.bufferData(std.mem.sliceAsBytes(data), usage);
         }
 
         pub fn bufferSubData(self: Self, indexes: []const u32, data: []const vertex) void {
@@ -126,7 +137,7 @@ pub const Interval = struct {
 
     platform: platform.Interval,
 
-    pub fn init(fn_ptr: usize, args: []const u8, delay: u32, count: u32) Self {
+    pub fn init(fn_ptr: i32, args: []const u8, delay: u32, count: u32) Self {
         return .{
             .platform = platform.Interval.init(
                 fn_ptr,

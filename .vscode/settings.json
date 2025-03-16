@@ -4,7 +4,6 @@
    "[javascript]": {
     "editor.defaultFormatter": "vscode.typescript-language-features"
   },
-  "window.title": "${dirty}${activeEditorShort}${separator}${rootName}${separator}${profileName}${separator}${appName}${separator}[Branch: setInterval-Zig]",
   "cSpell.words": [
     "deinit",
     "geoc",

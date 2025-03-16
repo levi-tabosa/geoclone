@@ -1,15 +1,14 @@
 const std = @import("std");
-const geoc = @import("../root.zig"); //TODO: erase
-
 const Allocator = std.mem.Allocator;
+// const geoc = @import("../root.zig"); //TODO: erase
 
-fn _log(txt: []const u8) void { //TODO: erase
-    geoc.platform.log(txt);
-}
+// fn _log(txt: []const u8) void { //TODO: erase
+//     geoc.platform.log(txt);
+// }
 
-fn _LOGF(allocator: Allocator, comptime txt: []const u8, args: anytype) void { //TODO: erase
-    _log(std.fmt.allocPrint(allocator, txt, args) catch unreachable);
-}
+// pub fn _LOGF(allocator: Allocator, comptime txt: []const u8, args: anytype) void { //TODO: erase
+//     _log(std.fmt.allocPrint(allocator, txt, args) catch unreachable);
+// }
 
 fn rotXZ(u: [3]f32, angle_x: f32, angle_y: f32, zoom: f32) [3]f32 {
     return .{
@@ -88,10 +87,10 @@ pub const Scene = struct {
     yaw: f32,
     axis: [6]V3,
     grid: []V3,
-    vectors: ?[]V3 = null,
-    shapes: ?[][]V3 = null,
+    vectors: std.ArrayList(V3),
+    shapes: std.ArrayList([]V3),
     camera: *Camera,
-    cameras: ?[]Camera = null,
+    cameras: std.ArrayList(Camera),
     view_matrix: [16]f32,
 
     pub fn init(allocator: Allocator) Self {
@@ -124,7 +123,6 @@ pub const Scene = struct {
         const radius = 10.0;
         const camera = allocator.create(Camera) catch unreachable;
         camera.* = Camera.init(
-            allocator,
             .{
                 .coords = .{
                     radius * @cos(yaw) * @cos(pitch),
@@ -144,29 +142,23 @@ pub const Scene = struct {
             .grid = grid,
             .camera = camera,
             .view_matrix = camera.viewMatrix(),
+            .vectors = std.ArrayList(V3).init(allocator),
+            .shapes = std.ArrayList([]V3).init(allocator),
+            .cameras = std.ArrayList(Camera).init(allocator),
         };
     }
 
     pub fn deinit(self: *Self) void {
         self.allocator.free(self.grid);
 
-        if (self.vectors) |vectors| {
-            self.allocator.free(vectors);
-        }
+        self.vectors.deinit();
 
-        if (self.shapes) |shapes| {
-            for (shapes) |shape| {
-                self.allocator.free(shape);
-            }
-            self.allocator.free(shapes);
+        for (self.shapes.items) |shape| {
+            self.allocator.free(shape);
         }
+        self.shapes.deinit();
 
-        if (self.cameras) |cameras| {
-            for (cameras) |camera| {
-                camera.deinit();
-            }
-            self.allocator.free(cameras);
-        }
+        self.cameras.deinit();
     }
 
     pub fn updateViewMatrix(self: *Self) void {
@@ -203,75 +195,27 @@ pub const Scene = struct {
     }
 
     pub fn insertVector(self: *Self, x: f32, y: f32, z: f32) void {
-        const len = if (self.vectors) |vectors| vectors.len else 0;
-
-        var new_vector_slice = self.allocator.alloc(V3, len + 2) catch unreachable;
-
-        if (self.vectors) |vectors| {
-            std.mem.copyBackwards(V3, new_vector_slice, vectors);
-            self.allocator.free(vectors);
-        }
-        new_vector_slice[len] = V3.init(x, y, z);
-        new_vector_slice[len + 1] = V3.init(0.0, 0.0, 0.0);
-
-        self.vectors = new_vector_slice;
+        self.vectors.append(V3.init(x, y, z)) catch unreachable;
+        self.vectors.append(V3.init(0.0, 0.0, 0.0)) catch unreachable;
     }
 
-    pub fn insertShape(self: *Self, shape: Shape) void {
-        const len = if (self.shapes) |shapes| shapes.len else 0;
-
-        var new_shapes = self.allocator.alloc([]V3, len + 1) catch unreachable;
-
-        if (self.shapes) |shapes| {
-            std.mem.copyBackwards([]V3, new_shapes, shapes);
-            self.allocator.free(shapes);
-        }
-
-        new_shapes[len] = shape.create(self.allocator, null);
-
-        self.shapes = new_shapes;
+    pub fn insertShape(self: *Self, new_shape: Shape) []V3 {
+        self.shapes.append(new_shape.create(self.allocator, null)) catch unreachable;
+        return self.shapes.getLast();
     }
 
     pub fn insertCamera(self: *Self, pos_x: f32, pos_y: f32, pos_z: f32) void {
-        const len = if (self.cameras) |cameras| cameras.len else 0;
-
-        var new_cameras_slice = self.allocator.alloc(Camera, len + 1) catch unreachable;
-
-        if (self.cameras) |cameras| {
-            std.mem.copyBackwards(Camera, new_cameras_slice, cameras);
-
-            //camera shape maybe leaking here
-            for (cameras) |cam| {
-                cam.deinit();
-            }
-            self.allocator.free(self.cameras.?);
-        }
-        new_cameras_slice[len] = Camera.init(self.allocator, V3.init(pos_x, pos_y, pos_z), null);
-
-        self.cameras = new_cameras_slice;
+        self.cameras.append(Camera.init(V3.init(pos_x, pos_y, pos_z), null)) catch unreachable;
     }
 
     /// TODO:fix crash when calling this while a fps cam is active
-    /// Shows increasing number of leaks after each call
     pub fn clear(self: *Self) void {
-        if (self.vectors) |vectors| {
-            self.allocator.free(vectors);
-            self.vectors = null;
+        self.vectors.clearAndFree();
+        for (self.shapes.items) |shape| {
+            self.allocator.free(shape);
         }
-        if (self.shapes) |shapes| {
-            for (shapes) |shape| {
-                self.allocator.free(shape);
-            }
-            self.allocator.free(shapes);
-            self.shapes = null;
-        }
-        if (self.cameras) |cameras| {
-            for (cameras) |camera| {
-                camera.deinit();
-            }
-            self.allocator.free(cameras);
-            self.cameras = null;
-        }
+        self.shapes.clearAndFree();
+        self.cameras.clearAndFree();
     }
 
     pub fn setResolution(self: *Self, res: usize) void {
@@ -304,24 +248,21 @@ pub const Scene = struct {
 
     ///TODO: change the passing -1 from js interpreted as usize::MAX hack to a proper solution
     pub fn setCamera(self: *Self, index: usize) void {
-        if (self.cameras) |cameras| {
-            if (index < cameras.len) {
-                if (self.camera.radius != null) {
-                    self.camera.deinit();
-                    self.allocator.destroy(self.camera);
-                }
-                self.camera = &cameras[index];
-            } else {
-                //TODO: make radius user input
-                const r = 10;
-
-                self.camera = self.allocator.create(Camera) catch unreachable;
-                self.camera.* = Camera.init(
-                    self.allocator,
-                    .{ .coords = .{ r, r, r } },
-                    r,
-                );
+        if (self.cameras.getLastOrNull() != null and index != std.math.maxInt(usize)) {
+            if (self.camera.radius) |_| {
+                //TODO: maybe reuse the camera object instead of reconstructing
+                self.allocator.destroy(self.camera);
             }
+            self.camera = &self.cameras.items[index];
+        } else {
+            const r = 10;
+
+            self.camera = self.allocator.create(Camera) catch unreachable;
+
+            self.camera.* = Camera.init(
+                .{ .coords = .{ r, r, r } },
+                r,
+            );
         }
     }
 
@@ -330,13 +271,13 @@ pub const Scene = struct {
         const shapes_count = counts & 0xFFFF;
 
         for (idxs_ptr[0..vectors_count]) |idx| {
-            for (&self.vectors.?[idx * 2].coords) |*value| {
+            for (&self.vectors.items[idx * 2].coords) |*value| {
                 value.* *= factor;
             }
         }
 
         for (idxs_ptr[vectors_count .. vectors_count + shapes_count]) |idx| {
-            for (self.shapes.?[idx]) |*vertex| {
+            for (self.shapes.items[idx]) |*vertex| {
                 for (&vertex.coords) |*value| {
                     value.* *= factor;
                 }
@@ -344,7 +285,7 @@ pub const Scene = struct {
         }
 
         for (idxs_ptr[vectors_count + shapes_count .. idxs_len]) |idx| {
-            for (&self.cameras.?[idx].pos.coords) |*value| {
+            for (&self.cameras.items[idx].pos.coords) |*value| {
                 value.* *= factor;
             }
         }
@@ -355,17 +296,17 @@ pub const Scene = struct {
         const shapes_count = counts & 0xFFFF;
 
         for (idxs_ptr[0..vectors_count]) |idx| {
-            rotXYZ(&self.vectors.?[idx * 2], x, y, z);
+            rotXYZ(&self.vectors.items[idx * 2], x, y, z);
         }
 
         for (idxs_ptr[vectors_count .. vectors_count + shapes_count]) |idx| {
-            for (self.shapes.?[idx]) |*vertex| {
+            for (self.shapes.items[idx]) |*vertex| {
                 rotXYZ(vertex, x, y, z);
             }
         }
 
         for (idxs_ptr[vectors_count + shapes_count .. idxs_len]) |idx| {
-            rotXYZ(&self.cameras.?[idx].pos, x, y, z);
+            rotXYZ(&self.cameras.items[idx].pos, x, y, z);
         }
     }
 
@@ -374,13 +315,13 @@ pub const Scene = struct {
         const shapes_count = counts & 0xFFFF;
 
         for (idxs_ptr[0..vectors_count]) |idx| {
-            self.vectors.?[idx * 2].coords[0] += dx;
-            self.vectors.?[idx * 2].coords[1] += dy;
-            self.vectors.?[idx * 2].coords[2] += dz;
+            self.vectors.items[idx * 2].coords[0] += dx;
+            self.vectors.items[idx * 2].coords[1] += dy;
+            self.vectors.items[idx * 2].coords[2] += dz;
         }
 
         for (idxs_ptr[vectors_count .. vectors_count + shapes_count]) |idx| {
-            for (self.shapes.?[idx]) |*vertex| {
+            for (self.shapes.items[idx]) |*vertex| {
                 vertex.coords[0] += dx;
                 vertex.coords[1] += dy;
                 vertex.coords[2] += dz;
@@ -388,10 +329,10 @@ pub const Scene = struct {
         }
 
         for (idxs_ptr[vectors_count + shapes_count .. idxs_len]) |idx| {
-            self.cameras.?[idx].pos.coords[0] += dx;
-            self.cameras.?[idx].pos.coords[1] += dy;
-            self.cameras.?[idx].pos.coords[2] += dz;
-            for (self.cameras.?[idx].shape) |*vertex| {
+            self.cameras.items[idx].pos.coords[0] += dx;
+            self.cameras.items[idx].pos.coords[1] += dy;
+            self.cameras.items[idx].pos.coords[2] += dz;
+            for (&self.cameras.items[idx].shape) |*vertex| {
                 vertex.coords[0] += dx;
                 vertex.coords[1] += dy;
                 vertex.coords[2] += dz;
@@ -400,20 +341,20 @@ pub const Scene = struct {
     }
 
     ///TODO: pass in coords_flags instead of coord_idx as a single u8
-    pub fn reflect(self: *Scene, idxs_ptr: [*]const u32, idxs_len: usize, counts: u32, coord_flags: u8, factor: f32) void {
+    pub fn reflect(self: *Scene, idxs_ptr: [*]const u32, idxs_len: usize, counts: u32, coord_flags: u8) void {
         const vectors_count = counts >> 0x10;
         const shapes_count = counts & 0xFFFF;
 
         if (coord_flags & 1 == 1) {
-            self.reflectCoord(idxs_ptr, idxs_len, vectors_count, shapes_count, 0, factor);
+            self.reflectCoord(idxs_ptr, idxs_len, vectors_count, shapes_count, 0);
         }
 
         if (coord_flags & 2 == 2) {
-            self.reflectCoord(idxs_ptr, idxs_len, vectors_count, shapes_count, 1, factor);
+            self.reflectCoord(idxs_ptr, idxs_len, vectors_count, shapes_count, 1);
         }
 
         if (coord_flags & 4 == 4) {
-            self.reflectCoord(idxs_ptr, idxs_len, vectors_count, shapes_count, 2, factor);
+            self.reflectCoord(idxs_ptr, idxs_len, vectors_count, shapes_count, 2);
         }
     }
 
@@ -424,21 +365,22 @@ pub const Scene = struct {
         vectors_count: usize,
         shapes_count: usize,
         coord_idx: u8,
-        factor: f32,
     ) void {
+        const factor: f32 = 1.0 / 25.0;
+
         for (idxs_ptr[0..vectors_count]) |idx| {
-            self.vectors.?[idx * 2].coords[coord_idx] *= factor;
+            self.vectors.items[idx * 2].coords[coord_idx] *= factor;
         }
 
         for (idxs_ptr[vectors_count .. vectors_count + shapes_count]) |idx| {
-            for (self.shapes.?[idx]) |*vertex| {
+            for (self.shapes.items[idx]) |*vertex| {
                 vertex.coords[coord_idx] *= factor;
             }
         }
 
         for (idxs_ptr[vectors_count + shapes_count .. idxs_len]) |idx| {
-            self.cameras.?[idx].pos.coords[coord_idx] *= factor;
-            for (self.cameras.?[idx].shape) |*vertex| {
+            self.cameras.items[idx].pos.coords[coord_idx] *= factor;
+            for (&self.cameras.items[idx].shape) |*vertex| {
                 vertex.coords[coord_idx] *= factor;
             }
         }
@@ -448,34 +390,29 @@ pub const Scene = struct {
 pub const Camera = struct {
     const Self = @This();
 
-    allocator: Allocator,
     pos: V3,
     target: V3 = .{ .coords = .{ 0.0, 0.0, 0.0 } },
     up: V3 = .{ .coords = .{ 0.0, 0.0, 1.0 } },
     radius: ?f32 = null,
-    shape: []V3,
+    shape: [8]V3,
 
-    pub fn init(allocator: Allocator, pos: V3, radius: ?f32) Self {
-        const cube = allocator.alloc(V3, 8) catch unreachable;
+    pub fn init(pos: V3, radius: ?f32) Self {
         const half_edge_len = 0.05; // lines will appear if  near is set smaller than 0.1
-        cube[0] = .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] - half_edge_len } };
-        cube[1] = .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] + half_edge_len } };
-        cube[2] = .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] + half_edge_len } };
-        cube[3] = .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] - half_edge_len } };
-        cube[4] = .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] - half_edge_len } };
-        cube[5] = .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] + half_edge_len } };
-        cube[6] = .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] + half_edge_len } };
-        cube[7] = .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] - half_edge_len } };
+        const cube: [8]V3 = .{
+            .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] - half_edge_len } },
+            .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] + half_edge_len } },
+            .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] + half_edge_len } },
+            .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] - half_edge_len, pos.coords[2] - half_edge_len } },
+            .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] - half_edge_len } },
+            .{ .coords = .{ pos.coords[0] - half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] + half_edge_len } },
+            .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] + half_edge_len } },
+            .{ .coords = .{ pos.coords[0] + half_edge_len, pos.coords[1] + half_edge_len, pos.coords[2] - half_edge_len } },
+        };
         return .{
-            .allocator = allocator,
             .pos = pos,
             .radius = radius,
             .shape = cube,
         };
-    }
-
-    pub fn deinit(self: Self) void {
-        self.allocator.free(self.shape);
     }
 
     pub fn viewMatrix(self: Self) [16]f32 {
@@ -529,7 +466,7 @@ pub const Shape = enum(u8) {
     }
 };
 
-pub const Sphere = struct {
+const Sphere = struct {
     /// Caller must free
     pub fn create(allocator: Allocator, res: usize) []V3 {
         const stacks = res;
@@ -557,7 +494,7 @@ pub const Sphere = struct {
     }
 };
 
-pub const Cone = struct {
+const Cone = struct {
     /// Caller must free
     pub fn create(allocator: Allocator, res: usize) []V3 {
         const slices = res;

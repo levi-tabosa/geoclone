@@ -1,6 +1,5 @@
 const std = @import("std");
 const builtin = @import("builtin");
-//used in example.zig
 pub const canvas = @import("geometry/canvas.zig");
 pub const animations = @import("animations/animations.zig");
 

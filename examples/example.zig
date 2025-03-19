@@ -98,7 +98,7 @@ pub const State = struct {
         const anm_fragment_shader_source =
             \\uniform vec4 color;
             \\void main() {
-            \\    gl_FragColor = vec4(0.0, 1.0, 0.0, 1.0);
+            \\    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
             \\}
         ;
         const vertex_shader = g.Shader.init(geoc, g.ShaderType.Vertex, vertex_shader_source);
@@ -576,9 +576,6 @@ fn applyTranslateFn(
     const args: *align(1) const Args = std.mem.bytesAsValue(Args, bytes);
 
     const state: *State = @ptrCast(@alignCast(ptr));
-    const scene = state.scene;
-
-    _LOGF(scene.allocator, "{any}", .{args.*});
 
     state.animation_manager.animate(
         state.geoc,
@@ -668,10 +665,9 @@ fn freeArgsFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(
 
     const val: *align(1) const Ctx = std.mem.bytesAsValue(Ctx, args_ptr[0..]);
 
-    val.ctx.updateStaticVertexData();
+    _LOGF(state.geoc.allocator, "VECS : {any}", .{state.scene.vectors.items});
     state.vector_buffer.?.bufferData(state.scene.vectors.items, Usage.StaticDraw);
     val.ctx.deinit(state.geoc.allocator);
-    _LOGF(state.geoc.allocator, "VECS : {any}", .{state.scene.vectors});
     state.geoc.allocator.free(args_ptr[0..args_len]);
 }
 
@@ -687,5 +683,7 @@ pub fn main() void {
 
     engine.setStatePtr(@ptrCast(&state));
 
+    // this call stops the scope from exiting with an Exception on js target
+    // TODO: implement a similar solution on native GLFW/SDL targets, maybe a loop?
     state.run(state.geocState());
 }

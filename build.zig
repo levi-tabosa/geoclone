@@ -14,12 +14,7 @@ pub fn build(b: *std.Build) void {
     setupDistributionSteps(b, exe, target);
 
     b.installArtifact(exe);
-
-    setupWasmFileStep(b, exe);
-
-    setupJSFileStep(b);
-
-    setupCSSFileStep(b);
+    setupWeb(b, exe);
 }
 
 fn createExecutable(
@@ -73,15 +68,15 @@ fn setupWasmDistribution(
     remove_out: *std.Build.Step.RemoveDir,
     exe: *std.Build.Step.Compile,
 ) void {
-    const install_dir = b.addInstallDirectory(.{
+    const install_docs = b.addInstallDirectory(.{
         .source_dir = b.path("docs"),
         .install_dir = .{
             .custom = "",
         },
         .install_subdir = "dist",
     });
-    install_dir.step.dependOn(&remove_out.step);
-    dist_step.dependOn(&install_dir.step);
+    install_docs.step.dependOn(&remove_out.step);
+    dist_step.dependOn(&install_docs.step);
     exe.rdynamic = true;
 }
 
@@ -93,6 +88,13 @@ fn setupNativeDistribution(
 ) void {
     dist_step.dependOn(&remove_out.step);
     dist_step.dependOn(&b.addRunArtifact(exe).step);
+    exe.rdynamic = true;
+}
+
+fn setupWeb(b: *std.Build, exe: *std.Build.Step.Compile) void {
+    setupWasmFileStep(b, exe);
+    setupJSFileStep(b);
+    setupCSSFileStep(b);
 }
 
 fn setupWasmFileStep(

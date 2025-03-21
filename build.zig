@@ -49,10 +49,9 @@ fn setupDistributionSteps(
 
     const remove_out = b.addRemoveDirTree(b.path("zig-out/dist"));
 
-    if (target.result.isWasm()) {
-        setupWasmDistribution(b, dist_step, remove_out, exe);
-    } else {
-        setupNativeDistribution(b, dist_step, remove_out, exe);
+    switch (target.result.cpu.arch) {
+        .wasm32 =>    setupWasmDistribution(b, dist_step, remove_out, exe);
+        else =>        setupNativeDistribution(b, dist_step, remove_out, exe);
     }
 
     dist_step.dependOn(&b.addInstallArtifact(exe, .{

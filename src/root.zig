@@ -3,16 +3,16 @@ const builtin = @import("builtin");
 pub const canvas = @import("geometry/canvas.zig");
 pub const animations = @import("animations/animations.zig");
 
-pub const platform = switch (builtin.target.isWasm()) {
-    true => @import("platform/web.zig"),
-    false => @import("platform/native.zig"),
+pub const platform = switch (builtin.cpu.arch) {
+    .wasm32 => @import("platform/web.zig"),
+    else => @import("platform/native.zig"),
 };
-//TODO:
+
 pub var gpa = std.heap.GeneralPurposeAllocator(.{
     .safety = true,
     .verbose_log = true,
 }){
-    .backing_allocator = if (builtin.target.isWasm()) std.heap.wasm_allocator else std.heap.page_allocator,
+    .backing_allocator = if (builtin.cpu.arch == .wasm32) std.heap.wasm_allocator else std.heap.page_allocator,
 };
 // used in example.zig, prevents build error if gpa is used
 pub fn logFn(
@@ -32,17 +32,20 @@ pub fn logFn(
     const prefix = "[" ++ comptime level.asText() ++ "]" ++ scope_prefix;
 
     const formatStr = prefix ++ format ++ "\n";
-    if (builtin.target.isWasm()) {
-        platform.log(std.fmt.allocPrint(gpa.allocator(), formatStr, args) catch unreachable);
-    } else {
-        const stderr = std.io.getStdErr().writer();
-        nosuspend stderr.print(formatStr, args) catch return;
+    switch (builtin.cpu.arch) {
+        .wasm32 => {
+            platform.log(std.fmt.allocPrint(gpa.allocator(), formatStr, args) catch unreachable);
+        },
+        else => {
+            const stderr = std.io.getStdErr().writer();
+            nosuspend stderr.print(formatStr, args) catch return;
+        },
     }
 }
 
-pub const ShaderType = enum(u32) { Vertex = 0, Fragment = 1 };
+pub const ShaderType = enum(u8) { Vertex = 0, Fragment = 1 };
 
-pub const DrawMode = enum(u32) {
+pub const DrawMode = enum(u8) {
     Points = 0,
     Lines = 1,
     LineLoop = 2,
@@ -52,7 +55,7 @@ pub const DrawMode = enum(u32) {
     TriangleFan = 6,
 };
 
-pub const BufferUsage = enum(u32) {
+pub const BufferUsage = enum(u8) {
     StaticDraw = 0,
     DynamicDraw = 1,
     StreamDraw = 2,

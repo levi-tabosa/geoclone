@@ -4,7 +4,8 @@ const animations = g.animations;
 const Scene = g.canvas.Scene;
 const Usage = g.BufferUsage;
 const V3 = g.canvas.V3;
-const AnimationManager = animations.AnimationManager(V3);
+const AM = animations.AnimationManager(V3);
+const AMArgs = animations.TrasformArgs;
 
 fn _LOGF(allocator: std.mem.Allocator, comptime fmt: []const u8, args: anytype) void {
     g.platform.log(std.fmt.allocPrint(allocator, fmt, args) catch unreachable);
@@ -51,7 +52,7 @@ pub const State = struct {
     cameras_program: g.Program,
     geoc: g.Geoc,
     scene: *Scene,
-    animation_manager: AnimationManager,
+    animation_manager: AM,
 
     pub fn init(geoc: g.Geoc, scene: *Scene) Self {
         const vertex_shader_source =
@@ -160,7 +161,7 @@ pub const State = struct {
             .cameras_program = g.Program.init(geoc, &.{ vertex_shader, c_fragment_shader }),
             .geoc = geoc,
             .scene = scene,
-            .animation_manager = AnimationManager.init(geoc.allocator, animation_program),
+            .animation_manager = AM.init(geoc.allocator, animation_program),
         };
     }
 
@@ -529,20 +530,19 @@ fn translateFn(
     const state: *State = @ptrCast(@alignCast(ptr));
 
     const Args = struct {
-        animation_ctx: animations.Ctx(V3),
+        animation_ctx: *AM.Ctx,
         dx: f32,
         dy: f32,
         dz: f32,
     };
 
-    const animation_ctx = AnimationManager.context(
-        state.geoc.allocator,
+    const animation_ctx = state.animation_manager.context(
         idxs_ptr[0..idxs_len],
         counts,
         .{
-            state.scene.vectors.items,
-            state.scene.shapes.items,
-            @as(*?[]struct { V3 }, @alignCast(@ptrCast(&state.scene.cameras.items))).*,
+            .vectors = state.scene.vectors.items,
+            .shapes = state.scene.shapes.items,
+            .cameras = @as(*?[]struct { V3 }, @alignCast(@ptrCast(&state.scene.cameras.items))).*,
         },
     );
 
@@ -566,7 +566,7 @@ fn applyTranslateFn(
     args_len: usize,
 ) callconv(.C) void {
     const Args = struct {
-        animation_ctx: animations.Ctx(V3),
+        ctx: *AM.Ctx,
         dx: f32,
         dy: f32,
         dz: f32,
@@ -579,14 +579,11 @@ fn applyTranslateFn(
 
     state.animation_manager.animate(
         state.geoc,
-        args.animation_ctx,
-        .{
-            args.dx,
-            args.dy,
-            args.dz,
-        },
-        animations.Trasform.Translate,
+        args.ctx,
+        .{ .Translate = .{ args.dx, args.dy, args.dz } },
     );
+    _LOGF(state.geoc.allocator, "VECS IN ApplyTranslate : {any}", .{state.scene.vectors.items});
+
     // state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
 
@@ -660,7 +657,7 @@ fn applyReflectFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callc
 fn freeArgsFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
     const Ctx = struct {
-        ctx: animations.Ctx(V3),
+        ctx: AM.Ctx,
     };
 
     const val: *align(1) const Ctx = std.mem.bytesAsValue(Ctx, args_ptr[0..]);

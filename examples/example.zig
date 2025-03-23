@@ -390,8 +390,7 @@ fn scaleFn(
         .counts = counts,
         .factor = std.math.pow(f32, factor, 1 / 25),
     });
-    const slice = std.mem.bytesAsSlice(u8, bytes);
-    const args = state.geoc.allocator.dupe(u8, slice) catch unreachable;
+    const args = state.geoc.allocator.dupe(u8, bytes) catch unreachable;
 
     // _LOGF(state.geoc.allocator, "vec is {s}", .{if (state.scene.vectors != null) "" else "not"});
     // var selected = state.geoc.allocator.alloc(V3, indexes.len) catch unreachable;
@@ -474,8 +473,7 @@ fn rotateFn(
         .y = y / 25,
         .z = z / 25,
     });
-    const slice = std.mem.bytesAsSlice(u8, bytes);
-    const args = state.geoc.allocator.dupe(u8, slice) catch unreachable;
+    const args = state.geoc.allocator.dupe(u8, bytes) catch unreachable;
 
     _ = g.Interval.init(@intCast(@intFromPtr(&applyRotateFn)), args, 30, 25);
 }
@@ -551,11 +549,9 @@ fn translateFn(
         .dz = dz,
     });
 
-    //const slice = std.mem.bytesAsSlice(u8, bytes);
     const args = state.geoc.allocator.dupe(u8, bytes) catch unreachable;
-    //const args = state.geoc.allocator.rawFree(slice, @alignOf(Args), @returnAddress())(u8, slice) catch unreachable;
 
-    state.animation_manager.start(@intFromPtr(&applyTranslateFn), args);
+    state.animation_manager.start(@intFromPtr(&applyTranslateFn), args[0..bytes.len]);
 }
 
 fn applyTranslateFn(
@@ -609,8 +605,7 @@ fn reflectFn(
         .coord_idx = coord_idx,
     });
 
-    const slice = std.mem.bytesAsSlice(u8, bytes);
-    const args = state.geoc.allocator.dupe(u8, slice) catch unreachable;
+    const args = state.geoc.allocator.dupe(u8, bytes) catch unreachable;
 
     _ = g.Interval.init(@intCast(@intFromPtr(&applyReflectFn)), args, 30, 25);
     // defer _ = g.Interval.init(@intFromPtr(&applyReflectFn), args, 30, 25);

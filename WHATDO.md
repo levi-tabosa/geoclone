@@ -1,2 +1,3 @@
 - Pass perspective matrix and resize window cb to zig
 - Zoom with scrool wheel
+- Make line obj a struct to avoid indexing hack on GLbuffer.setSubData

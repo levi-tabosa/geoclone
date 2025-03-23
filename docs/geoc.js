@@ -188,7 +188,7 @@ class SceneController {
          parseFloat(z) || 0,
       ];
       if (xf === 0 && yf === 0 && zf === 0) {
-         for (let i = 0; i < 30; i++) {
+         for (let i = 0; i < 5; i++) {
             const randomX = Math.random() * 20 - 10;
             const randomY = Math.random() * 20 - 10;
             const randomZ = Math.random() * 20 - 10;
@@ -877,7 +877,7 @@ const env = {
 
       webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
 
-      //manage two vertex at a time for each line
+      //manage two vertex for each line
       for (let i = 0; i < idxs_len; i++) {
          const idx = idxs[i];
          const offset = idx * 6 * 4;

@@ -1,13 +1,18 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
+    //TODO: espicify the target with command line options to later build native ascii art, glfw, or webgl/wasm
+    //https://ziglang.org/learn/build-system/
     const target = b.standardTargetOptions(.{
         .default_target = .{
             .cpu_arch = .wasm32,
             .os_tag = .freestanding,
         },
     });
-    const optimize = b.standardOptimizeOption(.{ .preferred_optimize_mode = .ReleaseSafe });
+    //or -Dtarget=native as placeholder for options
+    const optimize = b.standardOptimizeOption(.{
+        .preferred_optimize_mode = .Debug,
+    });
 
     const exe = createExecutable(b, target, optimize);
 
@@ -50,8 +55,8 @@ fn setupDistributionSteps(
     const remove_out = b.addRemoveDirTree(b.path("zig-out/dist"));
 
     switch (target.result.cpu.arch) {
-        .wasm32 =>    setupWasmDistribution(b, dist_step, remove_out, exe);
-        else =>        setupNativeDistribution(b, dist_step, remove_out, exe);
+        .wasm32 => setupWasmDistribution(b, dist_step, remove_out, exe),
+        else => setupNativeDistribution(b, dist_step, remove_out, exe),
     }
 
     dist_step.dependOn(&b.addInstallArtifact(exe, .{

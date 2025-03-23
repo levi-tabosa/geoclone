@@ -37,6 +37,7 @@ pub fn AnimationManager(comptime vertex: type) type {
             slices: SceneSlices,
         ) *Ctx {
             const ptr = self.pool.new();
+            _LOGF(self.pool.arena.allocator(), "AM.context entered", .{});
             ptr.* = Ctx.init(
                 self.pool.arena.allocator(),
                 idxs,
@@ -92,7 +93,7 @@ pub fn AnimationManager(comptime vertex: type) type {
                     allocator.alloc(vertex, vecs.len) catch unreachable
                 else
                     null,
-                .shapes = if (ctx.copied.shapes.?.len > 0) //TODO: use null checking
+                .shapes = if (ctx.copied.shapes != null and ctx.copied.shapes.?.len > 0) //TODO: use null checking
                     allocator.alloc(vertex, ctx.copied.shapes.?.len) catch unreachable
                 else
                     null,
@@ -128,19 +129,16 @@ pub fn AnimationManager(comptime vertex: type) type {
             self.curr_frame += 1;
         }
 
-        pub fn remove(self: *Self, vec: vertex) void {
-            self.pool.delete(vec);
-        }
-
-        pub fn clear(self: *Self) void {
+        pub fn clear(self: *Self, ctx: *Ctx) void {
             while (self.pool.free.popFirst()) |node| {
-                node.data.deinit();
+                node.data.deinitBuffers();
                 self.pool.delete(&node.data);
             }
-            // self.ctx.?.slices.vectors.?[]
-            self.ctx.?.freeCopies(self.pool.arena.allocator());
+            ctx.deinitBuffers();
             self.ctx = null;
             self.curr_frame = 0;
+            self.pool.arena.deinit();
+            self.pool = Pool.init(std.heap.wasm_allocator);
         }
 
         const SceneSlices = struct {
@@ -187,7 +185,7 @@ pub fn AnimationManager(comptime vertex: type) type {
 
             pub fn init(
                 allocator: std.mem.Allocator,
-                idxs: []const u32,
+                idxs: []const u32, //if [2,3] touches unreachable
                 vector_count: usize,
                 shape_count: usize,
                 slices: SceneSlices,
@@ -210,15 +208,6 @@ pub fn AnimationManager(comptime vertex: type) type {
                 var shapes_copy = allocator.alloc([]vertex, shape_count) catch unreachable;
                 var shapes_ptr_copy = allocator.alloc([]*vertex, shape_count) catch unreachable;
 
-                defer {
-                    for (shapes_copy, shapes_ptr_copy) |shape, shape_ptr| {
-                        allocator.free(shape);
-                        allocator.free(shape_ptr);
-                    }
-                    allocator.free(shapes_copy);
-                    allocator.free(shapes_ptr_copy);
-                }
-
                 for (vector_count..vector_count + shape_count) |i| {
                     shapes_copy[i - vector_count] = allocator.alloc(vertex, slices.shapes.?[idxs[i]].len) catch unreachable;
                     shapes_ptr_copy[i - vector_count] = allocator.alloc(*vertex, slices.shapes.?[idxs[i]].len) catch unreachable;
@@ -229,8 +218,10 @@ pub fn AnimationManager(comptime vertex: type) type {
                     }
                 }
 
-                copied.shapes = std.mem.concat(allocator, vertex, shapes_copy) catch unreachable;
-                applied.shapes = std.mem.concat(allocator, *vertex, shapes_ptr_copy) catch unreachable;
+                if (shapes_copy.len > 0) {
+                    copied.shapes = std.mem.concat(allocator, vertex, shapes_copy) catch unreachable;
+                    applied.shapes = std.mem.concat(allocator, *vertex, shapes_ptr_copy) catch unreachable;
+                }
 
                 // TODO: camera implementation
 
@@ -245,6 +236,7 @@ pub fn AnimationManager(comptime vertex: type) type {
                     ) else null,
                 };
 
+                _LOGF(allocator, "{d}", .{vector_count});
                 return .{
                     .copied = copied,
                     .applied = applied,
@@ -253,8 +245,7 @@ pub fn AnimationManager(comptime vertex: type) type {
                 };
             }
 
-            pub fn deinit(self: *align(1) const Ctx, allocator: std.mem.Allocator) void {
-                self.freeCopies(allocator);
+            pub fn deinitBuffers(self: *align(1) const Ctx) void {
                 if (self.buffers.vectors) |buffer| buffer.deinit();
                 if (self.buffers.shapes) |buffer| buffer.deinit();
                 if (self.buffers.cameras) |buffer| buffer.deinit();
@@ -262,30 +253,14 @@ pub fn AnimationManager(comptime vertex: type) type {
 
             pub fn updateBuffers(self: *const Ctx, data: VertexData) void {
                 _LOGF(std.heap.wasm_allocator, "IN UPBUFFERS CTX DATA : {any}", .{data.vectors.?});
-                if (data.vectors) |vecs| {
-                    self.buffers.vectors.?.bufferData(vecs, g.BufferUsage.DynamicDraw);
+                if (data.vectors) |vectors| {
+                    self.buffers.vectors.?.bufferData(vectors, g.BufferUsage.DynamicDraw);
                 }
                 if (data.shapes) |shapes| {
                     self.buffers.shapes.?.bufferData(shapes, g.BufferUsage.DynamicDraw);
                 }
                 if (data.cameras) |camera_pos| {
                     self.buffers.cameras.?.bufferData(camera_pos, g.BufferUsage.DynamicDraw);
-                }
-            }
-
-            pub fn freeCopies(self: *align(1) const Ctx, allocator: std.mem.Allocator) void {
-                _LOGF(allocator, "IN FREE CTX COPIES : {any}", .{self.applied.vectors.?});
-                if (self.copied.vectors) |vecs| {
-                    allocator.free(vecs);
-                    allocator.free(self.applied.vectors.?);
-                }
-                if (self.copied.shapes) |shapes| {
-                    allocator.free(shapes);
-                    allocator.free(self.applied.shapes.?);
-                }
-                if (self.copied.cameras) |camera_pos| {
-                    allocator.free(camera_pos);
-                    allocator.free(self.applied.cameras.?);
                 }
             }
         };
@@ -320,7 +295,7 @@ pub fn AnimationManager(comptime vertex: type) type {
             }
 
             pub fn delete(self: *Pool, obj: *Ctx) void {
-                const node: List.Node = @fieldParentPtr("data", obj);
+                const node: *List.Node = @fieldParentPtr("data", obj);
                 self.free.prepend(node);
             }
         };

@@ -391,8 +391,7 @@ fn scaleFn(
         .factor = std.math.pow(f32, factor, 1 / 25),
     });
     const slice = std.mem.bytesAsSlice(u8, bytes);
-    const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
-    std.mem.copyBackwards(u8, args, slice);
+    const args = state.geoc.allocator.dupe(u8, slice) catch unreachable;
 
     // _LOGF(state.geoc.allocator, "vec is {s}", .{if (state.scene.vectors != null) "" else "not"});
     // var selected = state.geoc.allocator.alloc(V3, indexes.len) catch unreachable;
@@ -476,8 +475,7 @@ fn rotateFn(
         .z = z / 25,
     });
     const slice = std.mem.bytesAsSlice(u8, bytes);
-    const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
-    std.mem.copyBackwards(u8, args, slice);
+    const args = state.geoc.allocator.dupe(u8, slice) catch unreachable;
 
     _ = g.Interval.init(@intCast(@intFromPtr(&applyRotateFn)), args, 30, 25);
 }
@@ -553,9 +551,9 @@ fn translateFn(
         .dz = dz,
     });
 
-    const slice = std.mem.bytesAsSlice(u8, bytes);
-    const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
-    std.mem.copyBackwards(u8, args, slice);
+    //const slice = std.mem.bytesAsSlice(u8, bytes);
+    const args = state.geoc.allocator.dupe(u8, bytes) catch unreachable;
+    //const args = state.geoc.allocator.rawFree(slice, @alignOf(Args), @returnAddress())(u8, slice) catch unreachable;
 
     state.animation_manager.start(@intFromPtr(&applyTranslateFn), args);
 }
@@ -612,8 +610,7 @@ fn reflectFn(
     });
 
     const slice = std.mem.bytesAsSlice(u8, bytes);
-    const args = state.geoc.allocator.alloc(u8, slice.len) catch unreachable;
-    std.mem.copyBackwards(u8, args, slice);
+    const args = state.geoc.allocator.dupe(u8, slice) catch unreachable;
 
     _ = g.Interval.init(@intCast(@intFromPtr(&applyReflectFn)), args, 30, 25);
     // defer _ = g.Interval.init(@intFromPtr(&applyReflectFn), args, 30, 25);
@@ -657,14 +654,14 @@ fn applyReflectFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callc
 fn freeArgsFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
     const Ctx = struct {
-        ctx: AM.Ctx,
+        ctx: *AM.Ctx,
     };
 
     const val: *align(1) const Ctx = std.mem.bytesAsValue(Ctx, args_ptr[0..]);
 
     _LOGF(state.geoc.allocator, "VECS : {any}", .{state.scene.vectors.items});
     state.vector_buffer.?.bufferData(state.scene.vectors.items, Usage.StaticDraw);
-    val.ctx.deinit(state.geoc.allocator);
+    state.animation_manager.clear(val.ctx);
     state.geoc.allocator.free(args_ptr[0..args_len]);
 }
 

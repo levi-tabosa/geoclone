@@ -93,12 +93,12 @@ pub fn AnimationManager(comptime vertex: type) type {
                     allocator.alloc(vertex, vecs.len) catch unreachable
                 else
                     null,
-                .shapes = if (ctx.copied.shapes != null and ctx.copied.shapes.?.len > 0) //TODO: use null checking
-                    allocator.alloc(vertex, ctx.copied.shapes.?.len) catch unreachable
+                .shapes = if (ctx.copied.shapes) |shapes| //TODO: use null checking
+                    allocator.alloc(vertex, shapes.len) catch unreachable
                 else
                     null,
-                .cameras = if (ctx.copied.cameras) |cams|
-                    allocator.alloc(vertex, cams.len) catch unreachable
+                .cameras = if (ctx.copied.cameras) |cameras|
+                    allocator.alloc(vertex, cameras.len) catch unreachable
                 else
                     null,
             };

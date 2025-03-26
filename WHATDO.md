@@ -1,3 +1,8 @@
 - Pass perspective matrix and resize window cb to zig
 - Zoom with scrool wheel
 - Make line obj a struct to avoid indexing hack on GLbuffer.setSubData
+- fix free fn touching unreachable on some cases
+- fix the incorrectAlignment causing unreachable on first transform on lines in middle of list
+- investigate Dga's claims of memory leaks with a separate test app with console wasm tools
+- Ui with zig
+- Add some cool shaders

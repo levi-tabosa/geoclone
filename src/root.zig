@@ -8,10 +8,7 @@ pub const platform = switch (builtin.cpu.arch) {
     else => @import("platform/native.zig"),
 };
 
-pub var gpa = std.heap.GeneralPurposeAllocator(.{
-    .safety = true,
-    .verbose_log = true,
-}){
+pub var gpa = std.heap.GeneralPurposeAllocator(.{}){
     .backing_allocator = if (builtin.cpu.arch == .wasm32) std.heap.wasm_allocator else std.heap.page_allocator,
 };
 // used in example.zig, prevents build error if gpa is used

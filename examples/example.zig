@@ -356,7 +356,6 @@ fn clearFn(ptr: *anyopaque) callconv(.C) void {
         buff.deinit();
     }
     state.camera_buffers.deinit();
-    _LOGF(state.geoc.allocator, "{}", .{g.gpa.detectLeaks()});
 }
 
 fn setCameraFn(ptr: *anyopaque, index: usize) callconv(.C) void {
@@ -566,8 +565,7 @@ fn applyTranslateFn(
         dz: f32,
     };
 
-    const bytes = std.mem.sliceAsBytes(args_ptr[0..args_len]);
-    const args: *align(1) const Args = std.mem.bytesAsValue(Args, bytes);
+    const args: *align(1) const Args = std.mem.bytesAsValue(Args, args_ptr[0..args_len]);
 
     const state: *State = @ptrCast(@alignCast(ptr));
 

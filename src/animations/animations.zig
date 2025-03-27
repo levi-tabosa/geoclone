@@ -37,7 +37,6 @@ pub fn AnimationManager(comptime vertex: type) type {
             slices: SceneSlices,
         ) *Ctx {
             const ptr = self.pool.new();
-            _LOGF(self.pool.arena.allocator(), "AM.context entered", .{});
             ptr.* = Ctx.init(
                 self.pool.arena.allocator(),
                 idxs,
@@ -130,15 +129,10 @@ pub fn AnimationManager(comptime vertex: type) type {
         }
 
         pub fn clear(self: *Self, ctx: *Ctx) void {
-            while (self.pool.free.popFirst()) |node| {
-                node.data.deinitBuffers();
-                self.pool.delete(&node.data);
-            }
-            ctx.deinitBuffers();
+            ctx.deinit(self.pool.arena.allocator());
+            self.pool.delete(ctx);
             self.ctx = null;
             self.curr_frame = 0;
-            self.pool.arena.deinit();
-            self.pool = Pool.init(std.heap.wasm_allocator);
         }
 
         const SceneSlices = struct {
@@ -170,7 +164,7 @@ pub fn AnimationManager(comptime vertex: type) type {
             shapes: ?[]*vertex = null,
             cameras: ?[]*vertex = null,
 
-            pub fn free(self: *VertexData, allocator: std.mem.Allocator) void {
+            pub fn free(self: *VertexPointers, allocator: std.mem.Allocator) void {
                 if (self.vectors) |vecs| allocator.free(vecs);
                 if (self.shapes) |shapes| allocator.free(shapes);
                 if (self.cameras) |cams| allocator.free(cams);
@@ -190,8 +184,6 @@ pub fn AnimationManager(comptime vertex: type) type {
                 shape_count: usize,
                 slices: SceneSlices,
             ) Ctx {
-                _LOGF(allocator, "IN INIT CTX SLICES : {any}", .{slices.vectors.?});
-
                 var copied = VertexData{};
                 var applied = VertexPointers{};
 
@@ -202,6 +194,8 @@ pub fn AnimationManager(comptime vertex: type) type {
                     for (0..vector_count) |i| {
                         copied.vectors.?[i * 2] = slices.vectors.?[idxs[i] * 2];
                         applied.vectors.?[i * 2] = &slices.vectors.?[idxs[i] * 2];
+                        copied.vectors.?[i * 2 + 1] = slices.vectors.?[idxs[i] * 2 + 1];
+                        applied.vectors.?[i * 2 + 1] = &slices.vectors.?[idxs[i] * 2 + 1];
                     }
                 }
 
@@ -236,13 +230,18 @@ pub fn AnimationManager(comptime vertex: type) type {
                     ) else null,
                 };
 
-                _LOGF(allocator, "{d}", .{vector_count});
                 return .{
                     .copied = copied,
                     .applied = applied,
                     .slices = slices,
                     .buffers = buffers,
                 };
+            }
+
+            pub fn deinit(self: *Ctx, allocator: std.mem.Allocator) void {
+                self.copied.free(allocator);
+                self.applied.free(allocator);
+                self.deinitBuffers();
             }
 
             pub fn deinitBuffers(self: *align(1) const Ctx) void {
@@ -252,7 +251,6 @@ pub fn AnimationManager(comptime vertex: type) type {
             }
 
             pub fn updateBuffers(self: *const Ctx, data: VertexData) void {
-                _LOGF(std.heap.wasm_allocator, "IN UPBUFFERS CTX DATA : {any}", .{data.vectors.?});
                 if (data.vectors) |vectors| {
                     self.buffers.vectors.?.bufferData(vectors, g.BufferUsage.DynamicDraw);
                 }
@@ -295,6 +293,7 @@ pub fn AnimationManager(comptime vertex: type) type {
             }
 
             pub fn delete(self: *Pool, obj: *Ctx) void {
+                obj.deinit(self.arena.allocator());
                 const node: *List.Node = @fieldParentPtr("data", obj);
                 self.free.prepend(node);
             }

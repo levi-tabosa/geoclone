@@ -310,36 +310,6 @@ pub const Scene = struct {
         }
     }
 
-    pub fn translate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, counts: u32, dx: f32, dy: f32, dz: f32) void {
-        const vectors_count = counts >> 0x10;
-        const shapes_count = counts & 0xFFFF;
-
-        for (idxs_ptr[0..vectors_count]) |idx| {
-            self.vectors.items[idx * 2].coords[0] += dx;
-            self.vectors.items[idx * 2].coords[1] += dy;
-            self.vectors.items[idx * 2].coords[2] += dz;
-        }
-
-        for (idxs_ptr[vectors_count .. vectors_count + shapes_count]) |idx| {
-            for (self.shapes.items[idx]) |*vertex| {
-                vertex.coords[0] += dx;
-                vertex.coords[1] += dy;
-                vertex.coords[2] += dz;
-            }
-        }
-
-        for (idxs_ptr[vectors_count + shapes_count .. idxs_len]) |idx| {
-            self.cameras.items[idx].pos.coords[0] += dx;
-            self.cameras.items[idx].pos.coords[1] += dy;
-            self.cameras.items[idx].pos.coords[2] += dz;
-            for (&self.cameras.items[idx].shape) |*vertex| {
-                vertex.coords[0] += dx;
-                vertex.coords[1] += dy;
-                vertex.coords[2] += dz;
-            }
-        }
-    }
-
     ///TODO: pass in coords_flags instead of coord_idx as a single u8
     pub fn reflect(self: *Scene, idxs_ptr: [*]const u32, idxs_len: usize, counts: u32, coord_flags: u8) void {
         const vectors_count = counts >> 0x10;

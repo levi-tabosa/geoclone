@@ -6,3 +6,4 @@
 - investigate Dga's claims of memory leaks with a separate test app with console wasm tools
 - Ui with zig
 - Add some cool shaders
+- Text rendering

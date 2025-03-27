@@ -574,9 +574,6 @@ fn applyTranslateFn(
         args.ctx,
         .{ .Translate = .{ args.dx, args.dy, args.dz } },
     );
-    _LOGF(state.geoc.allocator, "VECS IN ApplyTranslate : {any}", .{state.scene.vectors.items});
-
-    // state.geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
 }
 
 fn reflectFn(
@@ -649,10 +646,11 @@ fn freeArgsFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(
     const Ctx = struct {
         ctx: *AM.Ctx,
     };
+    const allocator = state.animation_manager.pool.arena.allocator();
 
     const val: *align(1) const Ctx = std.mem.bytesAsValue(Ctx, args_ptr[0..]);
 
-    _LOGF(state.geoc.allocator, "VECS : {any}", .{state.scene.vectors.items});
+    _LOGF(allocator, "VECS : {any}", .{state.scene.vectors.items});
     state.vector_buffer.?.bufferData(state.scene.vectors.items, Usage.StaticDraw);
     state.animation_manager.clear(val.ctx);
     state.geoc.allocator.free(args_ptr[0..args_len]);

@@ -32,7 +32,7 @@ pub fn AnimationManager(comptime vertex: type) type {
 
         pub fn context(
             self: *Self,
-            idxs: []const u32,
+            idxs: []const usize,
             counts: u32,
             slices: SceneSlices,
         ) *Ctx {
@@ -87,45 +87,29 @@ pub fn AnimationManager(comptime vertex: type) type {
 
         pub fn animate(self: *Self, geoc: g.Geoc, ctx: *Ctx, args: TrasformArgs) void {
             const allocator = self.pool.arena.allocator();
-            var data = VertexData{
-                .vectors = if (ctx.copied.vectors) |vecs|
-                    allocator.alloc(vertex, vecs.len) catch unreachable
-                else
-                    null,
-                .shapes = if (ctx.copied.shapes) |shapes| //TODO: use null checking
-                    allocator.alloc(vertex, shapes.len) catch unreachable
-                else
-                    null,
-                .cameras = if (ctx.copied.cameras) |cameras|
-                    allocator.alloc(vertex, cameras.len) catch unreachable
-                else
-                    null,
-            };
-            defer data.free(allocator);
-            const curr_f32: f32 = @floatFromInt(self.curr_frame);
-            switch (args) {
-                .Translate => |a| translate(ctx, data, &a, curr_f32),
-                .Rotate => |a| rotate(ctx, data, &a, curr_f32),
-                .Scale => |a| scale(ctx, data, &a, curr_f32),
-            }
-            _LOGF(allocator,
-                \\Applied Vector Data : {any}
-            , .{
-                data.vectors.?[0].coords,
+            // const data = (allocator.dupe(VertexData, &.{ctx.copied}) catch unreachable)[0];
+            var data = VertexData.alloc(allocator, .{
+                if (ctx.copied.vectors) |vecs| vecs.len else 0,
+                if (ctx.copied.shapes) |shapes| shapes.len else 0,
+                if (ctx.copied.cameras) |cams| cams.len else 0,
             });
-            ctx.updateBuffers(data);
+            defer data.free(allocator);
 
-            if (ctx.buffers.vectors) |buff| {
-                geoc.draw(vertex, self.program, buff, g.DrawMode.LineLoop);
+            const count_f32: f32 = @floatFromInt(self.curr_frame);
+            switch (args) {
+                .Translate => |a| translate(ctx, data, &a, count_f32),
+                .Rotate => |a| rotate(ctx, data, &a, count_f32),
+                .Scale => |a| scale(ctx, data, &a, count_f32),
             }
-            if (ctx.buffers.shapes) |buff| {
-                geoc.draw(vertex, self.program, buff, g.DrawMode.TriangleFan);
-            }
-            if (ctx.buffers.cameras) |buff| {
-                geoc.draw(vertex, self.program, buff, g.DrawMode.LineLoop);
-            }
+
+            // _LOGF(allocator, "Applied Vector Data : {any}", .{data.vectors.?[0].coords});
+
+            ctx.updateBuffers(data);
+            ctx.buffers.draw(geoc, self.program);
 
             self.curr_frame += 1;
+
+            _LOGF(allocator, "{d}", .{self.pool.arena.queryCapacity()});
         }
 
         pub fn clear(self: *Self, ctx: *Ctx) void {
@@ -146,10 +130,21 @@ pub fn AnimationManager(comptime vertex: type) type {
             shapes: ?[]vertex = null,
             cameras: ?[]vertex = null,
 
+            pub fn alloc(allocator: std.mem.Allocator, tpl: std.meta.Tuple(&.{ usize, usize, usize })) VertexData {
+                return .{
+                    .vectors = if (tpl[0] > 0) allocator.alloc(vertex, tpl[0]) catch unreachable else null,
+                    .shapes = if (tpl[1] > 0) allocator.alloc(vertex, tpl[1]) catch unreachable else null,
+                    .cameras = if (tpl[2] > 0) allocator.alloc(vertex, tpl[2]) catch unreachable else null,
+                };
+            }
+
             pub fn free(self: *VertexData, allocator: std.mem.Allocator) void {
                 if (self.vectors) |vecs| allocator.free(vecs);
                 if (self.shapes) |shapes| allocator.free(shapes);
                 if (self.cameras) |cams| allocator.free(cams);
+                self.vectors = null;
+                self.shapes = null;
+                self.cameras = null;
             }
         };
 
@@ -157,6 +152,35 @@ pub fn AnimationManager(comptime vertex: type) type {
             vectors: ?g.VertexBuffer(vertex) = null,
             shapes: ?g.VertexBuffer(vertex) = null,
             cameras: ?g.VertexBuffer(vertex) = null,
+
+            pub fn init(data: VertexData) VertexBuffers {
+                return .{
+                    .vectors = if (data.vectors) |vecs| g.VertexBuffer(vertex).init(vecs, g.BufferUsage.DynamicDraw) else null,
+                    .shapes = if (data.shapes) |shapes| g.VertexBuffer(vertex).init(shapes, g.BufferUsage.DynamicDraw) else null,
+                    .cameras = if (data.cameras) |cams| g.VertexBuffer(vertex).init(cams, g.BufferUsage.DynamicDraw) else null,
+                };
+            }
+
+            pub fn deinit(self: *VertexBuffers) void {
+                if (self.vectors) |buffer| buffer.deinit();
+                if (self.shapes) |buffer| buffer.deinit();
+                if (self.cameras) |buffer| buffer.deinit();
+                self.vectors = null;
+                self.shapes = null;
+                self.cameras = null;
+            }
+
+            pub fn bufferData(self: VertexBuffers, data: VertexData, usage: g.BufferUsage) void {
+                if (self.vectors) |buffer| buffer.bufferData(data.vectors.?, usage);
+                if (self.shapes) |buffer| buffer.bufferData(data.shapes.?, usage);
+                if (self.cameras) |buffer| buffer.bufferData(data.cameras.?, usage);
+            }
+
+            pub fn draw(self: *VertexBuffers, geoc: g.Geoc, program: g.Program) void {
+                if (self.vectors) |buffer| geoc.draw(vertex, program, buffer, g.DrawMode.LineLoop);
+                if (self.shapes) |buffer| geoc.draw(vertex, program, buffer, g.DrawMode.TriangleFan);
+                if (self.cameras) |buffer| geoc.draw(vertex, program, buffer, g.DrawMode.LineLoop);
+            }
         };
 
         const VertexPointers = struct {
@@ -168,18 +192,20 @@ pub fn AnimationManager(comptime vertex: type) type {
                 if (self.vectors) |vecs| allocator.free(vecs);
                 if (self.shapes) |shapes| allocator.free(shapes);
                 if (self.cameras) |cams| allocator.free(cams);
+                self.vectors = null;
+                self.shapes = null;
+                self.cameras = null;
             }
         };
 
         pub const Ctx = struct {
-            slices: SceneSlices,
             buffers: VertexBuffers,
             copied: VertexData,
             applied: VertexPointers,
 
             pub fn init(
                 allocator: std.mem.Allocator,
-                idxs: []const u32, //if [2,3] touches unreachable
+                idxs: []const usize,
                 vector_count: usize,
                 shape_count: usize,
                 slices: SceneSlices,
@@ -201,6 +227,8 @@ pub fn AnimationManager(comptime vertex: type) type {
 
                 var shapes_copy = allocator.alloc([]vertex, shape_count) catch unreachable;
                 var shapes_ptr_copy = allocator.alloc([]*vertex, shape_count) catch unreachable;
+                defer allocator.free(shapes_copy);
+                defer allocator.free(shapes_ptr_copy);
 
                 for (vector_count..vector_count + shape_count) |i| {
                     shapes_copy[i - vector_count] = allocator.alloc(vertex, slices.shapes.?[idxs[i]].len) catch unreachable;
@@ -213,53 +241,30 @@ pub fn AnimationManager(comptime vertex: type) type {
                 }
 
                 if (shapes_copy.len > 0) {
+                    //insert padding
                     copied.shapes = std.mem.concat(allocator, vertex, shapes_copy) catch unreachable;
                     applied.shapes = std.mem.concat(allocator, *vertex, shapes_ptr_copy) catch unreachable;
                 }
 
                 // TODO: camera implementation
-
-                const buffers = VertexBuffers{
-                    .vectors = if (copied.vectors) |vectors| g.VertexBuffer(vertex).init(
-                        vectors,
-                        g.BufferUsage.DynamicDraw,
-                    ) else null,
-                    .shapes = if (copied.shapes != null and copied.shapes.?.len > 0) g.VertexBuffer(vertex).init(
-                        copied.shapes.?,
-                        g.BufferUsage.DynamicDraw,
-                    ) else null,
-                };
-
                 return .{
                     .copied = copied,
                     .applied = applied,
-                    .slices = slices,
-                    .buffers = buffers,
+                    .buffers = VertexBuffers.init(copied),
                 };
             }
 
             pub fn deinit(self: *Ctx, allocator: std.mem.Allocator) void {
                 self.copied.free(allocator);
                 self.applied.free(allocator);
-                self.deinitBuffers();
-            }
-
-            pub fn deinitBuffers(self: *align(1) const Ctx) void {
-                if (self.buffers.vectors) |buffer| buffer.deinit();
-                if (self.buffers.shapes) |buffer| buffer.deinit();
-                if (self.buffers.cameras) |buffer| buffer.deinit();
+                self.buffers.deinit();
+                self.buffers = VertexBuffers{};
+                self.copied = VertexData{};
+                self.applied = VertexPointers{};
             }
 
             pub fn updateBuffers(self: *const Ctx, data: VertexData) void {
-                if (data.vectors) |vectors| {
-                    self.buffers.vectors.?.bufferData(vectors, g.BufferUsage.DynamicDraw);
-                }
-                if (data.shapes) |shapes| {
-                    self.buffers.shapes.?.bufferData(shapes, g.BufferUsage.DynamicDraw);
-                }
-                if (data.cameras) |camera_pos| {
-                    self.buffers.cameras.?.bufferData(camera_pos, g.BufferUsage.DynamicDraw);
-                }
+                self.buffers.bufferData(data, g.BufferUsage.DynamicDraw);
             }
         };
 

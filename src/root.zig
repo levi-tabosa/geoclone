@@ -8,9 +8,8 @@ pub const platform = switch (builtin.cpu.arch) {
     else => @import("platform/native.zig"),
 };
 
-pub var gpa = std.heap.GeneralPurposeAllocator(.{}){
-    .backing_allocator = if (builtin.cpu.arch == .wasm32) std.heap.wasm_allocator else std.heap.page_allocator,
-};
+pub var gpa: std.heap.GeneralPurposeAllocator(.{}) = .init;
+
 // used in example.zig, prevents build error if gpa is used
 pub fn logFn(
     comptime level: std.log.Level,
@@ -63,9 +62,9 @@ pub const Shader = struct {
 
     platform: platform.Shader,
 
-    pub fn init(geoc_instance: Geoc, shader_type: ShaderType, source: []const u8) Self {
+    pub fn init(shader_type: ShaderType, source: []const u8) Self {
         return .{
-            .platform = platform.Shader.init(geoc_instance, shader_type, source),
+            .platform = platform.Shader.init(shader_type, source),
         };
     }
 
@@ -125,7 +124,7 @@ pub fn VertexBuffer(comptime vertex: type) type {
             self.platform.bufferData(std.mem.sliceAsBytes(data), usage);
         }
 
-        pub fn bufferSubData(self: Self, indexes: []const u32, data: []const vertex) void {
+        pub fn bufferSubData(self: Self, indexes: []const usize, data: []const vertex) void {
             self.platform.bufferSubData(indexes, std.mem.sliceAsBytes(data));
         }
     };
@@ -136,7 +135,7 @@ pub const Interval = struct {
 
     platform: platform.Interval,
 
-    pub fn init(fn_ptr: i32, args: []const u8, delay: u32, count: u32) Self {
+    pub fn init(fn_ptr: i32, args: []const u8, delay: usize, count: usize) Self {
         return .{
             .platform = platform.Interval.init(
                 fn_ptr,
@@ -208,7 +207,7 @@ pub const Geoc = struct {
         self.platform.setStatePtr(state);
     }
 
-    pub fn setFnPtr(self: Self, fn_name: []const u8, fn_ptr: u32) void {
+    pub fn setFnPtr(self: Self, fn_name: []const u8, fn_ptr: usize) void {
         self.platform.setFnPtr(fn_name, fn_ptr);
     }
 
@@ -237,6 +236,6 @@ pub const Geoc = struct {
         transpose: bool,
         value_ptr: [*]const f32,
     ) void {
-        self.platform.uniformMatrix4fv(location.ptr, location.len, transpose, value_ptr);
+        self.platform.uniformMatrix4fv(location, transpose, value_ptr);
     }
 };

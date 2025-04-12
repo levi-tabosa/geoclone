@@ -142,7 +142,7 @@ pub const State = struct {
         };
 
         inline for (std.meta.fields(Table)) |field| {
-            // _LOGF(geoc.allocator, "{} {s}", .{ @intFromPtr(@field(table, field.name)), field.name });
+            _LOGF(geoc.allocator, "{} {s}", .{ @intFromPtr(@field(table, field.name)), field.name });
             geoc.setFnPtr(field.name, @intFromPtr(@field(table, field.name)));
         }
 
@@ -250,6 +250,10 @@ pub const State = struct {
     pub fn run(self: Self, state: g.State) void {
         self.geoc.run(state);
     }
+
+    // pub fn hold(self: Self) void {
+    //     self.geoc.hold();
+    // }
 
     pub fn geocState(self: *Self) g.State {
         return .{
@@ -659,17 +663,17 @@ fn freeArgsFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(
 
 pub fn main() void {
     var engine = g.Geoc.init();
-    defer engine.deinit();
+    // defer engine.deinit();
 
     var scene = Scene.init(engine.allocator);
-    defer scene.deinit();
+    // defer scene.deinit();
 
-    var state = State.init(engine, &scene);
-    defer state.deinit();
+    const q = engine.allocator.create(State) catch unreachable;
 
-    engine.setStatePtr(@ptrCast(&state));
+    q.* = State.init(engine, &scene);
+    // defer state.deinit();
 
-    // this call stops the scope from exiting with an Exception on js target
-    // TODO: implement a similar solution on native GLFW/SDL targets, maybe a loop?
-    state.run(state.geocState());
+    engine.setStatePtr(@ptrCast(q));
+    q.run(q.geocState());
+    // state.hold();
 }

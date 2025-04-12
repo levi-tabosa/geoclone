@@ -13,28 +13,36 @@
 * */
 
 /** Context and Globals **/
-/** @type { HTMLCanvasElement } */
-let canvas;
-/** @type { WebGLRenderingContext } */
-let webgl;
-/** @type { WebAssembly.Instance } */
-let wasm_instance;
-/** @type { WebAssembly.Memory } */
-let wasm_memory;
-/** @type { Map<number, WebGLShader> } */
-const shaders = new Map();
-let next_shader = 0;
-/** @type { Map<number, Program> } */
-const programs = new Map();
-let next_program = 0;
-/** @type { Map<number, WebGLBuffer> } */
-const buffers = new Map();
-let next_buffer = 0;
+/** @type { HTMLCanvasElement[] } */
+let canvases = [];
+/** @type { WebGLRenderingContext[] } */
+let webgls = [];
+/** @type { WebAssembly.Instance[] } */
+let wasm_instances = [];
+/** @type { WebAssembly.Memory[] } */
+let wasm_memories = [];
+/** @type { ArrayBufferView<Uint8Array>[] } */
+let memory_views = [];
+/** @type { Map<number, WebGLShader>[] } */
+const shaders = [new Map(), new Map(), new Map(), new Map()];
+/** @type { Map<number, Program>[] } */
+const programs = [new Map(), new Map(), new Map(), new Map()];
+/** @type { Map<number, WebGLBuffer>[] } */
+const buffers = [new Map(), new Map(), new Map(), new Map()];
+let next_shader = [0, 0, 0, 0];
+let next_program = [0, 0, 0, 0];
+let next_buffer = [0, 0, 0, 0];
+/** @type { SceneController[] } */
+let scene_controllers = [];
+/** @type { number[] } */
+let state_ptrs = [];
+/** @type { Map<String, number>[] } */
+const fn_ptrs = [new Map(), new Map(), new Map(), new Map()];
+
+
 
 /** @type {ArrayBufferView<Uint8Array>} */
 let memory_view;
-/** @type { SharedArrayBuffer } */
-let shared_memory;
 
 const INTERVAL = 30,
    FRAMES = 25,
@@ -59,37 +67,27 @@ const CONFIG = {
    PINCH_ZOOM_SENSITIVITY: 2000, //TODO: test with gh pages
 };
 
-let state_ptr;
-/** @type {Map<String, number>} */
-const fn_ptrs = new Map();
 
-/**
-*
-* @param {*} ptr
-* @param {*} len
-* @returns {Uint8Array<ArrayBuffer>}
-*/
-function getData(ptr, len) {
-   return new Uint8Array(wasm_memory.buffer, ptr, len);
-}
+/** @type { Array<{ fov: number, near: number, far: number, aspect_ratio: number }> } */
+let scene_configs = [
+   { fov: 1.4, near: 0.1, far: 100.0, aspect_ratio: 1.0 },
+   { fov: 1.4, near: 0.1, far: 100.0, aspect_ratio: 1.0 },
+   { fov: 1.4, near: 0.1, far: 100.0, aspect_ratio: 1.0 },
+   { fov: 1.4, near: 0.1, far: 100.0, aspect_ratio: 1.0 },
+];
 
-/**
-* @param {number} c_ptr - Pointer to string
-* @param {number} len - Length of string
-* @returns {string} - Decoded string
-* */
-function getStr(c_ptr, len) {
-   return new TextDecoder().decode(getData(c_ptr, len));
-}
+/** @type { Array<{ is_pressed: boolean, last_x: number, last_y: number, initial_pinch_distance: number }> } */
+let states = [
+   { is_pressed: false, last_x: 0, last_y: 0, initial_pinch_distance: -1 },
+   { is_pressed: false, last_x: 0, last_y: 0, initial_pinch_distance: -1 },
+   { is_pressed: false, last_x: 0, last_y: 0, initial_pinch_distance: -1 },
+   { is_pressed: false, last_x: 0, last_y: 0, initial_pinch_distance: -1 },
+];
 
-function call(ptr, fnPtr) {
-   wasm_instance.exports.draw(ptr, fnPtr);
-}
-// Delegate methods matching Zig Scene/Handler methods
 class SceneController {
-   constructor() {
-      // Instance properties
-      this.wasm_interface = new WasmInterface();
+   constructor(qid) {
+      this.qid = qid;
+      this.wasm_interface = new WasmInterface(qid);
       this.vectors = [];
       this.shapes = [];
       this.cameras = [];
@@ -98,81 +96,81 @@ class SceneController {
       this.selected_cameras = [];
       this.is_rotating = false;
       this.rotation_interval = null;
-      // Event listeners
+
       this.handleMouseMove = this.handleMouseMove.bind(this);
       this.handleTouch = this.handleTouch.bind(this);
       this.handleWheel = this.handleWheel.bind(this);
+      this.handleMouseUp = this.handleMouseUp.bind(this);
+      this.handleMouseDown = this.handleMouseDown.bind(this);
+      this.handleTouchStart = this.handleTouchStart.bind(this);
+      this.handleTouchEnd = this.handleTouchEnd.bind(this);
+
       this.setupEventListeners();
    }
 
    setupEventListeners() {
+      const canvas = canvases[this.qid];
+      if(!canvas) throw new Error(`Canvas for quadrant ${this.qid} not found`);
       canvas.addEventListener("mouseup", this.handleMouseUp, { passive: true });
-      canvas.addEventListener("mousedown", this.handleMouseDown, {
-         passive: true,
-      });
-      canvas.addEventListener("mousemove", this.handleMouseMove, {
-         passive: true,
-      });
-      // canvas.addEventListener("mouseleave", this.handleMouseUp);
-      canvas.addEventListener("touchstart", this.handleMouseDown, {
-         passive: true,
-      });
-      canvas.addEventListener("touchend", this.handleMouseUp, { passive: true });
+      canvas.addEventListener("mousedown", this.handleMouseDown, { passive: true });
+      canvas.addEventListener("mousemove", this.handleMouseMove, { passive: true });
+      canvas.addEventListener("touchstart", this.handleTouchStart, { passive: true });
+      canvas.addEventListener("touchend", this.handleTouchEnd, { passive: true });
       canvas.addEventListener("touchmove", this.handleTouch, { passive: true });
       canvas.addEventListener("wheel", this.handleWheel, { passive: true });
    }
 
-   handleMouseUp(/** @type { MouseEvent} */ _e) {
-      state.is_pressed = false;
+   handleMouseUp(_e) {
+      states[this.qid].is_pressed = false;
    }
 
-   handleMouseDown(/** @type { MouseEvent} */ _e) {
-      state.is_pressed = true;
+   handleMouseDown(_e) {
+      states[this.qid].is_pressed = true;
    }
 
-   handleMouseMove(/** @type { MouseEvent} */ e) {
-      if (!state.is_pressed) return;
+   handleMouseMove(e) {
+      if (!states[this.qid].is_pressed) return;
 
-      const { left, top, width, height } = canvas.getBoundingClientRect();
+      const { left, top, width, height } = canvases[this.qid].getBoundingClientRect();
       this.wasm_interface.setAngles(
          ((e.clientY - top) * Math.PI * 2) / height,
          ((e.clientX - left) * Math.PI * 2) / width
       );
    }
 
-   handleTouchStart(/** @type { TouchEvent } */ e) {
+   handleTouchStart(e) {
       if (e.touches.length === 2) {
-         state.initial_pinch_distance = Math.hypot(
+         states[this.qid].initial_pinch_distance = Math.hypot(
             e.touches[0].clientX - e.touches[1].clientX,
             e.touches[0].clientY - e.touches[1].clientY
          );
       } else if (e.touches.length === 1) {
-         state.is_pressed = true;
+         states[this.qid].is_pressed = true;
       }
    }
 
-   handleTouchEnd(/** @type { TouchEvent } */ e) {
-      state.is_pressed = false;
-      state.initial_pinch_distance = -1;
+   handleTouchEnd(e) {
+      states[this.qid].is_pressed = false;
+      states[this.qid].initial_pinch_distance = -1;
       e.preventDefault();
    }
 
-   handleTouch(/** @type { TouchEvent } */ e) {
+   handleTouch(e) {
       if (e.touches.length === 2) {
          const current_distance = Math.hypot(
             e.touches.item(0).clientX - e.touches.item(1).clientX,
             e.touches.item(0).clientY - e.touches.item(1).clientY
          );
 
-         if (state.initial_pinch_distance < 0) {
+         if (states[this.qid].initial_pinch_distance < 0) {
             const pinch_delta =
-               (current_distance - state.initial_pinch_distance) /
+               (current_distance - states[this.qid].initial_pinch_distance) /
                CONFIG.PINCH_ZOOM_SENSITIVITY;
             this.updateZoom(-pinch_delta);
-            state.initial_pinch_distance = current_distance;
+            states[this.qid].initial_pinch_distance = current_distance;
          }
-      } else if (e.touches.length === 1 && state.is_pressed) {
-         const { left, top, width, height } = canvas.getBoundingClientRect();
+      } else if (e.touches.length === 1 && states[this.qid].is_pressed) {
+         const { left, top, width, height } = canvases[this.qid].getBoundingClientRect();
          this.wasm_interface.setAngles(
             ((e.touches.item(0).clientY - top) * Math.PI * 2) / height,
             ((e.touches.item(0).clientX - left) * Math.PI * 2) / width
@@ -181,9 +179,13 @@ class SceneController {
       e.preventDefault();
    }
 
-   handleWheel(/** @type { WheelEvent }*/ e) {
+   handleWheel(e) {
       const zoom_delta = -e.deltaY / CONFIG.ZOOM_SENSITIVITY;
       this.wasm_interface.setZoom(zoom_delta);
+   }
+
+   updateZoom(delta) {
+      this.wasm_interface.setZoom(delta);
    }
 
    insertVector(x, y, z) {
@@ -251,7 +253,7 @@ class SceneController {
 
       if (len === 0) return;
 
-      const buffer = new Uint32Array(wasm_memory.buffer);
+      const buffer = new Uint32Array(wasm_memories[this.qid].buffer);
       const offset = buffer.length - len;
       buffer.set(combined, offset);
 
@@ -288,7 +290,7 @@ class SceneController {
       const shorts =
          (this.selected_vectors.length << 16) + this.selected_shapes.length;
 
-      const buffer = new Uint32Array(wasm_memory.buffer);
+      const buffer = new Uint32Array(wasm_memories[this.qid].buffer);
       const offset = buffer.length - len;
       buffer.set(combined, offset);
 
@@ -338,7 +340,7 @@ class SceneController {
       const shorts =
          (this.selected_vectors.length << 16) + this.selected_shapes.length;
 
-      const buffer = new Uint32Array(wasm_memory.buffer);
+      const buffer = new Uint32Array(wasm_memories[this.qid].buffer);
       const offset = buffer.length - len;
       buffer.set(combined, offset);
 
@@ -363,7 +365,7 @@ class SceneController {
       const shorts =
          (this.selected_vectors.length << 16) + this.selected_shapes.length;
 
-      const buffer = new Uint32Array(wasm_memory.buffer);
+      const buffer = new Uint32Array(wasm_memories[this.qid].buffer);
       const offset = buffer.length - len;
       buffer.set(combined, offset);
 
@@ -383,11 +385,11 @@ class SceneController {
    }
 
    updateUI() {
-      const vectors_column = document.getElementById("vectors-column");
-      const shapes_column = document.getElementById("shapes-column");
-      const cameras_column = document.getElementById("cameras-column");
+      const vectors_column = document.getElementById(`vectors-column-${this.qid}`) || document.getElementById("vectors-column");
+      const shapes_column = document.getElementById(`shapes-column-${this.qid}`) || document.getElementById("shapes-column");
+      const cameras_column = document.getElementById(`cameras-column-${this.qid}`) || document.getElementById("cameras-column");
 
-      vectors_column.innerHTML = ""; //TODO: maybe change later
+      vectors_column.innerHTML = "";
       shapes_column.innerHTML = "";
       cameras_column.innerHTML = "";
 
@@ -395,9 +397,7 @@ class SceneController {
          this.addColumnItem(
             vectors_column,
             "vector-item",
-            `${vector.x.toFixed(2)},
-          ${vector.y.toFixed(2)},
-          ${vector.z.toFixed(2)}`
+            `${vector.x.toFixed(2)}, ${vector.y.toFixed(2)}, ${vector.z.toFixed(2)}`
          );
       });
 
@@ -411,9 +411,9 @@ class SceneController {
    }
 
    addColumnItem(
-   /** @type {HTMLElement} */ column,
-   /** @type {String} */ item_class_name,
-   /** @type {String} */ text
+      /** @type {HTMLElement} */ column,
+      /** @type {String} */ item_class_name,
+      /** @type {String} */ text
    ) {
       const item = document.createElement("div");
       item.textContent = text;
@@ -491,16 +491,19 @@ class SceneController {
       ];
    }
 }
-
 class WasmInterface {
-   constructor() {
-      this.wasm_exports = wasm_instance.exports;
+   constructor(qid) {
+      this.qid = qid;
+      if (!wasm_instances[qid]) {
+         throw new Error(`WASM instance for quadrant ${qid} is not initialized`);
+      }
+      this.wasm_exports = wasm_instances[qid].exports;
    }
 
    setAngles(p_angle, y_angle) {
       this.wasm_exports.setAngles(
-         state_ptr,
-         fn_ptrs.get("set_angles_fn_ptr"),
+         state_ptrs[this.qid],
+         fn_ptrs[this.qid].get("set_angles_fn_ptr"),
          p_angle,
          y_angle
       );
@@ -508,23 +511,23 @@ class WasmInterface {
 
    setZoom(zoom_delta) {
       this.wasm_exports.setZoom(
-         state_ptr,
-         fn_ptrs.get("set_zoom_fn_ptr"),
+         state_ptrs[this.qid],
+         fn_ptrs[this.qid].get("set_zoom_fn_ptr"),
          zoom_delta
       );
    }
 
    getPitch() {
       return this.wasm_exports.getPitch(
-         state_ptr,
-         fn_ptrs.get("get_pitch_fn_ptr")
+         state_ptrs[this.qid],
+         fn_ptrs[this.qid].get("get_pitch_fn_ptr")
       );
    }
 
    insertVector(x, y, z) {
       this.wasm_exports.insertVector(
-         state_ptr,
-         fn_ptrs.get("insert_vector_fn_ptr"),
+         state_ptrs[this.qid],
+         fn_ptrs[this.qid].get("insert_vector_fn_ptr"),
          x,
          y,
          z
@@ -533,8 +536,8 @@ class WasmInterface {
 
    insertCamera(x, y, z) {
       this.wasm_exports.insertCamera(
-         state_ptr,
-         fn_ptrs.get("insert_camera_fn_ptr"),
+         state_ptrs[this.qid],
+         fn_ptrs[this.qid].get("insert_camera_fn_ptr"),
          x,
          y,
          z
@@ -542,35 +545,34 @@ class WasmInterface {
    }
 
    insertShape(shape) {
-      const shape_fn_ptr = fn_ptrs.get(`${shape.toLowerCase()}_fn_ptr`);
-      this.wasm_exports[`insert${shape}`](state_ptr, shape_fn_ptr);
+      const shape_fn_ptr = fn_ptrs[this.qid].get(`${shape.toLowerCase()}_fn_ptr`);
+      this.wasm_exports[`insert${shape}`](state_ptrs[this.qid], shape_fn_ptr);
    }
 
    clear() {
-      this.wasm_exports.clear(state_ptr, fn_ptrs.get("clear_fn_ptr"));
+      this.wasm_exports.clear(state_ptrs[this.qid], fn_ptrs[this.qid].get("clear_fn_ptr"));
    }
 
    setResolution(resolution) {
       this.wasm_exports.setResolution(
-         // state_ptr,
-         state_ptr,
-         fn_ptrs.get("set_res_fn_ptr"),
+         state_ptrs[this.qid],
+         fn_ptrs[this.qid].get("set_res_fn_ptr"),
          resolution
       );
    }
 
    setCamera(index) {
       this.wasm_exports.setCamera(
-         state_ptr,
-         fn_ptrs.get("set_camera_fn_ptr"),
+         state_ptrs[this.qid],
+         fn_ptrs[this.qid].get("set_camera_fn_ptr"),
          index
       );
    }
 
    rotate(indexes_ptr, indexes_len, shorts, x, y, z) {
       this.wasm_exports.rotate(
-         state_ptr,
-         fn_ptrs.get("rotate_fn_ptr"),
+         state_ptrs[this.qid],
+         fn_ptrs[this.qid].get("rotate_fn_ptr"),
          indexes_ptr,
          indexes_len,
          shorts,
@@ -582,8 +584,8 @@ class WasmInterface {
 
    scale(indexes_ptr, indexes_len, shorts, factor) {
       this.wasm_exports.scale(
-         state_ptr,
-         fn_ptrs.get("scale_fn_ptr"),
+         state_ptrs[this.qid],
+         fn_ptrs[this.qid].get("scale_fn_ptr"),
          indexes_ptr,
          indexes_len,
          shorts,
@@ -593,8 +595,8 @@ class WasmInterface {
 
    translate(indexes_ptr, indexes_len, shorts, dx, dy, dz) {
       this.wasm_exports.translate(
-         state_ptr,
-         fn_ptrs.get("translate_fn_ptr"),
+         state_ptrs[this.qid],
+         fn_ptrs[this.qid].get("translate_fn_ptr"),
          indexes_ptr,
          indexes_len,
          shorts,
@@ -606,8 +608,8 @@ class WasmInterface {
 
    reflect(indexes_ptr, indexes_len, shorts, coord_idx, factor) {
       this.wasm_exports.reflect(
-         state_ptr,
-         fn_ptrs.get("reflect_fn_ptr"),
+         state_ptrs[this.qid],
+         fn_ptrs[this.qid].get("reflect_fn_ptr"),
          indexes_ptr,
          indexes_len,
          shorts,
@@ -617,314 +619,235 @@ class WasmInterface {
    }
 }
 
-const resize_listener = (entries) => {
+const resize_listener = (entries, qid) => {
    const { width, height } = entries[0].contentRect;
-   canvas.width = width;
-   canvas.height = height;
+   canvases[qid].width = width;
+   canvases[qid].height = height;
 
-   webgl.viewport(0, 0, width, height);
-   webgl.clear(webgl.COLOR_BUFFER_BIT);
-   setAspectRatioUniform(width / height);
-   scene_config.aspect_ratio = width / height;
+   webgls[qid].viewport(0, 0, width, height);
+   webgls[qid].clear(webgls[qid].COLOR_BUFFER_BIT);
+   setAspectRatioUniform(width / height, qid);
+   scene_configs[qid].aspect_ratio = width / height;
 };
-
-function setAspectRatioUniform(/** @type { number} */ aspect_ratio) {
-   for (let i = 0; i < next_program; i++) {
-      const program = programs.get(i);
-
-      webgl.useProgram(program.gl);
-      webgl.uniformMatrix4fv(
-         webgl.getUniformLocation(program.gl, "projection_matrix"),
-         false,
-         createProjectionMatrix(
-            scene_config.fov,
-            aspect_ratio,
-            scene_config.near,
-            scene_config.far
-         )
-      );
-   }
-}
-
-function setPerspectiveUniforms(
- /** @type { number} */ fov,
- /** @type { number} */ near,
- /** @type { number} */ far
-) {
-   for (let i = 0; i < next_program; i++) {
-      const program = programs.get(i);
-      webgl.useProgram(program.gl);
-      webgl.uniformMatrix4fv(
-         webgl.getUniformLocation(program.gl, "projection_matrix"),
-         false,
-         createProjectionMatrix(fov, scene_config.aspect_ratio, near, far)
-      );
-   }
-}
-
-function createProjectionMatrix(fov, aspect_ratio, near, far) {
-   const tan_half_FOV = Math.tan(fov / 2.0);
-   const projection = new Float32Array(16);
-   projection[0] = 1.0 / (tan_half_FOV * aspect_ratio);
-   projection[5] = 1.0 / tan_half_FOV;
-   projection[10] = -(far + near) / (far - near);
-   projection[11] = -1.0;
-   projection[14] = -(2.0 * far * near) / (far - near);
-
-   return projection;
-}
 
 const env = {
    init() {
-      canvas = document.createElement("canvas");
-      canvas.id = "canvas";
-      webgl = canvas.getContext("webgl");
-      if (webgl == null) {
-         throw new Error("No WebGL support on browser");
-      }
-
-      const scene_handler = new SceneController();
-
-      btn_listeners.splice(
-         0,
-         btn_listeners.length,
-         ...createButtonListeners(scene_handler)
-      );
-
-      const body = document.body;
-      const container = document.createElement("div");
-      const text_fields = document.createElement("div");
-      const inputs = ["input1", "input2", "input3"].map((id) => {
-         const input = document.createElement("input");
-         input.id = id;
-         return input;
-      });
-
-      container.id = "container";
-      text_fields.id = "text-inputs";
-
-      new ResizeObserver(resize_listener).observe(canvas);
-
-      body.appendChild(container);
-      container.append(
-         canvas,
-         text_fields,
-         createButtonGrid(),
-         createToggleButtonGrid(),
-         createFloatingTable(),
-         createToggleTableButton(),
-         createColorButtonGrid(),
-         createPerspectiveInputs(scene_handler)
-      );
-      text_fields.append(...inputs);
    },
-   deinit() {
-      webgl.finish();
+   deinit(qid) {
+      webgls[qid].finish();
    },
-   run(ptr, fnPtr) {
+   run(ptr, fnPtr, qid) {
+      console.log("Running animation loop for quadrant", qid);
       function frame() {
-         console.log(memory_view.buffer);
-         // if (memory_view.byteLength !== 0) 
-         // else {
-         //    console.error("RESIZE");
-         //    memory_view = new Uint8Array(wasm_memory.buffer);
-         //    // setTimeout(() => { memory_view = new Uint8Array(wasm_memory.buffer); }, 1);
-         //    // setTimeout(() => {}, 0);
-         // }
-         call(ptr, fnPtr);
-         // setTimeout(() => requestAnimationFrame(frame), 1500);
-         // setTimeout(() => requestAnimationFrame(frame), 1000 / FPS);
-         requestAnimationFrame(frame);
+         try {
+            call(ptr, fnPtr, qid);
+            requestAnimationFrame(frame);
+         } catch (e) {
+            console.error(`Error in quadrant ${qid} animation loop:`, e);
+         }
       }
       requestAnimationFrame(frame);
-      throw new Error("Not an error");
    },
-   setStatePtr(ptr) {
-      state_ptr = ptr;
+   setStatePtr(ptr, qid) {
+      state_ptrs[qid] = ptr;
    },
-   setFnPtr(fn_name_ptr, fn_ptrs_len, value) {
-      fn_ptrs.set(getStr(fn_name_ptr, fn_ptrs_len), value);
+   setFnPtr(fn_name_ptr, fn_ptrs_len, value, qid) {
+      fn_ptrs[qid].set(getStr(fn_name_ptr, fn_ptrs_len, qid), value);
    },
    time() {
       return performance.now();
    },
-   print(ptr, len) {
-      console.log(getStr(ptr, len));
+   print(ptr, len, qid) {
+      console.log(getStr(ptr, len, qid));
    },
-   initShader(type, source_ptr, source_len) {
-      const shaderType = type === 0 ? webgl.VERTEX_SHADER : webgl.FRAGMENT_SHADER;
-      const shader = webgl.createShader(shaderType);
-      if (!shader) throw new Error("Invalid shader type");
+   initShader(type, source_ptr, source_len, qid) {
+      console.log(`initShader: qid=${qid}, type=${type}, shader created with webgls[${qid}]`);
+      const shaderType = type === 0 ? webgls[qid].VERTEX_SHADER : webgls[qid].FRAGMENT_SHADER;
+      const shader = webgls[qid].createShader(shaderType);
+      if (!shader) throw new Error("Shader is not");
 
-      webgl.shaderSource(
+      webgls[qid].shaderSource(
          shader,
-         `precision mediump float;\n${getStr(source_ptr, source_len)}`
+         `precision mediump float;\n${getStr(source_ptr, source_len, qid)}`
       );
-      webgl.compileShader(shader);
+      webgls[qid].compileShader(shader);
 
-      if (!webgl.getShaderParameter(shader, webgl.COMPILE_STATUS)) {
+      if (!webgls[qid].getShaderParameter(shader, webgls[qid].COMPILE_STATUS)) {
          throw new Error(
-            `Failed to compile shader ${webgl.getShaderInfoLog(shader)}`
+            `Failed to compile shader ${webgls[qid].getShaderInfoLog(shader)}`
          );
       }
 
-      const handle = next_shader++;
-      shaders.set(handle, shader);
+
+      const handle = next_shader[qid]++;
+      shaders[qid].set(handle, shader);
       return handle;
    },
-   deinitShader(handle) {
-      webgl.deleteShader(shaders.get(handle) ?? null);
+   deinitShader(handle, qid) {
+      webgls[qid].deleteShader(shaders[qid].get(handle) ?? null);
    },
-   initProgram(shader1_handle, shader2_handle) {
-      const program = webgl.createProgram();
-      if (!program) throw new Error("Failed to create program");
+   initProgram(shader1_handle, shader2_handle, qid) {
+      console.log(`initProgram: qid=${qid}`);
+      const program = webgls[qid].createProgram();
+      if (!program) throw new Error(`Failed to create program for qid=${qid}`);
+      const shader1 = shaders[qid].get(shader1_handle);
+      const shader2 = shaders[qid].get(shader2_handle);
+      if (!shader1 || !shader2) throw new Error(`Invalid shaders for qid=${qid}`);
+      webgls[qid].attachShader(program, shader1);
+      webgls[qid].attachShader(program, shader2);
+      webgls[qid].linkProgram(program);
+      if (!webgls[qid].getProgramParameter(program, webgls[qid].LINK_STATUS)) {
+         throw new Error(`Program link failed for qid=${qid}: ${webgls[qid].getProgramInfoLog(program)}`);
+      }
 
-      const shader1 = shaders.get(shader1_handle);
-      const shader2 = shaders.get(shader2_handle);
-      if (!shader1 || !shader2) throw new Error("Failed to attach shaders");
-
-      webgl.attachShader(program, shader1);
-      webgl.attachShader(program, shader2);
-      webgl.linkProgram(program);
-
-      if (!webgl.getProgramParameter(program, webgl.LINK_STATUS)) {
+      if (!webgls[qid].getProgramParameter(program, webgls[qid].LINK_STATUS)) {
          throw new Error(
-            `Failed to link program: ${webgl.getProgramInfoLog(program)}`
+            `Failed to link program: ${webgls[qid].getProgramInfoLog(program)}`
          );
       }
 
-      const attribute_count = webgl.getProgramParameter(
+      const attribute_count = webgls[qid].getProgramParameter(
          program,
-         webgl.ACTIVE_ATTRIBUTES
+         webgls[qid].ACTIVE_ATTRIBUTES
       );
       const attributes = new Map();
 
       for (let i = 0; i < attribute_count; i++) {
-         const attribute = webgl.getActiveAttrib(program, i);
+         const attribute = webgls[qid].getActiveAttrib(program, i);
          if (attribute) {
             attributes.set(attribute.name, { index: i, info: attribute });
          }
       }
 
-      const uniform_count = webgl.getProgramParameter(
+      const uniform_count = webgls[qid].getProgramParameter(
          program,
-         webgl.ACTIVE_UNIFORMS
+         webgls[qid].ACTIVE_UNIFORMS
       );
       const uniforms = new Map();
 
       for (let i = 0; i < uniform_count; i++) {
-         const uniform = webgl.getActiveUniform(program, i);
+         const uniform = webgls[qid].getActiveUniform(program, i);
          if (uniform) {
             uniforms.set(uniform.name, uniform);
          }
       }
 
-      webgl.useProgram(program);
+      webgls[qid].useProgram(program);
 
       const fov = 1.4;
-      const aspect_ratio = canvas.width / canvas.height;
+      const aspect_ratio = canvases[qid].width / canvases[qid].height;
       const near = 0.1;
       const far = 100.0;
 
-      webgl.uniformMatrix4fv(
-         webgl.getUniformLocation(program, "projection_matrix"),
+      webgls[qid].uniformMatrix4fv(
+         webgls[qid].getUniformLocation(program, "projection_matrix"),
          false,
          createProjectionMatrix(fov, aspect_ratio, near, far)
       );
 
-      const handle = next_program++;
-      programs.set(handle, { gl: program, attributes, uniforms });
+      const handle = next_program[qid]++;
+      console.log(`initProgram: qid=${qid}, storing program with handle=${handle}`);
+      programs[qid].set(handle, { gl: program, attributes, uniforms });
+
       return handle;
    },
-   useProgram(handle) {
-      const program = programs.get(handle);
-      if (program) webgl.useProgram(program.gl);
-   },
-   deinitProgram(handle) {
-      const program = programs.get(handle);
+   useProgram(handle, qid) {
+      const program = programs[qid].get(handle);
       if (program) {
-         programs.delete(handle);
-         webgl.deleteProgram(program.gl);
+         if (!webgls[qid].isProgram(program.gl)) {
+            throw new Error(`Program for qid=${qid}, handle=${handle} is invalid or from another context`);
+         }
+         webgls[qid].useProgram(program.gl);
+      } else {
+         console.error(`No program found for qid=${qid}, handle=${handle}`);
       }
    },
-   initVertexBuffer(data_ptr, data_len, usage) {
+   deinitProgram(handle, qid) {
+      const program = programs[qid].get(handle);
+      if (program) {
+         programs[qid].delete(handle);
+         webgls[qid].deleteProgram(program.gl);
+      }
+   },
+   initVertexBuffer(data_ptr, data_len, usage, qid) {
       const gl_usage = [
-         webgl.STATIC_DRAW,
-         webgl.DYNAMIC_DRAW,
-         webgl.STREAM_DRAW,
+         webgls[qid].STATIC_DRAW,
+         webgls[qid].DYNAMIC_DRAW,
+         webgls[qid].STREAM_DRAW,
       ][usage];
-      const vertex_buffer = webgl.createBuffer();
+      const vertex_buffer = webgls[qid].createBuffer();
 
-      webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
-      webgl.bufferData(
-         webgl.ARRAY_BUFFER,
-         getData(data_ptr, data_len),
+      webgls[qid].bindBuffer(webgls[qid].ARRAY_BUFFER, vertex_buffer);
+      webgls[qid].bufferData(
+         webgls[qid].ARRAY_BUFFER,
+         getData(data_ptr, data_len, qid),
          gl_usage
       );
 
-      const handle = next_buffer++;
-      buffers.set(handle, vertex_buffer);
+      const handle = next_buffer[qid]++;
+      buffers[qid].set(handle, vertex_buffer);
       return handle;
    },
-   deinitVertexBuffer(handle) {
-      const buffer = buffers.get(handle);
-      if (buffers.delete(handle)) {
-         webgl.deleteBuffer(buffer);
+   deinitVertexBuffer(handle, qid) {
+      const buffer = buffers[qid].get(handle);
+      if (buffers[qid].delete(handle)) {
+         webgls[qid].deleteBuffer(buffer);
       } else {
          console.error("Failed to delete buffer\nhandle : " + handle);
       }
    },
-   bindVertexBuffer(handle) {
-      const vertex_buffer = buffers.get(handle);
+   bindVertexBuffer(handle, qid) {
+      const vertex_buffer = buffers[qid].get(handle);
       if (vertex_buffer) {
-         webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
+         if (!webgls[qid].isBuffer(vertex_buffer)) {
+            console.error(`Buffer for qid=${qid}, handle=${handle} is invalid or from another context`);
+            return;
+         }
+         webgls[qid].bindBuffer(webgls[qid].ARRAY_BUFFER, vertex_buffer);
       } else {
-         console.error("Failed to bind handle : " + handle);
+         console.error(`Failed to bind handle: ${handle} for qid=${qid}`);
       }
    },
-   bufferSubData(handle, idxs_ptr, idxs_len, data_ptr, data_len) {
-      const vertex_buffer = buffers.get(handle);
+   bufferSubData(handle, idxs_ptr, idxs_len, data_ptr, data_len, qid) {
+      const vertex_buffer = buffers[qid].get(handle);
 
-      const data = new Float32Array(wasm_memory.buffer, data_ptr, data_len / 4);
-      const idxs = new Uint32Array(wasm_memory.buffer, idxs_ptr, idxs_len);
+      const data = new Float32Array(wasm_memories[qid].buffer, data_ptr, data_len / 4);
+      const idxs = new Uint32Array(wasm_memories[qid].buffer, idxs_ptr, idxs_len);
 
-      webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
+      webgls[qid].bindBuffer(webgls[qid].ARRAY_BUFFER, vertex_buffer);
 
-      //manage two vertex for each line
       for (let i = 0; i < idxs_len; i++) {
          const idx = idxs[i];
          const offset = idx * 6 * 4;
          const vertexData = data.subarray(i * 6, (i + 1) * 6);
-         webgl.bufferSubData(webgl.ARRAY_BUFFER, offset, vertexData);
+         webgls[qid].bufferSubData(webgls[qid].ARRAY_BUFFER, offset, vertexData);
       }
    },
-   bufferData(handle, data_ptr, data_len, usage) {
+   bufferData(handle, data_ptr, data_len, usage, qid) {
       const gl_usage = [
-         webgl.STATIC_DRAW,
-         webgl.DYNAMIC_DRAW,
-         webgl.STREAM_DRAW,
+         webgls[qid].STATIC_DRAW,
+         webgls[qid].DYNAMIC_DRAW,
+         webgls[qid].STREAM_DRAW,
       ][usage];
-      const vertex_buffer = buffers.get(handle);
-      webgl.bindBuffer(webgl.ARRAY_BUFFER, vertex_buffer);
-      webgl.bufferData(
-         webgl.ARRAY_BUFFER,
-         getData(data_ptr, data_len),
+      const vertex_buffer = buffers[qid].get(handle);
+      webgls[qid].bindBuffer(webgls[qid].ARRAY_BUFFER, vertex_buffer);
+      webgls[qid].bufferData(
+         webgls[qid].ARRAY_BUFFER,
+         getData(data_ptr, data_len, qid),
          gl_usage
       );
    },
-   setInterval(fn_ptr, args_ptr, args_len, delay, timeout) {
-      // console.log("Set interval", getStr(args_ptr, args_len));
+   setInterval(fn_ptr, args_ptr, args_len, delay, timeout, qid) {
       const handle = setInterval(() => {
-         // console.log("Tick", getStr(args_ptr, args_len));
-         wasm_instance.exports.apply(state_ptr, fn_ptr, args_ptr, args_len);
+         wasm_instances[qid].exports.apply(state_ptrs[qid], fn_ptr, args_ptr, args_len);
       }, delay);
 
       if (timeout > 0) {
          setTimeout(() => {
             clearInterval(handle);
-            wasm_instance.exports.free(
-               state_ptr,
-               fn_ptrs.get("free_args_fn_ptr"),
+            wasm_instances[qid].exports.free(
+               state_ptrs[qid],
+               fn_ptrs[qid].get("free_args_fn_ptr"),
                args_ptr,
                args_len
             );
@@ -944,19 +867,20 @@ const env = {
       type,
       normalized,
       stride,
-      offset
+      offset,
+      qid
    ) {
-      const program = programs.get(program_handle);
+      const program = programs[qid].get(program_handle);
       if (!program) return;
 
-      const attribute = program.attributes.get(getStr(name_ptr, name_len));
+      const attribute = program.attributes.get(getStr(name_ptr, name_len, qid));
       if (!attribute) return;
 
-      const gl_type = type === 0 ? webgl.FLOAT : null;
+      const gl_type = type === 0 ? webgls[qid].FLOAT : null;
       if (!gl_type) throw new Error("Unknown type");
 
-      webgl.enableVertexAttribArray(attribute.index);
-      webgl.vertexAttribPointer(
+      webgls[qid].enableVertexAttribArray(attribute.index);
+      webgls[qid].vertexAttribPointer(
          attribute.index,
          size,
          gl_type,
@@ -965,27 +889,27 @@ const env = {
          offset
       );
    },
-   drawArrays(mode, first, count) {
+   drawArrays(mode, first, count, qid) {
       const gl_mode = [
-         webgl.POINTS,
-         webgl.LINES,
-         webgl.LINE_LOOP,
-         webgl.LINE_STRIP,
-         webgl.TRIANGLES,
-         webgl.TRIANGLE_STRIP,
-         webgl.TRIANGLE_FAN,
+         webgls[qid].POINTS,
+         webgls[qid].LINES,
+         webgls[qid].LINE_LOOP,
+         webgls[qid].LINE_STRIP,
+         webgls[qid].TRIANGLES,
+         webgls[qid].TRIANGLE_STRIP,
+         webgls[qid].TRIANGLE_FAN,
       ][mode];
       if (gl_mode === undefined) throw new Error("Unsupported draw mode");
-      webgl.drawArrays(gl_mode, first, count);
+      webgls[qid].drawArrays(gl_mode, first, count);
    },
-   uniformMatrix4fv(location_ptr, location_len, transpose, value_ptr) {
-      const location = getStr(location_ptr, location_len);
-      const value = new Float32Array(wasm_memory.buffer, value_ptr, 16);
-      for (let i = 0; i < next_program; i++) {
-         const program = programs.get(i);
-         webgl.useProgram(program.gl);
-         webgl.uniformMatrix4fv(
-            webgl.getUniformLocation(program.gl, location),
+   uniformMatrix4fv(location_ptr, location_len, transpose, value_ptr, qid) {
+      const location = getStr(location_ptr, location_len, qid);
+      const value = new Float32Array(wasm_memories[qid].buffer, value_ptr, 16);
+      for (let i = 0; i < next_program[qid]; i++) {
+         const program = programs[qid].get(i);
+         webgls[qid].useProgram(program.gl);
+         webgls[qid].uniformMatrix4fv(
+            webgls[qid].getUniformLocation(program.gl, location),
             transpose,
             value
          );
@@ -993,144 +917,14 @@ const env = {
    },
 };
 
-function createButtonListeners(/** @type { SceneController } */ scene_handler) {
-   return [
-      () => {
-         scene_handler.insertVector(input1.value, input2.value, input3.value);
-         // input1.value = input2.value = input3.value = "";
-      },
-      () => scene_handler.clear(),
-      () => {
-         scene_handler.rotate(input1.value, input2.value, input3.value);
-         input1.value = input2.value = input3.value = "";
-      },
-      () => scene_handler.insertShape("Cube"),
-      () => console.log("Toggle"),
-      () => {
-         scene_handler.scale(input1.value);
-         input1.value = "";
-      },
-      () => scene_handler.insertShape("Pyramid"),
-      () => { },
-      () => {
-         scene_handler.translate(input1.value, input2.value, input3.value);
-         input1.value = input2.value = input3.value = "";
-      },
-      () => scene_handler.insertShape("Sphere"),
-      () => scene_handler.reflect(
-         0
-         | (input1.value ? 1 : 0)
-         | (input2.value ? 2 : 0)
-         | (input3.value ? 4 : 0)
-      ),
-      () => scene_handler.projectXY(),
-      () => scene_handler.insertShape("Cone"),
-      () => { },
-      () => scene_handler.projectYZ(),
-      () => {
-         scene_handler.insertCamera(input1.value, input2.value, input3.value);
-         input1.value = input2.value = input3.value = "";
-      },
-      () => { },
-      () => scene_handler.projectXZ(),
-   ];
-}
-
-const btn_listeners = [];
-
-function createButtonGrid() {
-   const grid = document.createElement("div");
-   grid.id = "button-grid";
-   // grid.classList.toggle("hidden");
-
-   const labels = [
-      "Insert",
-      "Clear",
-      "Rotate",
-      "Cube",
-      "Toggle",
-      "Scale",
-      "Pyramid",
-      "Text",
-      "Translate",
-      "Sphere",
-      "Reflect",
-      "Project-XY",
-      "Cone",
-      "Text",
-      "Project-YZ",
-      "Camera",
-      "Text",
-      "Project-XZ",
-   ];
-
-   labels.forEach((label, index) => {
-      const btn = createButton(
-         `grid-btn-${index + 1}`,
-         label,
-         btn_listeners[index]
-      );
-      btn.className = "floating-button";
-      grid.appendChild(btn);
-   });
-
-   return grid;
-}
-
 function createToggleButtonGrid() {
    return createButton("toggle-grid-btn", "Btns", () => {
       document.getElementById("button-grid").classList.toggle("hidden");
    });
 }
 
-function createFloatingTable() {
-   const table = document.createElement("div");
-   table.id = "floating-table";
-   // table.classList.toggle("hidden");
-
-   const header = document.createElement("div");
-   header.className = "table-header";
-
-   ["Vectors", "Shapes", "Cameras"].forEach((title) => {
-      const column = document.createElement("div");
-      column.className = "header-column";
-      column.textContent = title;
-      header.appendChild(column);
-   });
-
-   const content = document.createElement("div");
-   content.className = "table-content";
-
-   const vectorsColumn = document.createElement("div");
-   vectorsColumn.id = "vectors-column";
-   vectorsColumn.className = "table-column";
-
-   const shapesColumn = document.createElement("div");
-   shapesColumn.id = "shapes-column";
-   shapesColumn.className = "table-column";
-
-   const camerasColumn = document.createElement("div");
-   camerasColumn.id = "cameras-column";
-   camerasColumn.className = "table-column";
-
-   content.appendChild(vectorsColumn);
-   content.appendChild(shapesColumn);
-   content.appendChild(camerasColumn);
-
-   table.appendChild(header);
-   table.appendChild(content);
-   return table;
-}
-
-function createToggleTableButton() {
-   const btn = document.createElement("button");
-   btn.id = "toggle-table-btn";
-   btn.textContent = "▼";
-   btn.addEventListener("click", () => {
-      btn.classList.toggle("expanded");
-      document.getElementById("floating-table").classList.toggle("hidden");
-   });
-   return btn;
+function updateMemoryView(qid) {
+   memory_views[qid] = new Uint8Array(wasm_memories[qid].buffer);
 }
 
 function createButton(id, text, on_click) {
@@ -1141,7 +935,7 @@ function createButton(id, text, on_click) {
    return btn;
 }
 
-function createColorButtonGrid() {
+function createColorButtonGrid(qid) {
    const container = document.createElement("div");
    container.id = "color-button-container";
 
@@ -1172,7 +966,7 @@ function createColorButtonGrid() {
       btn.className = "color-button";
       btn.style.background = color;
       btn.onclick = () => {
-         canvas.style.background = color;
+         canvases[qid].style.background = color;
       };
 
       if (index > 1) {
@@ -1202,63 +996,366 @@ function createColorButtonGrid() {
 
    return container;
 }
-
-function createPerspectiveInputs(/** @type {SceneController} */ scene_handler) {
+function createQuadrantCanvases() {
    const container = document.createElement("div");
-   container.id = "perspective-inputs";
+   container.id = "quadrant-container";
+   container.style.display = "grid";
+   container.style.gridTemplateColumns = "50% 50%";
+   container.style.gridTemplateRows = "50% 50%";
+   container.style.width = "100vw";
+   container.style.height = "100vh";
+   container.style.position = "fixed";
+   container.style.top = "0";
+   container.style.left = "0";
+   container.style.margin = "0";
+   container.style.padding = "0";
+
+   const canvases = [];
+   for (let i = 0; i < 4; i++) {
+      const canvas = document.createElement("canvas");
+      canvas.id = `canvas-${i}`;
+      canvas.style.width = "100%";
+      canvas.style.height = "100%";
+      container.appendChild(canvas);
+      canvases.push(canvas);
+   }
+
+   document.body.appendChild(container);
+   console.log("Created canvases:", canvases);
+   return canvases;
+}
+
+function getStr(c_ptr, len, qid) {
+   return new TextDecoder().decode(getData(c_ptr, len, qid));
+}
+
+function call(ptr, fnPtr, qid) {
+   wasm_instances[qid].exports.draw(ptr, fnPtr);
+}
+
+function getData(ptr, len, qid) {
+   updateMemoryView(qid); // Ensure memory view is current
+   return new Uint8Array(wasm_memories[qid].buffer, ptr, len);
+}
+
+function setAspectRatioUniform(aspect_ratio, qid) {
+   for (let i = 0; i < next_program[qid]; i++) {
+      const program = programs[qid].get(i);
+      webgls[qid].useProgram(program.gl);
+      webgls[qid].uniformMatrix4fv(
+         webgls[qid].getUniformLocation(program.gl, "projection_matrix"),
+         false,
+         createProjectionMatrix(
+            scene_configs[qid].fov,
+            aspect_ratio,
+            scene_configs[qid].near,
+            scene_configs[qid].far
+         )
+      );
+   }
+}
+
+function setPerspectiveUniforms(fov, near, far, qid) {
+   for (let i = 0; i < next_program[qid]; i++) {
+      const program = programs[qid].get(i);
+      webgls[qid].useProgram(program.gl);
+      webgls[qid].uniformMatrix4fv(
+         webgls[qid].getUniformLocation(program.gl, "projection_matrix"),
+         false,
+         createProjectionMatrix(fov, scene_configs[qid].aspect_ratio, near, far)
+      );
+   }
+}
+
+function createProjectionMatrix(fov, aspect_ratio, near, far) {
+   const tan_half_FOV = Math.tan(fov / 2.0);
+   const projection = new Float32Array(16);
+   projection[0] = 1.0 / (tan_half_FOV * aspect_ratio);
+   projection[5] = 1.0 / tan_half_FOV;
+   projection[10] = -(far + near) / (far - near);
+   projection[11] = -1.0;
+   projection[14] = -(2.0 * far * near) / (far - near);
+   return projection;
+}
+
+function createQuadrantUI(qid, scene_handler) {
+   const container = document.createElement("div");
+   container.id = `ui-container-${qid}`;
+   container.style.position = "absolute";
+   container.style.top = qid < 2 ? "10px" : "calc(50% + 10px)";
+   container.style.left = qid % 2 === 0 ? "10px" : "calc(50% + 10px)";
+   container.style.background = "rgba(0, 0, 0, 0.5)";
+   container.style.padding = "10px";
+   container.style.color = "white";
+
+   const text_fields = document.createElement("div");
+   text_fields.id = `text-inputs-${qid}`;
+   const inputs = [`input1-${qid}`, `input2-${qid}`, `input3-${qid}`].map((id) => {
+      const input = document.createElement("input");
+      input.id = id;
+      input.placeholder = id.split('-')[0];
+      input.type = "text";
+      return input;
+   });
+   text_fields.append(...inputs);
+   container.appendChild(text_fields);
+
+   document.body.appendChild(container);
+   console.log(`Appended container for quadrant ${qid}, inputs:`, text_fields.querySelectorAll("input"));
+
+   const buttonGrid = createButtonGrid(qid, scene_handler);
+   container.appendChild(buttonGrid);
+
+   const table = createFloatingTable(qid);
+   container.appendChild(table);
+
+   const toggleTableBtn = createToggleTableButton(qid);
+   container.appendChild(toggleTableBtn);
+
+   const perspectiveInputs = createPerspectiveInputs(scene_handler, qid);
+   container.appendChild(perspectiveInputs);
+
+   const colorButtonGrid = createColorButtonGrid(qid);
+   container.appendChild(colorButtonGrid);
+
+   return container;
+}
+function createButtonGrid(qid, scene_handler) {
+   const grid = document.createElement("div");
+   grid.id = `button-grid-${qid}`;
+   grid.className = "button-grid";
+
+   const labels = [
+      "Insert",
+      "Clear",
+      "Rotate",
+      "Cube",
+      "Toggle",
+      "Scale",
+      "Pyramid",
+      "Text",
+      "Translate",
+      "Sphere",
+      "Reflect",
+      "Project-XY",
+      "Cone",
+      "Text",
+      "Project-YZ",
+      "Camera",
+      "Text",
+      "Project-XZ",
+   ];
+
+   const listeners = createButtonListeners(scene_handler, qid);
+   labels.forEach((label, index) => {
+      const btn = createButton(`grid-btn-${qid}-${index + 1}`, label, listeners[index]);
+      btn.className = "floating-button";
+      grid.appendChild(btn);
+   });
+   return grid;
+}
+
+function createButtonListeners(scene_handler, qid) {
+   const inputs = [
+      document.getElementById(`input1-${qid}`),
+      document.getElementById(`input2-${qid}`),
+      document.getElementById(`input3-${qid}`),
+   ];
+   console.log(`Looking for inputs in quadrant ${qid}:`, inputs);
+   if (inputs.some(input => !input)) {
+      console.error(`Input elements missing for quadrant ${qid}:`, inputs);
+      console.log(`DOM state for quadrant ${qid}:`, document.getElementById(`text-inputs-${qid}`)?.innerHTML);
+      return Array(18).fill(() => console.warn(`UI for quadrant ${qid} not ready`));
+   }
+   return [
+      () => {
+         scene_handler.insertVector(
+            inputs[0].value || "0",
+            inputs[1].value || "0",
+            inputs[2].value || "0"
+         );
+         inputs.forEach((input) => (input.value = ""));
+      },
+      () => scene_handler.clear(),
+      () => {
+         scene_handler.rotate(
+            inputs[0].value || "0",
+            inputs[1].value || "0",
+            inputs[2].value || "0"
+         );
+         inputs.forEach((input) => (input.value = ""));
+      },
+      () => scene_handler.insertShape("Cube"),
+      () => console.log(`Toggle quadrant ${qid}`),
+      () => {
+         scene_handler.scale(inputs[0].value || "1");
+         inputs[0].value = "";
+      },
+      () => scene_handler.insertShape("Pyramid"),
+      () => { },
+      () => {
+         scene_handler.translate(
+            inputs[0].value || "0",
+            inputs[1].value || "0",
+            inputs[2].value || "0"
+         );
+         inputs.forEach((input) => (input.value = ""));
+      },
+      () => scene_handler.insertShape("Sphere"),
+      () => scene_handler.reflect(
+         0 |
+         (inputs[0].value ? 1 : 0) |
+         (inputs[1].value ? 2 : 0) |
+         (inputs[2].value ? 4 : 0)
+      ),
+      () => scene_handler.projectXY?.(),
+      () => scene_handler.insertShape("Cone"),
+      () => { },
+      () => scene_handler.projectYZ?.(),
+      () => {
+         scene_handler.insertCamera(
+            inputs[0].value || "0",
+            inputs[1].value || "0",
+            inputs[2].value || "0"
+         );
+         inputs.forEach((input) => (input.value = ""));
+      },
+      () => { },
+      () => scene_handler.projectXZ?.(),
+   ];
+}
+function createFloatingTable(qid) {
+   const table = document.createElement("div");
+   table.id = `floating-table-${qid}`;
+   table.className = "floating-table";
+
+   const header = document.createElement("div");
+   header.className = "table-header";
+   ["Vectors", "Shapes", "Cameras"].forEach((title) => {
+      const column = document.createElement("div");
+      column.className = "header-column";
+      column.textContent = title;
+      header.appendChild(column);
+   });
+
+   const content = document.createElement("div");
+   content.className = "table-content";
+
+   const vectorsColumn = document.createElement("div");
+   vectorsColumn.id = `vectors-column-${qid}`;
+   vectorsColumn.className = "table-column";
+
+   const shapesColumn = document.createElement("div");
+   shapesColumn.id = `shapes-column-${qid}`;
+   shapesColumn.className = "table-column";
+
+   const camerasColumn = document.createElement("div");
+   camerasColumn.id = `cameras-column-${qid}`;
+   camerasColumn.className = "table-column";
+
+   content.appendChild(vectorsColumn);
+   content.appendChild(shapesColumn);
+   content.appendChild(camerasColumn);
+
+   table.appendChild(header);
+   table.appendChild(content);
+   return table;
+}
+
+function createToggleTableButton(qid) {
+   const btn = createButton(`toggle-table-btn-${qid}`, "▼", () => {
+      btn.classList.toggle("expanded");
+      document.getElementById(`floating-table-${qid}`).classList.toggle("hidden");
+   });
+   return btn;
+}
+
+function createPerspectiveInputs(scene_handler, qid) {
+   const container = document.createElement("div");
+   container.id = `perspective-inputs-${qid}`;
 
    const input1 = document.createElement("input");
-   input1.id = "near-input";
+   input1.id = `near-input-${qid}`;
    input1.placeholder = "Near";
 
    const input2 = document.createElement("input");
-   input2.id = "far-input";
+   input2.id = `far-input-${qid}`;
    input2.placeholder = "Far";
 
    const input3 = document.createElement("input");
-   input3.id = "grid-input";
+   input3.id = `grid-input-${qid}`;
    input3.placeholder = "Grid resolution";
 
    const input4 = document.createElement("input");
-   input4.id = "fov-input";
+   input4.id = `fov-input-${qid}`;
    input4.placeholder = "FOV";
 
-   const button = document.createElement("button");
-   button.id = "perspective-input-button";
-   button.textContent = "Set";
-
-   button.addEventListener("click", () => {
-      const near = parseFloat(input1.value) || scene_config.near;
-      const far = parseFloat(input2.value) || scene_config.far;
-      const fov = (parseFloat(input4.value) * Math.PI) / 180 || scene_config.fov;
+   const button = createButton(`perspective-input-button-${qid}`, "Set", () => {
+      const near = parseFloat(input1.value) || scene_configs[qid].near;
+      const far = parseFloat(input2.value) || scene_configs[qid].far;
+      const fov = (parseFloat(input4.value) * Math.PI) / 180 || scene_configs[qid].fov;
       const resolution = parseFloat(input3.value);
 
-      setPerspectiveUniforms(fov, near, far);
+      setPerspectiveUniforms(fov, near, far, qid);
 
       if (!isNaN(resolution)) {
          scene_handler.setResolution(resolution);
       }
 
-      scene_config.near = near;
-      scene_config.far = far;
-      scene_config.fov = fov;
+      scene_configs[qid].near = near;
+      scene_configs[qid].far = far;
+      scene_configs[qid].fov = fov;
 
       input1.value = input2.value = input3.value = input4.value = "";
    });
 
    container.append(input1, input2, input3, input4, button);
-
    return container;
 }
 
 export async function init(wasm_path) {
-   fetch(wasm_path)
-      .then((response) => response.arrayBuffer())
-      .then((bytes) => {
-         const mod = new WebAssembly.Module(bytes);
-         wasm_instance = new WebAssembly.Instance(mod, { env });
-         wasm_memory = wasm_instance.exports.memory;
-         memory_view = wasm_memory.buffer;
-         wasm_instance.exports._start();
-      });
+   console.log("Fetching WASM module...");
+   const bytes = await fetch(wasm_path).then((response) => response.arrayBuffer());
+   const mod = new WebAssembly.Module(bytes);
+
+   console.log("Initializing WASM instances...");
+   wasm_instances = new Array(4);
+   wasm_memories = new Array(4);
+   memory_views = new Array(4);
+
+   console.log("Creating canvases...");
+   canvases = createQuadrantCanvases();
+
+   webgls = canvases.map((canvas, qid) => {
+      const gl = canvas.getContext("webgl");
+      return gl;
+   });
+
+   for (let qid = 0; qid < 4; qid++) {
+      const envInstance = {};
+      for (const [key, fn] of Object.entries(env)) {
+         envInstance[key] = (...args) => fn(...args, qid);
+      }
+      wasm_instances[qid] = new WebAssembly.Instance(mod, { env: envInstance });
+      wasm_memories[qid] = wasm_instances[qid].exports.memory;
+      memory_views[qid] = new Uint8Array(wasm_memories[qid].buffer);
+   }
+
+   scene_controllers = canvases.map((_, qid) => {
+      return new SceneController(qid);
+   });
+
+   scene_controllers.forEach((controller, qid) => {
+      createQuadrantUI(qid, controller);
+   });
+
+   canvases.forEach((canvas, qid) => {
+      new ResizeObserver((entries) => resize_listener(entries, qid)).observe(canvas);
+   });
+
+   for (let qid = 0; qid < 4; qid++) {
+      wasm_instances[qid].exports._start();
+   }
+
+   console.log("WASM instances initialized:", wasm_instances);
 }

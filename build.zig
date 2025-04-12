@@ -1,7 +1,7 @@
 const std = @import("std");
 
 pub fn build(b: *std.Build) void {
-    //TODO: espicify the target with command line options to later build native ascii art, glfw, or webgl/wasm
+    //TODO: espicify the target with command line options
     //https://ziglang.org/learn/build-system/
     const target = b.standardTargetOptions(.{
         .default_target = .{
@@ -19,7 +19,7 @@ pub fn build(b: *std.Build) void {
     setupDistributionSteps(b, exe, target);
 
     b.installArtifact(exe);
-    setupWeb(b, exe);
+    setupWebSteps(b, exe);
 }
 
 fn createExecutable(
@@ -95,7 +95,7 @@ fn setupNativeDistribution(
     exe.rdynamic = true;
 }
 
-fn setupWeb(b: *std.Build, exe: *std.Build.Step.Compile) void {
+fn setupWebSteps(b: *std.Build, exe: *std.Build.Step.Compile) void {
     setupWasmFileStep(b, exe);
     setupJSFileStep(b);
     setupCSSFileStep(b);

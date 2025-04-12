@@ -30,10 +30,10 @@ const Table = struct {
     clear_fn_ptr: *const fn (*anyopaque) callconv(.C) void,
     set_res_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
     set_camera_fn_ptr: *const fn (*anyopaque, usize) callconv(.C) void,
-    scale_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32) callconv(.C) void,
-    rotate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
-    translate_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, f32, f32, f32) callconv(.C) void,
-    reflect_fn_ptr: *const fn (*anyopaque, [*]const u32, usize, u32, u8) callconv(.C) void,
+    scale_fn_ptr: *const fn (*anyopaque, [*]const usize, usize, u32, f32) callconv(.C) void,
+    rotate_fn_ptr: *const fn (*anyopaque, [*]const usize, usize, u32, f32, f32, f32) callconv(.C) void,
+    translate_fn_ptr: *const fn (*anyopaque, [*]const usize, usize, u32, f32, f32, f32) callconv(.C) void,
+    reflect_fn_ptr: *const fn (*anyopaque, [*]const usize, usize, u32, u8) callconv(.C) void,
     free_args_fn_ptr: *const fn (*anyopaque, [*]const u8, usize) callconv(.C) void,
 };
 
@@ -102,20 +102,20 @@ pub const State = struct {
             \\    gl_FragColor = vec4(1.0, 1.0, 1.0, 1.0);
             \\}
         ;
-        const vertex_shader = g.Shader.init(geoc, g.ShaderType.Vertex, vertex_shader_source);
+        const vertex_shader = g.Shader.init(g.ShaderType.Vertex, vertex_shader_source);
         defer vertex_shader.deinit();
 
-        const a_fragment_shader = g.Shader.init(geoc, g.ShaderType.Fragment, a_fragment_shader_source);
+        const a_fragment_shader = g.Shader.init(g.ShaderType.Fragment, a_fragment_shader_source);
         defer a_fragment_shader.deinit();
-        const g_fragment_shader = g.Shader.init(geoc, g.ShaderType.Fragment, g_fragment_shader_source);
+        const g_fragment_shader = g.Shader.init(g.ShaderType.Fragment, g_fragment_shader_source);
         defer g_fragment_shader.deinit();
-        const v_fragment_shader = g.Shader.init(geoc, g.ShaderType.Fragment, v_fragment_shader_source);
+        const v_fragment_shader = g.Shader.init(g.ShaderType.Fragment, v_fragment_shader_source);
         defer v_fragment_shader.deinit();
-        const s_fragment_shader = g.Shader.init(geoc, g.ShaderType.Fragment, s_fragment_shader_source);
+        const s_fragment_shader = g.Shader.init(g.ShaderType.Fragment, s_fragment_shader_source);
         defer s_fragment_shader.deinit();
-        const c_fragment_shader = g.Shader.init(geoc, g.ShaderType.Fragment, c_fragment_shader_source);
+        const c_fragment_shader = g.Shader.init(g.ShaderType.Fragment, c_fragment_shader_source);
         defer c_fragment_shader.deinit();
-        const anm_fragment_shader = g.Shader.init(geoc, g.ShaderType.Fragment, anm_fragment_shader_source);
+        const anm_fragment_shader = g.Shader.init(g.ShaderType.Fragment, anm_fragment_shader_source);
         defer anm_fragment_shader.deinit();
 
         defer geoc.uniformMatrix4fv("view_matrix", false, &scene.view_matrix);
@@ -215,7 +215,7 @@ pub const State = struct {
         }
     }
 
-    fn updateVectors(self: *Self, scene: *Scene, idxs_ptr: [*]const u32, vectors_count: usize) void {
+    fn updateVectors(self: *Self, scene: *Scene, idxs_ptr: [*]const usize, vectors_count: usize) void {
         const selected = scene.allocator.alloc(V3, vectors_count * 2) catch unreachable;
         defer scene.allocator.free(selected);
 
@@ -227,7 +227,7 @@ pub const State = struct {
         self.vector_buffer.?.bufferSubData(idxs_ptr[0..vectors_count], selected);
     }
 
-    fn updateShapes(self: *Self, scene: *Scene, idxs_ptr: [*]const u32, vectors_count: usize, shapes_count: usize) void {
+    fn updateShapes(self: *Self, scene: *Scene, idxs_ptr: [*]const usize, vectors_count: usize, shapes_count: usize) void {
         const selected = scene.allocator.alloc([]V3, shapes_count) catch unreachable;
         defer scene.allocator.free(selected);
 
@@ -237,7 +237,7 @@ pub const State = struct {
         }
     }
 
-    fn updateCameras(self: *Self, scene: *Scene, idxs_ptr: [*]const u32, vectors_count: usize, shapes_count: usize, idxs_len: usize) void {
+    fn updateCameras(self: *Self, scene: *Scene, idxs_ptr: [*]const usize, vectors_count: usize, shapes_count: usize, idxs_len: usize) void {
         const selected = scene.allocator.alloc([]V3, idxs_len - vectors_count + shapes_count) catch unreachable;
         defer scene.allocator.free(selected);
 
@@ -356,6 +356,7 @@ fn clearFn(ptr: *anyopaque) callconv(.C) void {
         buff.deinit();
     }
     state.camera_buffers.deinit();
+    _ = g.gpa.detectLeaks();
 }
 
 fn setCameraFn(ptr: *anyopaque, index: usize) callconv(.C) void {
@@ -368,18 +369,18 @@ fn setCameraFn(ptr: *anyopaque, index: usize) callconv(.C) void {
 
 fn scaleFn(
     ptr: *anyopaque,
-    idxs_ptr: [*]const u32,
+    idxs_ptr: [*]const usize,
     idxs_len: usize,
     counts: u32,
     factor: f32,
 ) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
 
-    const indexes = state.geoc.allocator.alloc(u32, idxs_len) catch unreachable;
-    std.mem.copyBackwards(u32, indexes, idxs_ptr[0..idxs_len]);
+    const indexes = state.geoc.allocator.alloc(usize, idxs_len) catch unreachable;
+    std.mem.copyBackwards(usize, indexes, idxs_ptr[0..idxs_len]);
 
     const bytes = std.mem.asBytes(&struct {
-        idxs_ptr: [*]const u32,
+        idxs_ptr: [*]const usize,
         idxs_len: usize,
         counts: u32,
         factor: f32,
@@ -410,7 +411,7 @@ fn scaleFn(
 
 fn applyScaleFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void {
     const Args = struct {
-        idxs_ptr: [*]const u32,
+        idxs_ptr: [*]const usize,
         idxs_len: usize,
         counts: u32,
         factor: f32,
@@ -445,7 +446,7 @@ fn applyScaleFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callcon
 
 fn rotateFn(
     ptr: *anyopaque,
-    idxs_ptr: [*]const u32,
+    idxs_ptr: [*]const usize,
     idxs_len: usize,
     counts: u32,
     x: f32,
@@ -454,11 +455,11 @@ fn rotateFn(
 ) callconv(.C) void {
     const state: *State = @ptrCast(@alignCast(ptr));
 
-    const indexes = state.geoc.allocator.alloc(u32, idxs_len) catch unreachable;
-    std.mem.copyBackwards(u32, indexes, idxs_ptr[0..idxs_len]);
+    const indexes = state.geoc.allocator.alloc(usize, idxs_len) catch unreachable;
+    std.mem.copyBackwards(usize, indexes, idxs_ptr[0..idxs_len]);
 
     const bytes = std.mem.asBytes(&struct {
-        idxs_ptr: [*]const u32,
+        idxs_ptr: [*]const usize,
         idxs_len: usize,
         counts: u32,
         x: f32,
@@ -479,7 +480,7 @@ fn rotateFn(
 
 fn applyRotateFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void {
     const Args = struct {
-        idxs_ptr: [*]const u32,
+        idxs_ptr: [*]const usize,
         idxs_len: usize,
         counts: u32,
         x: f32,
@@ -515,7 +516,7 @@ fn applyRotateFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callco
 
 fn translateFn(
     ptr: *anyopaque,
-    idxs_ptr: [*]const u32,
+    idxs_ptr: [*]const usize,
     idxs_len: usize,
     counts: u32,
     dx: f32,
@@ -578,17 +579,17 @@ fn applyTranslateFn(
 
 fn reflectFn(
     ptr: *anyopaque,
-    idxs_ptr: [*]const u32,
+    idxs_ptr: [*]const usize,
     idxs_len: usize,
     counts: u32,
     coord_idx: u8,
 ) callconv(.C) void {
     const state: *State = @alignCast(@ptrCast(ptr));
-    const indexes = state.geoc.allocator.alloc(u32, idxs_len) catch unreachable;
-    std.mem.copyBackwards(u32, indexes, idxs_ptr[0..idxs_len]);
+    const indexes = state.geoc.allocator.alloc(usize, idxs_len) catch unreachable;
+    std.mem.copyBackwards(usize, indexes, idxs_ptr[0..idxs_len]);
 
     const Args = struct {
-        idxs_ptr: [*]const u32,
+        idxs_ptr: [*]const usize,
         idxs_len: usize,
         counts: u32,
         coord_idx: u8,
@@ -608,7 +609,7 @@ fn reflectFn(
 
 fn applyReflectFn(ptr: *anyopaque, args_ptr: [*]const u8, args_len: usize) callconv(.C) void { //TODO: remove
     const Args = struct {
-        idxs_ptr: [*]const u32,
+        idxs_ptr: [*]const usize,
         idxs_len: usize,
         counts: u32,
         coord_idx: u8,

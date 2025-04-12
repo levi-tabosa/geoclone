@@ -23,7 +23,7 @@ const js = struct { //TODO remove all unused fn
     ) void;
     extern fn bufferSubData(
         js_handle: i32,
-        idxs_ptr: [*]const u32,
+        idxs_ptr: [*]const usize,
         idxs_len: usize,
         data_ptr: [*]const u8,
         data_len: usize,
@@ -32,8 +32,8 @@ const js = struct { //TODO remove all unused fn
         fn_ptr: i32,
         args_ptr: [*]const u8,
         args_len: usize,
-        delay: u32,
-        timeout: u32,
+        delay: usize,
+        timeout: usize,
     ) i32;
     extern fn clearInterval(js_handle: i32) void;
     extern fn vertexAttribPointer(
@@ -47,7 +47,7 @@ const js = struct { //TODO remove all unused fn
         offset: usize,
     ) void;
     extern fn setStatePtr(ptr: *anyopaque) void;
-    extern fn setFnPtr(fn_name_ptr: [*]const u8, fn_name_len: usize, fn_ptr: u32) void;
+    extern fn setFnPtr(fn_name_ptr: [*]const u8, fn_name_len: usize, fn_ptr: usize) void;
     extern fn drawArrays(mode: geoc.DrawMode, first: usize, count: usize) void;
     extern fn uniformMatrix4fv(
         location_ptr: [*]const u8,
@@ -248,7 +248,7 @@ pub const Shader = struct {
 
     js_handle: i32,
 
-    pub fn init(_: geoc.Geoc, @"type": geoc.ShaderType, source: []const u8) Self {
+    pub fn init(@"type": geoc.ShaderType, source: []const u8) Self {
         return .{
             .js_handle = js.initShader(@intFromEnum(@"type"), source.ptr, source.len),
         };
@@ -304,7 +304,7 @@ pub const VertexBuffer = struct {
         js.bufferData(self.js_handle, data.ptr, data.len, usage);
     }
 
-    pub fn bufferSubData(self: Self, indexes: []const u32, data: []const u8) void {
+    pub fn bufferSubData(self: Self, indexes: []const usize, data: []const u8) void {
         js.bufferSubData(self.js_handle, indexes.ptr, indexes.len, data.ptr, data.len);
     }
 };
@@ -314,7 +314,7 @@ pub const Interval = struct {
 
     js_handle: i32,
 
-    pub fn init(fn_ptr: i32, args: []const u8, delay: u32, count: u32) Self {
+    pub fn init(fn_ptr: i32, args: []const u8, delay: usize, count: usize) Self {
         return .{
             .js_handle = js.setInterval(
                 fn_ptr,
@@ -338,7 +338,7 @@ fn getGLType(comptime @"type": type) GLType {
         return .Float;
     }
 
-    @compileError("Unknown type for OpenGL");
+    @compileError("Unknown type for WebGL");
 }
 
 pub const VAO = struct {
@@ -370,7 +370,7 @@ pub const State = struct {
         js.setStatePtr(ptr);
     }
 
-    pub fn setFnPtr(_: Self, fn_name: []const u8, fn_ptr: u32) void {
+    pub fn setFnPtr(_: Self, fn_name: []const u8, fn_ptr: usize) void {
         js.setFnPtr(fn_name.ptr, fn_name.len, fn_ptr);
     }
 
@@ -409,11 +409,10 @@ pub const State = struct {
 
     pub fn uniformMatrix4fv(
         _: Self,
-        location_ptr: [*]const u8,
-        location_len: usize,
+        location: []const u8,
         transpose: bool,
         value_ptr: [*]const f32,
     ) void {
-        js.uniformMatrix4fv(location_ptr, location_len, transpose, value_ptr);
+        js.uniformMatrix4fv(location.ptr, location.len, transpose, value_ptr);
     }
 };

@@ -31,6 +31,11 @@ let next_program = 0;
 const buffers = new Map();
 let next_buffer = 0;
 
+/** @type {ArrayBufferView<Uint8Array>} */
+let memory_view;
+/** @type { SharedArrayBuffer } */
+let shared_memory;
+
 const INTERVAL = 30,
    FRAMES = 25,
    FPS = 100;
@@ -718,6 +723,14 @@ const env = {
    },
    run(ptr, fnPtr) {
       function frame() {
+         console.log(memory_view.buffer);
+         // if (memory_view.byteLength !== 0) 
+         // else {
+         //    console.error("RESIZE");
+         //    memory_view = new Uint8Array(wasm_memory.buffer);
+         //    // setTimeout(() => { memory_view = new Uint8Array(wasm_memory.buffer); }, 1);
+         //    // setTimeout(() => {}, 0);
+         // }
          call(ptr, fnPtr);
          // setTimeout(() => requestAnimationFrame(frame), 1500);
          // setTimeout(() => requestAnimationFrame(frame), 1000 / FPS);
@@ -980,16 +993,6 @@ const env = {
    },
 };
 
-export async function init(wasm_path) {
-   const promise = fetch(wasm_path);
-   const result = await WebAssembly.instantiateStreaming(promise, { env });
-   wasm_instance = result.instance;
-   wasm_memory = wasm_instance.exports.memory;
-   wasm_instance.exports._start();
-}
-
-// UI stuff
-
 function createButtonListeners(/** @type { SceneController } */ scene_handler) {
    return [
       () => {
@@ -1246,4 +1249,16 @@ function createPerspectiveInputs(/** @type {SceneController} */ scene_handler) {
    container.append(input1, input2, input3, input4, button);
 
    return container;
+}
+
+export async function init(wasm_path) {
+   fetch(wasm_path)
+      .then((response) => response.arrayBuffer())
+      .then((bytes) => {
+         const mod = new WebAssembly.Module(bytes);
+         wasm_instance = new WebAssembly.Instance(mod, { env });
+         wasm_memory = wasm_instance.exports.memory;
+         memory_view = wasm_memory.buffer;
+         wasm_instance.exports._start();
+      });
 }

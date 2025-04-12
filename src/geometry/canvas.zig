@@ -266,7 +266,7 @@ pub const Scene = struct {
         }
     }
 
-    pub fn scale(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, counts: u32, factor: f32) void {
+    pub fn scale(self: *Self, idxs_ptr: [*]const usize, idxs_len: usize, counts: u32, factor: f32) void {
         const vectors_count = counts >> 0x10;
         const shapes_count = counts & 0xFFFF;
 
@@ -291,7 +291,7 @@ pub const Scene = struct {
         }
     }
 
-    pub fn rotate(self: *Self, idxs_ptr: [*]const u32, idxs_len: usize, counts: u32, x: f32, y: f32, z: f32) void {
+    pub fn rotate(self: *Self, idxs_ptr: [*]const usize, idxs_len: usize, counts: u32, x: f32, y: f32, z: f32) void {
         const vectors_count = counts >> 0x10;
         const shapes_count = counts & 0xFFFF;
 
@@ -311,7 +311,7 @@ pub const Scene = struct {
     }
 
     ///TODO: pass in coords_flags instead of coord_idx as a single u8
-    pub fn reflect(self: *Scene, idxs_ptr: [*]const u32, idxs_len: usize, counts: u32, coord_flags: u8) void {
+    pub fn reflect(self: *Scene, idxs_ptr: [*]const usize, idxs_len: usize, counts: u32, coord_flags: u8) void {
         const vectors_count = counts >> 0x10;
         const shapes_count = counts & 0xFFFF;
 
@@ -330,7 +330,7 @@ pub const Scene = struct {
 
     fn reflectCoord(
         self: *Scene,
-        idxs_ptr: [*]const u32,
+        idxs_ptr: [*]const usize,
         idxs_len: usize,
         vectors_count: usize,
         shapes_count: usize,
